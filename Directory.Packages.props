@@ -9,7 +9,8 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="8.0.8" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.8" />
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.11.0" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnit" Version="0.11.0" />
