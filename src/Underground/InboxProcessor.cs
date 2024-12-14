@@ -1,5 +1,3 @@
-using System;
-using System.Globalization;
 using System.Text.Json;
 
 using Microsoft.Extensions.DependencyInjection;
@@ -26,8 +24,6 @@ public class InboxProcessor(IInbox inbox, Dictionary<Type, HandlerDescriptor> Ha
                 return false;
             }
 
-            Console.WriteLine("publish: " + type);
-
             // TODO: Error handling
             // TODO: wrap events in Feature container to prevent messages being sent to other modules!!!
             // TODO: cast breaks things
@@ -45,12 +41,23 @@ public class InboxProcessor(IInbox inbox, Dictionary<Type, HandlerDescriptor> Ha
 
             var handlerObject = services.GetRequiredService(handler.MessageHandler);
 
+            // convert handlerObject from type `object` to type `IMessageHandler`
             var genericInterfaceType = typeof(IMessageHandler<>);
             var interfaceType = genericInterfaceType.MakeGenericType(fullEvent.GetType());
-            var method = interfaceType.GetMethod("Handle");
-            Console.WriteLine(interfaceType);
-            method!.Invoke(handlerObject, [fullEvent]);
 
+            // invoke `Handle` method
+            var method = interfaceType.GetMethod("Handle");
+
+            if (method is null)
+            {
+                // TODO:
+                return false;
+            }
+            var task = (Task?)method.Invoke(handlerObject, [fullEvent]);
+            if (task is not null)
+            {
+                await task;
+            }
 
             return true;
         });

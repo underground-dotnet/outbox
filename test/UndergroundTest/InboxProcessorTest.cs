@@ -5,7 +5,7 @@ using Underground.Inbox;
 
 namespace UndergroundTest;
 
-public class UnitTest1
+public class InboxProcessorTest
 {
     [Fact]
     public async Task CallsHandlerToHandleTheMessage()

@@ -1,6 +1,6 @@
 namespace Underground;
 
-public interface IMessageHandler<in T> where T : IMessage
+public interface IMessageHandler<in T>
 {
     public Task Handle(T message);
 }
