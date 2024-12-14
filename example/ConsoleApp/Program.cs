@@ -6,7 +6,7 @@ using Underground;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 // builder.Services.AddHostedService<Worker>();
-builder.Services.AddOutboxServices(cfg =>
+builder.Services.AddInboxServices("example", cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });

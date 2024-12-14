@@ -2,19 +2,17 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Underground;
 
-internal sealed record HandlerDescriptor(Type MessageHandler, ServiceLifetime Lifetime);
-
-public class OutboxServiceConfiguration
+public class InboxServiceConfiguration
 {
     // public Type OutboxType { get; set; } = typeof(InMemoryOutbox);
     internal Dictionary<Type, HandlerDescriptor> Handlers = [];
 
-    public OutboxServiceConfiguration AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    public InboxServiceConfiguration AddHandler<TMessageHandlerType>()
     {
-        return AddHandler(typeof(TMessageHandlerType), serviceLifetime);
+        return AddHandler(typeof(TMessageHandlerType));
     }
 
-    public OutboxServiceConfiguration AddHandler(Type messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    public InboxServiceConfiguration AddHandler(Type messageHandlerType)
     {
         // var interfaceType = messageHandlerType.GetInterfaces().FirstOrDefault();
         var interfaceType = messageHandlerType.GetInterface("Underground.IMessageHandler`1");
@@ -25,7 +23,7 @@ public class OutboxServiceConfiguration
             // Console.WriteLine($"is: {interfaceType.AssemblyQualifiedName}");
             Console.WriteLine($"is: {messageType}");
 
-            Handlers[messageType] = new HandlerDescriptor(messageHandlerType, serviceLifetime);
+            Handlers[messageType] = new HandlerDescriptor(messageHandlerType);
         }
         // if (messageHandlerType.IsGenericType)
         // {
