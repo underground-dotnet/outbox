@@ -6,13 +6,14 @@ public class InboxServiceConfiguration
 {
     // public Type OutboxType { get; set; } = typeof(InMemoryOutbox);
     internal Dictionary<Type, HandlerDescriptor> Handlers = [];
+    internal List<ServiceDescriptor> HandlersWithLifetime = [];
 
     public InboxServiceConfiguration AddHandler<TMessageHandlerType>()
     {
         return AddHandler(typeof(TMessageHandlerType));
     }
 
-    public InboxServiceConfiguration AddHandler(Type messageHandlerType)
+    public InboxServiceConfiguration AddHandler(Type messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
         // var interfaceType = messageHandlerType.GetInterfaces().FirstOrDefault();
         var interfaceType = messageHandlerType.GetInterface("Underground.IMessageHandler`1");
@@ -21,9 +22,9 @@ public class InboxServiceConfiguration
         {
             var messageType = interfaceType.GetGenericArguments()[0];
             // Console.WriteLine($"is: {interfaceType.AssemblyQualifiedName}");
-            Console.WriteLine($"is: {messageType}");
 
             Handlers[messageType] = new HandlerDescriptor(messageHandlerType);
+            HandlersWithLifetime.Add(new ServiceDescriptor(interfaceType, messageHandlerType, serviceLifetime));
         }
         // if (messageHandlerType.IsGenericType)
         // {

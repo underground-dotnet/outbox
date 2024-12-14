@@ -6,6 +6,7 @@ public class ExampleMessageHandler : IMessageHandler<ExampleMessage>
 {
     public Task Handle(ExampleMessage message)
     {
-        throw new NotImplementedException();
+        Console.WriteLine("received: " + message.Id);
+        return Task.CompletedTask;
     }
 }

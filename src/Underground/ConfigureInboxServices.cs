@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Underground.Inbox;
 
@@ -10,6 +11,9 @@ public static class ConfigureInboxServices
     {
         var serviceConfig = new InboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
+
+        // register all assigned handlers
+        services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
 
         IInbox inbox = new InMemoryInbox();
         services.AddKeyedSingleton(moduleName, new InboxProcessor(inbox, serviceConfig.Handlers, services.BuildServiceProvider()));
