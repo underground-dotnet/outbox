@@ -14,22 +14,20 @@
     "vscode": {
       "extensions": [
         "ms-dotnettools.csdevkit",
-        "mtxr.sqltools",
-        "mtxr.sqltools-driver-pg"
+        "ms-ossdata.vscode-pgsql"
       ],
       "settings": {
-        "sqltools.connections": [
-          {
-            "name": "Container database",
-            "driver": "PostgreSQL",
-            "previewLimit": 50,
-            "server": "localhost",
-            "port": 5432,
-            "database": "postgres",
-            "username": "postgres",
-            "password": "postgres"
-          }
-        ],
+        // "sqltools.connections": [
+        //   {
+        //     "name": "Container database",
+        //     "driver": "PostgreSQL",
+        //     "server": "localhost",
+        //     "port": 5432,
+        //     "database": "postgres",
+        //     "username": "postgres",
+        //     "password": "postgres"
+        //   }
+        // ],
         "editor.formatOnSave": true
       }
     }
