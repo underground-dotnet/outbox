@@ -1,0 +1,22 @@
+name: Release to nuget.org
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    - name: Build
+      run: dotnet build --configuration Release
+    - name: Pack
+      run: dotnet pack src/Underground.Outbox/Underground.Outbox.csproj
+    - name: Publish
+      run: dotnet nuget push "src/Underground.Outbox/bin/Release/Underground.Outbox.*.nupkg" --api-key ${{secrets.NUGET_APIKEY}} --source https://api.nuget.org/v3/index.json
