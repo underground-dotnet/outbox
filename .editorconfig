@@ -7,7 +7,7 @@ charset = utf-8
 trim_trailing_whitespace = true
 
 # Xml files
-[*.xml]
+[*.{xml,csproj,slnx,props}]
 indent_size = 4
 trim_trailing_whitespace = true
 
@@ -381,7 +381,7 @@ dotnet_naming_style.s_camelcase.required_suffix =
 dotnet_naming_style.s_camelcase.word_separator =
 dotnet_naming_style.s_camelcase.capitalization = camel_case
 
-# custom
+# Custom
 
 dotnet_diagnostic.CA1711.severity = none # Identifiers should not have incorrect suffix
 dotnet_diagnostic.CS1591.severity = none # Missing XML comment for publicly visible type or member
@@ -389,3 +389,11 @@ dotnet_diagnostic.S125.severity = none # Remove this commented out code.
 dotnet_diagnostic.S1135.severity = none # Complete the task associated to this 'TODO' comment.
 dotnet_diagnostic.IDE0008.severity = none # Use explicit type instead of var
 dotnet_diagnostic.CA1805.severity = none # Do not initialize unnecessarily
+dotnet_diagnostic.S3267.severity = None # Loops should be simplified using the "Where" LINQ method
+dotnet_diagnostic.CA1848.severity = None # Use the LoggerMessage delegates
+
+# Enable IDE1006 as error (required for code naming conventions)
+dotnet_diagnostic.IDE1006.severity = error
+
+[test/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores

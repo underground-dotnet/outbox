@@ -1,0 +1,23 @@
+using Microsoft.EntityFrameworkCore;
+
+using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
+
+namespace Underground.Outbox;
+
+internal sealed class Outbox(AddMessageToOutbox addMessage) : IOutbox
+{
+    public async Task AddMessageAsync(DbContext context, OutboxMessage message)
+    {
+        await addMessage.ExecuteAsync(context, message);
+    }
+
+    public async Task AddMessagesAsync(DbContext context, IEnumerable<OutboxMessage> messages)
+    {
+        foreach (var message in messages)
+        {
+            await AddMessageAsync(context, message);
+        }
+    }
+
+}

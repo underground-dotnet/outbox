@@ -1,16 +1,17 @@
-
 using Underground.Outbox;
 using Underground.Outbox.ErrorHandler;
 
-namespace ConsoleApp;
+namespace Underground.OutboxTest;
 
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
-    public IOutboxErrorHandler ErrorHandler => new OutboxRetryErrorHandler();
+    public static List<ExampleMessage> CalledWith { get; set; } = [];
+
+    public IOutboxErrorHandler ErrorHandler { get; } = new OutboxRetryErrorHandler();
 
     public Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
     {
-        Console.WriteLine("received: " + message.Id);
+        CalledWith.Add(message);
         return Task.CompletedTask;
     }
 }

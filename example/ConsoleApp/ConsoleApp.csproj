@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../src/Underground/Underground.csproj" />
+    <ProjectReference Include="../../src/Underground.Outbox/Underground.Outbox.csproj" />
   </ItemGroup>
 
 </Project>

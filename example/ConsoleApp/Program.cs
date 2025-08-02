@@ -2,11 +2,10 @@
 
 using Microsoft.Extensions.Hosting;
 
-using Underground;
+using Underground.Outbox.Configuration;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-// builder.Services.AddHostedService<Worker>();
-builder.Services.AddInboxServices("example", cfg =>
+builder.Services.AddOutboxServices(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });
