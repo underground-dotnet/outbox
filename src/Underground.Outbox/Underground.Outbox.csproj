@@ -10,7 +10,6 @@
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
 
     <TargetFramework>net9.0</TargetFramework>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
 
