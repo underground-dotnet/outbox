@@ -2,7 +2,7 @@ name: Release to nuget.org
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "release-pipeline" ]
   # release:
   #   types: [published]
 
