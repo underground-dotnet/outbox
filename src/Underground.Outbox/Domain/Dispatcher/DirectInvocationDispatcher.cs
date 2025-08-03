@@ -9,7 +9,7 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Dispatcher;
 
-internal sealed class DirectInvocationDispatcher(IServiceProvider serviceProvider) : IMessageDispatcher
+internal sealed class DirectInvocationDispatcher(IServiceProvider serviceProvider) : IOutboxMessageDispatcher
 {
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();

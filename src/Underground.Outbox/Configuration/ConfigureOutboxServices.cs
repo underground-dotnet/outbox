@@ -32,7 +32,7 @@ public static class ConfigureOutboxServices
         services.AddScoped(_ => new AddMessageToOutbox(serviceConfig));
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<OutboxReflectionErrorHandler>();
-        services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
+        services.AddScoped<IOutboxMessageDispatcher, DirectInvocationDispatcher>();
         services.AddScoped(
             provider => new OutboxProcessor(
                 serviceConfig,

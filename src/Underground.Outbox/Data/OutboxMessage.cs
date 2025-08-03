@@ -8,6 +8,7 @@ namespace Underground.Outbox.Data;
 public class OutboxMessage
 {
     // TODO: or can we pass use snake case naming somehow to the connection?
+    // TODO: move to guid?
     [Column("id")]
     public int Id { get; init; }
 

@@ -8,12 +8,14 @@ using Microsoft.Extensions.Logging;
 using System.Threading.Tasks.Dataflow;
 using Underground.Outbox.ErrorHandler;
 using Underground.Outbox.Domain.Dispatcher;
+using Underground.Outbox.Domain.DatabaseProvider;
 
 namespace Underground.Outbox.Domain;
 
 internal sealed class OutboxProcessor(
     OutboxServiceConfiguration config,
-    IMessageDispatcher dispatcher,
+    IOutboxMessageDispatcher dispatcher,
+    IOutboxDatabaseProvider databaseProvider,
     OutboxReflectionErrorHandler reflectionErrorHandler,
     ILogger<OutboxProcessor> logger
 )
@@ -21,7 +23,7 @@ internal sealed class OutboxProcessor(
 #pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
     public async Task ProcessAsync(DbContext dbContext, CancellationToken cancellationToken = default)
     {
-        var fetchPartitions = CreateFetchPartitionsBlock(dbContext, cancellationToken);
+        var fetchPartitions = CreateFetchPartitionsBlock(cancellationToken);
         var processPartitions = CreateProcessPartitionsBlock(dbContext, config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
 
         var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
@@ -32,45 +34,21 @@ internal sealed class OutboxProcessor(
         await processPartitions.Completion;
     }
 
-    private TransformManyBlock<int, string> CreateFetchPartitionsBlock(DbContext dbContext, CancellationToken cancellationToken)
+    private TransformManyBlock<int, string> CreateFetchPartitionsBlock(CancellationToken cancellationToken)
     {
-        return new TransformManyBlock<int, string>(async _ =>
-        {
-            var partitions = await dbContext.Database
-                .SqlQueryRaw<string>($"""SELECT DISTINCT(partition_key) FROM {config.FullTableName} WHERE completed = false""")
-                .AsNoTracking()
-                .ToListAsync(cancellationToken);
-
-            return partitions;
-        });
+        return new TransformManyBlock<int, string>(async _ => await databaseProvider.GetPartitionsAsync(cancellationToken));
     }
 
     private ActionBlock<string> CreateProcessPartitionsBlock(DbContext dbContext, int batchSize, int parallelProcessingOfPartitions, CancellationToken cancellationToken)
     {
         return new ActionBlock<string>(async partition =>
         {
-            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            // raw query is needed to inject tablename
-            var batchSizeValue = new NpgsqlParameter("@batchSize", batchSize);
-
-            // use NOWAIT instead of SKIP LOCKED to avoid deadlocks when multiple instances are running and to keep order guaranteed
-            var messages = await dbContext.Database.SqlQueryRaw<OutboxMessage>(
-                $"""SELECT * FROM {config.FullTableName} WHERE completed = false ORDER BY "id" FOR UPDATE NOWAIT LIMIT @batchSize""", batchSizeValue
-            )
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-            logger.LogInformation("Processing {Count} outbox messages", messages.Count);
-
-            var successIds = await CallMessageHandlersAsync(messages, dbContext, cancellationToken);
-
-            // mark as processed
-            await dbContext.Database.ExecuteSqlRawAsync(
-                $"""UPDATE {config.FullTableName} SET completed = true WHERE "id" = ANY(@ids)""",
-                new NpgsqlParameter("@ids", successIds.ToArray())
-            );
-            await transaction.CommitAsync(cancellationToken);
+            await databaseProvider.FetchAndUpdateMessagesWithTransactionAsync(async messages =>
+            {
+                logger.LogInformation("Processing {Count} outbox messages", messages.Count());
+                var successIds = await CallMessageHandlersAsync(messages, dbContext, cancellationToken);
+                return successIds;
+            }, batchSize, cancellationToken);
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions });
     }
 
