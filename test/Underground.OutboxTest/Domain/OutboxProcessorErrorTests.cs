@@ -127,7 +127,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         await outbox.AddMessageAsync(context, msg);
         await outbox.AddMessageAsync(context, msg2);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(SecondMessageHandler.CalledWith); // Second message handler should not be called due to error in first message handler
@@ -164,7 +164,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         await outbox.AddMessageAsync(context, msg);
         await outbox.AddMessageAsync(context, msg2);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database

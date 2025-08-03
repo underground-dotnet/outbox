@@ -1,9 +1,11 @@
 using Medallion.Threading;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Underground.Outbox.Configuration;
 using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
@@ -12,17 +14,28 @@ internal sealed class OutboxBackgroundService : BackgroundService
 {
     private readonly IDistributedLock _distributedLock;
     private readonly OutboxProcessor _processor;
+    private readonly Type _dbContextType;
+    private readonly IServiceScope _scope;
 
     private readonly ILogger _logger;
 
-    public OutboxBackgroundService(IServiceScopeFactory scopeFactory, IDistributedLockProvider synchronizationProvider, ILogger<OutboxBackgroundService> logger)
+    public OutboxBackgroundService(OutboxServiceConfiguration config, IServiceScopeFactory scopeFactory, IDistributedLockProvider synchronizationProvider, ILogger<OutboxBackgroundService> logger)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _distributedLock = synchronizationProvider.CreateLock("OutboxBackgroundServiceLock");
 
-        using var scope = scopeFactory.CreateScope();
-        _processor = scope.ServiceProvider.GetRequiredService<OutboxProcessor>();
+        _scope = scopeFactory.CreateScope();
+        _processor = _scope.ServiceProvider.GetRequiredService<OutboxProcessor>();
+
+        _dbContextType = config.DbContextType ?? throw new NoDbContextAssignedException();
+    }
+
+    public override void Dispose()
+    {
+        _scope.Dispose();
+
+        base.Dispose();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,7 +62,8 @@ internal sealed class OutboxBackgroundService : BackgroundService
     {
         try
         {
-            await _processor.ProcessAsync(stoppingToken);
+            using var dbContext = (DbContext)_scope.ServiceProvider.GetRequiredService(_dbContextType);
+            await _processor.ProcessAsync(dbContext, stoppingToken);
             await Task.Delay(1000, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
