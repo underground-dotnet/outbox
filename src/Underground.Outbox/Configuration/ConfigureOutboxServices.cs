@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Domain;
+using Underground.Outbox.Domain.Dispatcher;
 using Underground.Outbox.ErrorHandler;
 using Underground.Outbox.Exceptions;
 
@@ -30,11 +31,24 @@ public static class ConfigureOutboxServices
 
         services.AddScoped(_ => new AddMessageToOutbox(serviceConfig));
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped(
-            provider => new OutboxProcessor(serviceConfig, provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<ILogger<OutboxProcessor>>())
-        );
-        services.AddHostedService<OutboxBackgroundService>();
         services.AddScoped<OutboxReflectionErrorHandler>();
+        services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
+        services.AddScoped(
+            provider => new OutboxProcessor(
+                serviceConfig,
+                provider.GetRequiredService<IMessageDispatcher>(),
+                provider.GetRequiredService<OutboxReflectionErrorHandler>(),
+                provider.GetRequiredService<ILogger<OutboxProcessor>>()
+            )
+        );
+        services.AddHostedService(provider =>
+            new OutboxBackgroundService(
+                serviceConfig,
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IDistributedLockProvider>(),
+                provider.GetRequiredService<ILogger<OutboxBackgroundService>>()
+            )
+        );
 
         var dbContext = GetDbContext(serviceConfig, services.BuildServiceProvider());
         var connectionString = dbContext.Database.GetConnectionString();
