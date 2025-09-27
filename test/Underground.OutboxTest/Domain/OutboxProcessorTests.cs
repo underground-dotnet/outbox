@@ -8,34 +8,32 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.Domain;
 
-public class OutboxProcessorTests : IClassFixture<DatabaseFixture>
+public class OutboxProcessorTests : DatabaseTest
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly ITestOutputHelper _testOutputHelper;
 
     private readonly IServiceProvider _serviceProvider;
 
-    public OutboxProcessorTests(DatabaseFixture fixture)
+    public OutboxProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        _fixture = fixture;
+        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        _testOutputHelper = testOutputHelper;
 
         // clear the static lists to avoid interference between tests
         ExampleMessageHandler.CalledWith.Clear();
 
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(fixture.Container, fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
             cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<ExampleMessageHandler>();
-            /*cfg.OutboxType = typeof(InMemoryOutbox)*/
         });
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
-
-        // clear the outbox tables before each test
-        _fixture.CreateDbContext().Database.ExecuteSqlRaw("TRUNCATE TABLE \"outbox\"");
     }
 
     private async Task RunBackgroundServiceAsync()
@@ -54,7 +52,7 @@ public class OutboxProcessorTests : IClassFixture<DatabaseFixture>
     public async Task SendIntegrationEventFromOutbox()
     {
         // Arrange
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 

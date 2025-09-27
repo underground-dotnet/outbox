@@ -3,14 +3,13 @@ using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 using Testcontainers.Xunit;
 
-using Xunit.Sdk;
+[assembly: CaptureConsole]
 
 namespace Underground.OutboxTest;
 
-public sealed class DatabaseFixture(IMessageSink messageSink) : ContainerFixture<PostgreSqlBuilder, PostgreSqlContainer>(messageSink)
+public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : ContainerTest<PostgreSqlBuilder, PostgreSqlContainer>(testOutputHelper)
 {
-    public IMessageSink MessageSink { get; } = messageSink;
-    private readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.ConfigureTestLogger(messageSink));
+    private readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.ConfigureTestLogger(testOutputHelper));
 
     protected override PostgreSqlBuilder Configure(PostgreSqlBuilder builder)
     {

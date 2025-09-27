@@ -83,24 +83,24 @@ internal sealed class OutboxProcessor(
         foreach (var message in messages)
         {
             ProcessingResult result;
+            var transaction = dbContext.Database.CurrentTransaction!;
+            var savepointName = $"before_message_{message.Id}";
 
             try
             {
+                await transaction.CreateSavepointAsync(savepointName, cancellationToken);
                 result = await dispatcher.ExecuteAsync(message, cancellationToken);
-            }
-            catch (ParsingException ex)
-            {
-                logger.LogError(ex, "Error processing message {MessageId}", message.Id);
-                result = await CallErrorHandlerAsync(reflectionErrorHandler, dbContext, message, ex, cancellationToken);
             }
             catch (MessageHandlerException ex)
             {
                 logger.LogError(ex, "Error processing message {MessageId}", message.Id);
+                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
                 result = await CallErrorHandlerAsync(ex.ErrorHandler, dbContext, message, ex.InnerException, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogError(ex, "Error processing message {MessageId}", message.Id);
+                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
                 result = await CallErrorHandlerAsync(reflectionErrorHandler, dbContext, message, ex, cancellationToken);
             }
 
