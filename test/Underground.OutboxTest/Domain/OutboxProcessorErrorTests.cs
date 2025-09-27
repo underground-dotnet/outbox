@@ -174,6 +174,41 @@ public class OutboxProcessorErrorTests : DatabaseTest
         Assert.Equal(1, notCompleted);
     }
 
+    [Fact]
+    public async Task RollbackHandlerDbChangesOnError()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        // create Users table
+        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+
+        serviceCollection.AddOutboxServices(cfg =>
+        {
+            cfg.UseDbContext<TestDbContext>();
+            cfg.AddHandler<UserMessageHandler>();
+        });
+
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+
+        using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        var processor = serviceProvider.GetRequiredService<OutboxProcessor>();
+        await processor.ProcessAsync(context, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
     private static async Task RunBackgroundServiceAsync(IServiceProvider serviceProvider)
     {
         var service = serviceProvider.GetRequiredService<IHostedService>();
