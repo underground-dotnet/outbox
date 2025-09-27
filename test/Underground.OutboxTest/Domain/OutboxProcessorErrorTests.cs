@@ -12,13 +12,13 @@ using Underground.Outbox.Domain;
 
 namespace Underground.OutboxTest.Domain;
 
-public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
+public class OutboxProcessorErrorTests : DatabaseTest
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly ITestOutputHelper _testOutputHelper;
 
-    public OutboxProcessorErrorTests(DatabaseFixture fixture)
+    public OutboxProcessorErrorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        _fixture = fixture;
+        _testOutputHelper = testOutputHelper;
 
         FailedMessageHandler.CalledWith.Clear();
         MockErrorHandler.CalledWithMessage = null;
@@ -32,7 +32,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
@@ -41,8 +41,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = _fixture.CreateDbContext();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.outbox", cancellationToken: TestContext.Current.CancellationToken);
+        var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
@@ -66,7 +65,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
@@ -76,8 +75,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = _fixture.CreateDbContext();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.outbox", cancellationToken: TestContext.Current.CancellationToken);
+        var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
@@ -103,7 +101,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
@@ -113,8 +111,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = _fixture.CreateDbContext();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.outbox", cancellationToken: TestContext.Current.CancellationToken);
+        var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
@@ -140,7 +137,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
@@ -150,8 +147,7 @@ public class OutboxProcessorErrorTests : IClassFixture<DatabaseFixture>
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = _fixture.CreateDbContext();
-        await context.Database.ExecuteSqlRawAsync("TRUNCATE TABLE public.outbox", cancellationToken: TestContext.Current.CancellationToken);
+        var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();

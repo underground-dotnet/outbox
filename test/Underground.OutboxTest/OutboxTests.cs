@@ -9,17 +9,19 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.OutboxTest;
 
-public class OutboxTests : IClassFixture<DatabaseFixture>
+public class OutboxTests : DatabaseTest
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly ITestOutputHelper _testOutputHelper;
 
     private readonly IServiceProvider _serviceProvider;
 
-    public OutboxTests(DatabaseFixture fixture)
+    public OutboxTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        _fixture = fixture;
+        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        _testOutputHelper = testOutputHelper;
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(fixture.Container, fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg => cfg.UseDbContext<TestDbContext>());
 
@@ -30,7 +32,7 @@ public class OutboxTests : IClassFixture<DatabaseFixture>
     public async Task AddMessage_ThrowsNoActiveTransactionException_WhenThereIsNoActiveTransaction()
     {
         // Arrange
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         // Act & Assert
@@ -46,7 +48,7 @@ public class OutboxTests : IClassFixture<DatabaseFixture>
     public async Task AddMessages_ThrowsNoActiveTransactionException_WhenThereIsNoActiveTransaction()
     {
         // Arrange
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         // Act & Assert
@@ -65,7 +67,7 @@ public class OutboxTests : IClassFixture<DatabaseFixture>
     public async Task AddMessage_AddsOutboxMessageToTransaction()
     {
         // Arrange
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         // Act
@@ -84,7 +86,7 @@ public class OutboxTests : IClassFixture<DatabaseFixture>
     public async Task AddMessages_AddsOutboxMessagesToTransaction()
     {
         // Arrange
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         // Act

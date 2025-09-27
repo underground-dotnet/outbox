@@ -1,14 +1,12 @@
 using Microsoft.Extensions.Logging;
 
-using Xunit.Sdk;
-
 namespace Underground.OutboxTest;
 
 public static class LoggerExtensions
 {
-    public static ILoggingBuilder ConfigureTestLogger(this ILoggingBuilder builder, IMessageSink messageSink)
+    public static ILoggingBuilder ConfigureTestLogger(this ILoggingBuilder builder, ITestOutputHelper outputHelper)
     {
-        builder.AddXUnit(messageSink)
+        builder.AddXUnit(outputHelper)
             .SetMinimumLevel(LogLevel.Information)
             .AddFilter("Testcontainers.PostgreSql.PostgreSqlContainer", LogLevel.Error)
             .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Information);

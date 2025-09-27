@@ -7,13 +7,13 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.OutboxTest.Configuration;
 
-public class ConfigureOutboxServicesTests : IClassFixture<DatabaseFixture>
+public class ConfigureOutboxServicesTests : DatabaseTest
 {
-    private readonly DatabaseFixture _fixture;
+    private readonly ITestOutputHelper _testOutputHelper;
 
-    public ConfigureOutboxServicesTests(DatabaseFixture fixture)
+    public ConfigureOutboxServicesTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        _fixture = fixture;
+        _testOutputHelper = testOutputHelper;
     }
 
     [Fact]
@@ -21,7 +21,7 @@ public class ConfigureOutboxServicesTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         // Act & Assert
         Assert.Throws<NoDbContextAssignedException>(() =>
@@ -36,7 +36,7 @@ public class ConfigureOutboxServicesTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices(cfg =>
         {
@@ -58,13 +58,13 @@ public class ConfigureOutboxServicesTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(_fixture.Container, _fixture.MessageSink);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         // Act
         serviceCollection.AddOutboxServices(cfg => cfg.UseDbContext<TestDbContext>());
 
         // Assert
-        var context = _fixture.CreateDbContext();
+        var context = CreateDbContext();
         Assert.True(await TableExists(context, "outbox"));
 
         var tableCount = await context.Database.SqlQuery<int>($"""
