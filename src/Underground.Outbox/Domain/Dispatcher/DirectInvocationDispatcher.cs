@@ -9,12 +9,12 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Dispatcher;
 
-internal sealed class DirectInvocationDispatcher(IServiceProvider serviceProvider) : IMessageDispatcher
+internal sealed class DirectInvocationDispatcher : IMessageDispatcher
 {
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
 
-    public async Task<ProcessingResult> ExecuteAsync(OutboxMessage message, CancellationToken cancellationToken)
+    public async Task<ProcessingResult> ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken)
     {
         HandlerType? type = HandlerType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
@@ -29,7 +29,7 @@ internal sealed class DirectInvocationDispatcher(IServiceProvider serviceProvide
 
         // TODO: will throw when handler not found...
         // Console.WriteLine($"Handler not found for type {type}; all handlers: {string.Join(", ", config.Handlers.Keys)}");
-        var handlerObject = serviceProvider.GetRequiredService(interfaceType);
+        var handlerObject = scope.ServiceProvider.GetRequiredService(interfaceType);
 
         // resolve and invoke `Handle` method
         // resolve the method info from the type and cache it so that the method is only resolved once

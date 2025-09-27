@@ -36,6 +36,7 @@ public static class ConfigureOutboxServices
         services.AddScoped(
             provider => new OutboxProcessor(
                 serviceConfig,
+                provider.GetRequiredService<IServiceScopeFactory>(),
                 provider.GetRequiredService<IMessageDispatcher>(),
                 provider.GetRequiredService<OutboxReflectionErrorHandler>(),
                 provider.GetRequiredService<ILogger<OutboxProcessor>>()

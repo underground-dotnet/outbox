@@ -8,11 +8,16 @@ using Microsoft.Extensions.Logging;
 using System.Threading.Tasks.Dataflow;
 using Underground.Outbox.ErrorHandler;
 using Underground.Outbox.Domain.Dispatcher;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Data.Common;
+using System.Reflection;
 
 namespace Underground.Outbox.Domain;
 
 internal sealed class OutboxProcessor(
     OutboxServiceConfiguration config,
+    IServiceScopeFactory scopeFactory,
     IMessageDispatcher dispatcher,
     OutboxReflectionErrorHandler reflectionErrorHandler,
     ILogger<OutboxProcessor> logger
@@ -82,18 +87,40 @@ internal sealed class OutboxProcessor(
 
         foreach (var message in messages)
         {
-            ProcessingResult result;
             var transaction = dbContext.Database.CurrentTransaction!;
             var savepointName = $"before_message_{message.Id}";
+            await transaction.CreateSavepointAsync(savepointName, cancellationToken);
+            var sharedConnection = transaction.GetDbTransaction().Connection!;
+
+            using var scope = scopeFactory.CreateScope();
+            // connect dbcontext in new scope to current transaction so that all scoped contexts resolved from DI are part of the same transaction
+            var optionsBuilderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(config.DbContextType!);
+            var optionsBuilder = Activator.CreateInstance(optionsBuilderType)!;
+
+            // Call UseNpgsql etc. on the builder
+            var nonGenericBuilder = (DbContextOptionsBuilder)optionsBuilder;
+            nonGenericBuilder.UseNpgsql(sharedConnection);
+
+            // Get the .Options property
+            var optionsProperty = optionsBuilderType.GetProperty("Options", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
+            var dbContextOptions = optionsProperty.GetValue(optionsBuilder)!;
+
+            // Create the DbContext instance
+            await using var scopedDbContext = (DbContext)Activator.CreateInstance(config.DbContextType!, dbContextOptions)!;
+
+            // var scopedDbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType!);
+            // TODO: not working when new dbcontext is created from DI in handler (see assert in UserMessageHandler)
+            await scopedDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken: cancellationToken);
+
+            ProcessingResult result;
 
             try
             {
-                await transaction.CreateSavepointAsync(savepointName, cancellationToken);
-                result = await dispatcher.ExecuteAsync(message, cancellationToken);
+                result = await dispatcher.ExecuteAsync(scope, message, cancellationToken);
             }
             catch (MessageHandlerException ex)
             {
-                logger.LogError(ex, "Error processing message {MessageId}", message.Id);
+                logger.LogError(ex, "Error processing message {MessageId} in handler", message.Id);
                 await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
                 result = await CallErrorHandlerAsync(ex.ErrorHandler, dbContext, message, ex.InnerException, cancellationToken);
             }

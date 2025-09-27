@@ -14,6 +14,7 @@ public class UserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler
     {
         CalledWith.Add(message);
 
+        Assert.NotNull(dbContext.Database.CurrentTransaction);
         await dbContext.Users.AddAsync(new User { Name = "Testuser" }, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 

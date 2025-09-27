@@ -206,6 +206,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
         await processor.ProcessAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
+        // Assert.Empty(context.ChangeTracker.Entries<User>());
         Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
