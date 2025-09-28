@@ -8,7 +8,6 @@ using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.Dispatcher;
-using Underground.Outbox.ErrorHandler;
 using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Configuration;
@@ -31,14 +30,12 @@ public static class ConfigureOutboxServices
 
         services.AddScoped(_ => new AddMessageToOutbox(serviceConfig));
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped<OutboxReflectionErrorHandler>();
         services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
         services.AddScoped(
             provider => new OutboxProcessor(
                 serviceConfig,
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 provider.GetRequiredService<IMessageDispatcher>(),
-                provider.GetRequiredService<OutboxReflectionErrorHandler>(),
                 provider.GetRequiredService<ILogger<OutboxProcessor>>()
             )
         );

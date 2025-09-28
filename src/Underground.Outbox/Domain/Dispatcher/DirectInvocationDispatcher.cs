@@ -14,7 +14,7 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
 
-    public async Task<ProcessingResult> ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken)
     {
         HandlerType? type = HandlerType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
@@ -53,16 +53,10 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
         }
         catch (TargetInvocationException ex)
         {
-            var errorHandlerProperty = interfaceType.GetProperty("ErrorHandler") ?? throw new ParsingException($"Cannot get errorHandler for type '{message.Type} of message: {message.Id}");
-            var errorHandler = errorHandlerProperty.GetValue(handlerObject) as IOutboxErrorHandler ?? throw new ParsingException($"Cannot get errorHandler instance for type '{message.Type} of message: {message.Id}");
-
             throw new MessageHandlerException(
                 $"Error processing message {message.Id} with handler {handlerObject.GetType().Name}",
-                ex.InnerException ?? ex,
-                errorHandler
+                ex.InnerException ?? ex
             );
         }
-
-        return ProcessingResult.Success;
     }
 }

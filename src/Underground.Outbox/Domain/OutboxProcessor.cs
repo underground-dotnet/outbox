@@ -6,12 +6,8 @@ using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks.Dataflow;
-using Underground.Outbox.ErrorHandler;
 using Underground.Outbox.Domain.Dispatcher;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore.Storage;
-using System.Data.Common;
-using System.Reflection;
 
 namespace Underground.Outbox.Domain;
 
@@ -19,15 +15,17 @@ internal sealed class OutboxProcessor(
     OutboxServiceConfiguration config,
     IServiceScopeFactory scopeFactory,
     IMessageDispatcher dispatcher,
-    OutboxReflectionErrorHandler reflectionErrorHandler,
     ILogger<OutboxProcessor> logger
 )
 {
 #pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
-    public async Task ProcessAsync(DbContext dbContext, CancellationToken cancellationToken = default)
+    public async Task ProcessAsync(CancellationToken cancellationToken = default)
     {
+        using var scope = scopeFactory.CreateScope();
+        await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
+
         var fetchPartitions = CreateFetchPartitionsBlock(dbContext, cancellationToken);
-        var processPartitions = CreateProcessPartitionsBlock(dbContext, config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
+        var processPartitions = CreateProcessPartitionsBlock(scope, dbContext, config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
 
         var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
         fetchPartitions.LinkTo(processPartitions, linkOptions);
@@ -50,7 +48,7 @@ internal sealed class OutboxProcessor(
         });
     }
 
-    private ActionBlock<string> CreateProcessPartitionsBlock(DbContext dbContext, int batchSize, int parallelProcessingOfPartitions, CancellationToken cancellationToken)
+    private ActionBlock<string> CreateProcessPartitionsBlock(IServiceScope scope, DbContext dbContext, int batchSize, int parallelProcessingOfPartitions, CancellationToken cancellationToken)
     {
         return new ActionBlock<string>(async partition =>
         {
@@ -68,7 +66,7 @@ internal sealed class OutboxProcessor(
 
             logger.LogInformation("Processing {Count} outbox messages", messages.Count);
 
-            var successIds = await CallMessageHandlersAsync(messages, dbContext, cancellationToken);
+            var successIds = await CallMessageHandlersAsync(messages, scope, dbContext, cancellationToken);
 
             // mark as processed
             await dbContext.Database.ExecuteSqlRawAsync(
@@ -81,77 +79,58 @@ internal sealed class OutboxProcessor(
 
 #pragma warning restore EF1002 // Risk of vulnerability to SQL injection.
 
-    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, DbContext dbContext, CancellationToken cancellationToken)
+    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, DbContext dbContext, CancellationToken cancellationToken)
     {
-        var successfulIds = new List<int>();
+        var savepointName = $"batch_processing";
+        var transaction = dbContext.Database.CurrentTransaction!;
+        await transaction.CreateSavepointAsync(savepointName, cancellationToken);
 
+        var successfulIds = new List<int>();
         foreach (var message in messages)
         {
-            var transaction = dbContext.Database.CurrentTransaction!;
-            var savepointName = $"before_message_{message.Id}";
-            await transaction.CreateSavepointAsync(savepointName, cancellationToken);
-            var sharedConnection = transaction.GetDbTransaction().Connection!;
-
-            using var scope = scopeFactory.CreateScope();
-            // connect dbcontext in new scope to current transaction so that all scoped contexts resolved from DI are part of the same transaction
-            var optionsBuilderType = typeof(DbContextOptionsBuilder<>).MakeGenericType(config.DbContextType!);
-            var optionsBuilder = Activator.CreateInstance(optionsBuilderType)!;
-
-            // Call UseNpgsql etc. on the builder
-            var nonGenericBuilder = (DbContextOptionsBuilder)optionsBuilder;
-            nonGenericBuilder.UseNpgsql(sharedConnection);
-
-            // Get the .Options property
-            var optionsProperty = optionsBuilderType.GetProperty("Options", BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)!;
-            var dbContextOptions = optionsProperty.GetValue(optionsBuilder)!;
-
-            // Create the DbContext instance
-            await using var scopedDbContext = (DbContext)Activator.CreateInstance(config.DbContextType!, dbContextOptions)!;
-
-            // var scopedDbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType!);
-            // TODO: not working when new dbcontext is created from DI in handler (see assert in UserMessageHandler)
-            await scopedDbContext.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken: cancellationToken);
-
-            ProcessingResult result;
+            // TODO: if the current message has failed before and is not the first one to process then stop here and commit the previous messages.
+            Exception? exception = null;
 
             try
             {
-                result = await dispatcher.ExecuteAsync(scope, message, cancellationToken);
+                await dispatcher.ExecuteAsync(scope, message, cancellationToken);
+                successfulIds.Add(message.Id);
             }
             catch (MessageHandlerException ex)
             {
                 logger.LogError(ex, "Error processing message {MessageId} in handler", message.Id);
-                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
-                result = await CallErrorHandlerAsync(ex.ErrorHandler, dbContext, message, ex.InnerException, cancellationToken);
+                exception = ex;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogError(ex, "Error processing message {MessageId}", message.Id);
-                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
-                result = await CallErrorHandlerAsync(reflectionErrorHandler, dbContext, message, ex, cancellationToken);
+                logger.LogError(ex, "Error processing message {MessageId}. Probably a reflection issue.", message.Id);
+                exception = ex;
             }
 
-            // use if/else instead of a switch to be able to break out of the foreach loop
-            if (result == ProcessingResult.Success)
+            if (exception is not null)
             {
-                successfulIds.Add(message.Id);
-            }
-            else if (result == ProcessingResult.FailureAndContinue)
-            {
-                continue; // continue processing other messages
-            }
-            else if (result == ProcessingResult.FailureAndStop)
-            {
-                break; // Break out of the foreach loop (stop processing on first failure)
+                // clear all tracked entities, because the batch processing failed
+                dbContext.ChangeTracker.Clear();
+                successfulIds.Clear();
+                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
+
+                // TODO: decide if max retry count is reached or if a retry makes sense
+                await IncrementRetryCountAsync(dbContext, message, cancellationToken);
+                // Break out of the foreach loop (stop processing on first failure)
+                break;
             }
         }
 
         return successfulIds;
     }
 
-    private async Task<ProcessingResult> CallErrorHandlerAsync(IOutboxErrorHandler errorHandler, DbContext dbContext, OutboxMessage message, Exception exception, CancellationToken cancellationToken)
+    private async Task IncrementRetryCountAsync(DbContext dbContext, OutboxMessage message, CancellationToken cancellationToken)
     {
-        await errorHandler.HandleErrorAsync(dbContext, message, exception, config, cancellationToken);
-        return errorHandler.ShouldStopProcessingOnError ? ProcessingResult.FailureAndStop : ProcessingResult.FailureAndContinue;
+#pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
+        await dbContext.Database.ExecuteSqlRawAsync(
+            $"""UPDATE {config.FullTableName} SET retry_count = retry_count + 1 WHERE "id" = {message.Id}""",
+            cancellationToken
+        );
+#pragma warning restore EF1002 // Risk of vulnerability to SQL injection.
     }
 }

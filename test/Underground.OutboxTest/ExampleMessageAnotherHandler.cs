@@ -1,13 +1,10 @@
 using Underground.Outbox;
-using Underground.Outbox.ErrorHandler;
 
 namespace Underground.OutboxTest;
 
 public class ExampleMessageAnotherHandler : IOutboxMessageHandler<ExampleMessage>
 {
     public static List<ExampleMessage> CalledWith { get; set; } = [];
-
-    public IOutboxErrorHandler ErrorHandler { get; } = new OutboxRetryErrorHandler();
 
     public Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
     {

@@ -14,7 +14,6 @@ internal sealed class OutboxBackgroundService : BackgroundService
 {
     private readonly IDistributedLock _distributedLock;
     private readonly OutboxProcessor _processor;
-    private readonly Type _dbContextType;
     private readonly IServiceScope _scope;
 
     private readonly ILogger _logger;
@@ -27,8 +26,6 @@ internal sealed class OutboxBackgroundService : BackgroundService
 
         _scope = scopeFactory.CreateScope();
         _processor = _scope.ServiceProvider.GetRequiredService<OutboxProcessor>();
-
-        _dbContextType = config.DbContextType ?? throw new NoDbContextAssignedException();
     }
 
     public override void Dispose()
@@ -62,8 +59,7 @@ internal sealed class OutboxBackgroundService : BackgroundService
     {
         try
         {
-            using var dbContext = (DbContext)_scope.ServiceProvider.GetRequiredService(_dbContextType);
-            await _processor.ProcessAsync(dbContext, stoppingToken);
+            await _processor.ProcessAsync(stoppingToken);
             await Task.Delay(1000, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
