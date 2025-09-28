@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using Testcontainers.PostgreSql;
@@ -8,6 +7,8 @@ namespace Underground.OutboxTest;
 
 public class TestDbContext : DbContext
 {
+    public DbSet<User> Users { get; set; }
+
     public TestDbContext(DbContextOptions<TestDbContext> options) : base(options)
     {
     }
