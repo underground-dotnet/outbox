@@ -21,11 +21,8 @@ internal sealed class OutboxProcessor(
 #pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
     public async Task ProcessAsync(CancellationToken cancellationToken = default)
     {
-        using var scope = scopeFactory.CreateScope();
-        await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
-
-        var fetchPartitions = CreateFetchPartitionsBlock(dbContext, cancellationToken);
-        var processPartitions = CreateProcessPartitionsBlock(scope, dbContext, config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
+        var fetchPartitions = CreateFetchPartitionsBlock(cancellationToken);
+        var processPartitions = CreateProcessPartitionsBlock(config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
 
         var linkOptions = new DataflowLinkOptions { PropagateCompletion = true };
         fetchPartitions.LinkTo(processPartitions, linkOptions);
@@ -35,10 +32,13 @@ internal sealed class OutboxProcessor(
         await processPartitions.Completion;
     }
 
-    private TransformManyBlock<int, string> CreateFetchPartitionsBlock(DbContext dbContext, CancellationToken cancellationToken)
+    private TransformManyBlock<int, string> CreateFetchPartitionsBlock(CancellationToken cancellationToken)
     {
         return new TransformManyBlock<int, string>(async _ =>
         {
+            using var scope = scopeFactory.CreateScope();
+            await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
+
             var partitions = await dbContext.Database
                 .SqlQueryRaw<string>($"""SELECT DISTINCT(partition_key) FROM {config.FullTableName} WHERE completed = false""")
                 .AsNoTracking()
@@ -48,10 +48,14 @@ internal sealed class OutboxProcessor(
         });
     }
 
-    private ActionBlock<string> CreateProcessPartitionsBlock(IServiceScope scope, DbContext dbContext, int batchSize, int parallelProcessingOfPartitions, CancellationToken cancellationToken)
+    private ActionBlock<string> CreateProcessPartitionsBlock(int batchSize, int parallelProcessingOfPartitions, CancellationToken cancellationToken)
     {
         return new ActionBlock<string>(async partition =>
         {
+            // use separate scope & context for each partition
+            using var scope = scopeFactory.CreateScope();
+            await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
+
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
             // raw query is needed to inject tablename
