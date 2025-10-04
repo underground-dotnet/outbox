@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
+using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.Dispatcher;
 using Underground.Outbox.Exceptions;
@@ -14,21 +15,19 @@ namespace Underground.Outbox.Configuration;
 
 public static class ConfigureOutboxServices
 {
-    public static IServiceCollection AddOutboxServices(this IServiceCollection services, Action<OutboxServiceConfiguration> configuration)
+    public static IServiceCollection AddOutboxServices<TContext>(
+        this IServiceCollection services,
+        Action<OutboxServiceConfiguration> configuration
+    ) where TContext : DbContext, IOutboxDbContext
     {
         var serviceConfig = new OutboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
 
-        if (serviceConfig.CreateSchemaAutomatically)
-        {
-            var provider = services.BuildServiceProvider();
-            RunMigrations(serviceConfig, provider);
-        }
-
         // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
 
-        services.AddScoped(_ => new AddMessageToOutbox(serviceConfig));
+        services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
+        services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
         services.AddScoped(
@@ -48,7 +47,8 @@ public static class ConfigureOutboxServices
             )
         );
 
-        var dbContext = GetDbContext(serviceConfig, services.BuildServiceProvider());
+        var serviceProvider = services.BuildServiceProvider();
+        var dbContext = serviceProvider.GetRequiredService<IOutboxDbContext>();
         var connectionString = dbContext.Database.GetConnectionString();
         if (string.IsNullOrEmpty(connectionString))
         {
@@ -57,39 +57,5 @@ public static class ConfigureOutboxServices
         services.AddSingleton<IDistributedLockProvider>(_ => new PostgresDistributedSynchronizationProvider(connectionString));
 
         return services;
-    }
-
-    private static DbContext GetDbContext(OutboxServiceConfiguration config, IServiceProvider provider)
-    {
-        var dbContextType = config.DbContextType ?? throw new NoDbContextAssignedException();
-        var dbContext = (DbContext)provider.GetRequiredService(dbContextType);
-        return dbContext;
-    }
-
-    private static void RunMigrations(OutboxServiceConfiguration config, IServiceProvider provider)
-    {
-        using var dbContext = GetDbContext(config, provider);
-        using var connection = dbContext.Database.GetDbConnection();
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = $@"
-            CREATE TABLE IF NOT EXISTS {config.FullTableName} (
-                ""id"" int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-                ""trace_id"" UUID NOT NULL UNIQUE,
-                ""occurred_on"" TIMESTAMPTZ NOT NULL,
-                ""type"" text NOT NULL,
-                ""headers"" JSONB,
-                ""partition_key"" text NOT NULL,
-                ""data"" text,
-                ""payload"" BYTEA,
-                ""completed"" BOOLEAN NOT NULL DEFAULT FALSE,
-                ""executed_at"" TIMESTAMPTZ NULL,
-                ""retry_count"" int NOT NULL DEFAULT 0
-            );
-        ";
-
-        command.ExecuteNonQuery();
-        connection.Close();
     }
 }

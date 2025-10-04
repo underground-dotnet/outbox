@@ -1,16 +1,21 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace Underground.Outbox.Data;
 
 /// <summary>
 /// Represents a database context that contains the outbox messages.
 /// </summary>
-public interface IOutboxDbContext
+public interface IOutboxDbContext : IAsyncDisposable
 {
     /// <summary>
     /// Gets or sets the set of outbox messages.
     /// </summary>
     DbSet<OutboxMessage> OutboxMessages { get; set; }
+
+    public DatabaseFacade Database { get; }
+    public ChangeTracker ChangeTracker { get; }
 
     /// <summary>
     /// Asynchronously saves all changes made in this context to the database.
@@ -26,15 +31,4 @@ public interface IOutboxDbContext
     // {
     //     modelBuilder.ApplyConfiguration(new OutboxMessageEntityTypeConfiguration());
     // }
-}
-
-public static class DbContextExtensions
-{
-    public static string GetTableName<T>(this DbContext context) where T : class
-    {
-        var entityType = context.Model.FindEntityType(typeof(OutboxMessage)) ?? throw new InvalidOperationException($"Entity type {typeof(T).Name} not found in model");
-        var schema = entityType.GetSchema();
-        var tableName = entityType.GetTableName() ?? throw new InvalidOperationException($"Table name for entity type {typeof(T).Name} not found in model");
-        return schema != null ? $"{schema}.{tableName}" : tableName;
-    }
 }

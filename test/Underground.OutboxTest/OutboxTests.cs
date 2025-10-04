@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
@@ -23,7 +22,7 @@ public class OutboxTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg => cfg.UseDbContext<TestDbContext>());
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg => { });
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }

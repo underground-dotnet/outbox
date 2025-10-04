@@ -28,9 +28,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<FailedMessageHandler>();
             cfg.AddHandler<SecondMessageHandler>();
         });
@@ -64,9 +63,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<ExampleMessageHandler>();
             cfg.AddHandler<SecondMessageHandler>();
         });
@@ -102,9 +100,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<FailedMessageHandler>();
             cfg.AddHandler<SecondMessageHandler>();
         });
@@ -145,15 +142,12 @@ public class OutboxProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        // create Users table
-        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<UserMessageHandler>();
         });
 
@@ -180,15 +174,12 @@ public class OutboxProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        // create Users table
-        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             // tries to insert a user via raw SQL
             cfg.AddHandler<CustomSqlMessageHandler>();
         });
@@ -216,15 +207,12 @@ public class OutboxProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        // create Users table
-        await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
 
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices(cfg =>
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.UseDbContext<TestDbContext>();
             cfg.AddHandler<UserMessageHandler>();
         });
 

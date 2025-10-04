@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
@@ -18,7 +17,6 @@ internal sealed class OutboxProcessor(
     ILogger<OutboxProcessor> logger
 )
 {
-#pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
     public async Task ProcessAsync(CancellationToken cancellationToken = default)
     {
         var fetchPartitions = CreateFetchPartitionsBlock(cancellationToken);
@@ -37,10 +35,12 @@ internal sealed class OutboxProcessor(
         return new TransformManyBlock<int, string>(async _ =>
         {
             using var scope = scopeFactory.CreateScope();
-            await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
+            await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-            var partitions = await dbContext.Database
-                .SqlQueryRaw<string>($"""SELECT DISTINCT(partition_key) FROM {config.FullTableName} WHERE completed = false""")
+            var partitions = await dbContext.OutboxMessages
+                .Where(message => !message.Completed)
+                .Select(message => message.PartitionKey)
+                .Distinct()
                 .AsNoTracking()
                 .ToListAsync(cancellationToken);
 
@@ -54,36 +54,31 @@ internal sealed class OutboxProcessor(
         {
             // use separate scope & context for each partition
             using var scope = scopeFactory.CreateScope();
-            await using var dbContext = (DbContext)scope.ServiceProvider.GetRequiredService(config.DbContextType ?? throw new NoDbContextAssignedException());
+            await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
             await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-            // raw query is needed to inject tablename
-            var batchSizeValue = new NpgsqlParameter("@batchSize", batchSize);
+            // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
+            var messages = await dbContext.OutboxMessages
+                .Where(message => !message.Completed && message.PartitionKey == partition)
+                .OrderBy(message => message.Id)
+                .Take(batchSize)
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
 
-            // use NOWAIT instead of SKIP LOCKED to avoid deadlocks when multiple instances are running and to keep order guaranteed
-            var messages = await dbContext.Database.SqlQueryRaw<OutboxMessage>(
-                $"""SELECT * FROM {config.FullTableName} WHERE completed = false ORDER BY "id" FOR UPDATE NOWAIT LIMIT @batchSize""", batchSizeValue
-            )
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-            logger.LogInformation("Processing {Count} outbox messages", messages.Count);
+            logger.LogInformation("Processing {Count} outbox messages for partition '{Partition}'", messages.Count, partition);
 
             var successIds = await CallMessageHandlersAsync(messages, scope, dbContext, cancellationToken);
 
             // mark as processed
-            await dbContext.Database.ExecuteSqlRawAsync(
-                $"""UPDATE {config.FullTableName} SET completed = true WHERE "id" = ANY(@ids)""",
-                new NpgsqlParameter("@ids", successIds.ToArray())
-            );
+            await dbContext.OutboxMessages
+                .Where(m => successIds.Contains(m.Id))
+                .ExecuteUpdateAsync(update => update.SetProperty(m => m.Completed, true), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions });
     }
 
-#pragma warning restore EF1002 // Risk of vulnerability to SQL injection.
-
-    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, DbContext dbContext, CancellationToken cancellationToken)
+    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, IOutboxDbContext dbContext, CancellationToken cancellationToken)
     {
         var savepointName = $"batch_processing";
         var transaction = dbContext.Database.CurrentTransaction!;
@@ -128,13 +123,10 @@ internal sealed class OutboxProcessor(
         return successfulIds;
     }
 
-    private async Task IncrementRetryCountAsync(DbContext dbContext, OutboxMessage message, CancellationToken cancellationToken)
+    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, OutboxMessage message, CancellationToken cancellationToken)
     {
-#pragma warning disable EF1002 // Risk of vulnerability to SQL injection.
-        await dbContext.Database.ExecuteSqlRawAsync(
-            $"""UPDATE {config.FullTableName} SET retry_count = retry_count + 1 WHERE "id" = {message.Id}""",
-            cancellationToken
-        );
-#pragma warning restore EF1002 // Risk of vulnerability to SQL injection.
+        await dbContext.OutboxMessages
+            .Where(m => m.Id == message.Id)
+            .ExecuteUpdateAsync(update => update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1), cancellationToken);
     }
 }
