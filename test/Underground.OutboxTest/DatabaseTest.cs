@@ -19,6 +19,8 @@ public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : Containe
     // used only through direct access in the tests. We could also just get it from the service provider.
     public TestDbContext CreateDbContext()
     {
-        return new TestDbContext(Container, _loggerFactory);
+        var dbContext = new TestDbContext(Container, _loggerFactory);
+        dbContext.Database.EnsureCreated();
+        return dbContext;
     }
 }

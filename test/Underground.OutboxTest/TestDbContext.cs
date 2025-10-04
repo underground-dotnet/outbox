@@ -3,11 +3,14 @@ using Microsoft.Extensions.Logging;
 
 using Testcontainers.PostgreSql;
 
+using Underground.Outbox.Data;
+
 namespace Underground.OutboxTest;
 
-public class TestDbContext : DbContext
+public class TestDbContext : DbContext, IOutboxDbContext
 {
     public DbSet<User> Users { get; set; }
+    public DbSet<OutboxMessage> OutboxMessages { get; set; }
 
     public TestDbContext(DbContextOptions<TestDbContext> options) : base(options)
     {

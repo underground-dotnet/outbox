@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
@@ -9,6 +10,7 @@ public class OutboxMessage
 {
     // TODO: or can we pass use snake case naming somehow to the connection?
     [Column("id")]
+    [Key]
     public int Id { get; init; }
 
     [Column("trace_id")]
@@ -25,6 +27,9 @@ public class OutboxMessage
 
     [Column("data")]
     public string Data { get; init; }
+
+    [Column("retry_count")]
+    public int RetryCount { get; set; } = 0;
 
     [Column("completed")]
     public bool Completed { get; set; } = false;

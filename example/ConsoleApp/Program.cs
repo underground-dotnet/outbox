@@ -5,7 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox.Configuration;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddOutboxServices(cfg =>
+builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });

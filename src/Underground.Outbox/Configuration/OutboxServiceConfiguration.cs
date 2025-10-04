@@ -7,27 +7,11 @@ namespace Underground.Outbox.Configuration;
 
 public class OutboxServiceConfiguration
 {
-    public string SchemaName { get; set; } = "public";
-
-    public string TableName { get; set; } = $"outbox";
-
-    internal string FullTableName => $"\"{SchemaName}\".\"{TableName}\"";
-
-    public bool CreateSchemaAutomatically { get; set; } = true;
-
     public int BatchSize { get; set; } = 5;
 
     public int ParallelProcessingOfPartitions { get; set; } = 4;
 
     internal List<ServiceDescriptor> HandlersWithLifetime = [];
-
-    internal Type? DbContextType { get; set; }
-
-    public OutboxServiceConfiguration UseDbContext<TDbContext>() where TDbContext : DbContext
-    {
-        DbContextType = typeof(TDbContext);
-        return this;
-    }
 
     public OutboxServiceConfiguration AddHandler<TMessageHandlerType>()
     {
