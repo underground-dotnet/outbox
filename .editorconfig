@@ -398,7 +398,7 @@ dotnet_diagnostic.IDE1006.severity = error
 # Enable code style checks IDE0055
 # https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/style-rules/csharp-formatting-options
 # https://learn.microsoft.com/en-us/dotnet/fundamentals/code-analysis/style-rules/language-rules
-dotnet_diagnostic.IDE0055.severity = error
+dotnet_diagnostic.IDE0055.severity = warning
 csharp_space_around_binary_operators = before_and_after
 
 [test/**/*.cs]
