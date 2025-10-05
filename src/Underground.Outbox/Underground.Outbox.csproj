@@ -8,14 +8,11 @@
     <Description>Outbox implementation to support Modulith and Microservice development.</Description>
     <PackageTags>dotnet;outbox</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
-
-    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
 
   <ItemGroup>
     <PackageReference Include="DistributedLock.Postgres" />
-    <PackageReference Include="Humanizer" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />

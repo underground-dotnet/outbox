@@ -6,7 +6,24 @@
 
 version: 2
 updates:
- - package-ecosystem: "devcontainers"
-   directory: "/"
-   schedule:
-     interval: weekly
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    schedule:
+      interval: weekly
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 10
+    groups:
+      nuget-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      nuget-majors:
+        patterns: ["*"]
+        update-types: ["major"]
+      nuget-security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+# dotnet updates: https://devblogs.microsoft.com/dotnet/using-dependabot-to-manage-dotnet-sdk-updates/
