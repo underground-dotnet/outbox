@@ -8,6 +8,7 @@ using Underground.Outbox.Domain;
 
 namespace Underground.OutboxTest.Domain;
 
+[Collection("ExampleMessageHandler Collection")]
 public class OutboxProcessorErrorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;

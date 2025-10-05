@@ -1,6 +1,3 @@
-using Humanizer;
-
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Underground.Outbox.Configuration;
@@ -16,6 +13,11 @@ public class OutboxServiceConfiguration
     public OutboxServiceConfiguration AddHandler<TMessageHandlerType>()
     {
         return AddHandler(typeof(TMessageHandlerType));
+    }
+
+    public OutboxServiceConfiguration AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime)
+    {
+        return AddHandler(typeof(TMessageHandlerType), serviceLifetime);
     }
 
     public OutboxServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
