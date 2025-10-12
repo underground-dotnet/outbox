@@ -16,8 +16,8 @@ public class OutboxMessage
     [Column("trace_id")]
     public Guid TraceId { get; init; }
 
-    [Column("occurred_on")]
-    public DateTime OccurredOn { get; init; }
+    [Column("created_at")]
+    public DateTime CreatedAt { get; init; }
 
     [Column("type")]
     public string Type { get; init; }
@@ -31,22 +31,22 @@ public class OutboxMessage
     [Column("retry_count")]
     public int RetryCount { get; set; } = 0;
 
-    [Column("completed")]
-    public bool Completed { get; set; } = false;
+    [Column("processed_at")]
+    public DateTime? ProcessedAt { get; set; }
 
-    public OutboxMessage(Guid traceId, DateTime occurredOn, string type, string data, string partitionKey = "default")
+    public OutboxMessage(Guid traceId, DateTime createdAt, string type, string data, string partitionKey = "default")
     {
         TraceId = traceId;
-        OccurredOn = occurredOn;
+        CreatedAt = createdAt;
         Type = type;
         PartitionKey = partitionKey;
         Data = data;
     }
 
-    public OutboxMessage(Guid traceId, DateTime occurredOn, object data)
+    public OutboxMessage(Guid traceId, DateTime createdAt, object data)
     {
         TraceId = traceId;
-        OccurredOn = occurredOn;
+        CreatedAt = createdAt;
         Type = data.GetType().AssemblyQualifiedName!;
         PartitionKey = "default";
         Data = JsonSerializer.Serialize(data);

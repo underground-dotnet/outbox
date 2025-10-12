@@ -38,7 +38,7 @@ internal sealed class OutboxProcessor(
             await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
             var partitions = await dbContext.OutboxMessages
-                .Where(message => !message.Completed)
+                .Where(message => message.ProcessedAt == null)
                 .Select(message => message.PartitionKey)
                 .Distinct()
                 .AsNoTracking()
@@ -60,7 +60,7 @@ internal sealed class OutboxProcessor(
 
             // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
             var messages = await dbContext.OutboxMessages
-                .Where(message => !message.Completed && message.PartitionKey == partition)
+                .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
                 .OrderBy(message => message.Id)
                 .Take(batchSize)
                 .AsNoTracking()
@@ -73,7 +73,7 @@ internal sealed class OutboxProcessor(
             // mark as processed
             await dbContext.OutboxMessages
                 .Where(m => successIds.Contains(m.Id))
-                .ExecuteUpdateAsync(update => update.SetProperty(m => m.Completed, true), cancellationToken);
+                .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow), cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions });
     }

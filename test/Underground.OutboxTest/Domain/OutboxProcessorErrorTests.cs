@@ -89,7 +89,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
 
         // Assert
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed = true")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(2, completed);
     }
@@ -127,7 +127,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
         // Assert
         // If one message fails to process all previous successful messages should be rolled back (all or nothing)
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed = true")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(0, completed);
 
