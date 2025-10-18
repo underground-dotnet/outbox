@@ -38,7 +38,8 @@ public class OutboxTests : DatabaseTest
         await Assert.ThrowsAsync<NoActiveTransactionException>(async () =>
             await outbox.AddMessageAsync(
                 context,
-                new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1))
+                new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1)),
+                TestContext.Current.CancellationToken
             )
         );
     }
@@ -57,7 +58,8 @@ public class OutboxTests : DatabaseTest
                 [
                     new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1)),
                     new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2))
-                ]
+                ],
+                TestContext.Current.CancellationToken
             )
         );
     }
@@ -73,7 +75,8 @@ public class OutboxTests : DatabaseTest
         using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
         await outbox.AddMessageAsync(
             context,
-            new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1))
+            new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1)),
+            TestContext.Current.CancellationToken
         );
 
         // Assert
@@ -95,7 +98,8 @@ public class OutboxTests : DatabaseTest
             [
                 new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1)),
                 new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2))
-            ]
+            ],
+            TestContext.Current.CancellationToken
         );
 
         // Assert

@@ -46,8 +46,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
-            await outbox.AddMessageAsync(context, msg2);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
@@ -81,8 +81,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
-            await outbox.AddMessageAsync(context, msg2);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
@@ -118,8 +118,8 @@ public class OutboxProcessorErrorTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
-            await outbox.AddMessageAsync(context, msg2);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
@@ -158,7 +158,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
@@ -191,7 +191,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
@@ -223,7 +223,7 @@ public class OutboxProcessorErrorTests : DatabaseTest
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg);
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 

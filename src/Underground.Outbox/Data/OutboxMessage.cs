@@ -2,10 +2,13 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 
+using Microsoft.EntityFrameworkCore;
+
 namespace Underground.Outbox.Data;
 
 // TODO: how to use it from config file? and/or allow it for manual migrations with ef core
 [Table("outbox")]
+[Index(nameof(EventId), IsUnique = true)]
 public class OutboxMessage
 {
     // TODO: or can we pass use snake case naming somehow to the connection?
@@ -13,8 +16,8 @@ public class OutboxMessage
     [Key]
     public int Id { get; init; }
 
-    [Column("trace_id")]
-    public Guid TraceId { get; init; }
+    [Column("event_id")]
+    public Guid EventId { get; init; }
 
     [Column("created_at")]
     public DateTime CreatedAt { get; init; }
@@ -34,18 +37,18 @@ public class OutboxMessage
     [Column("processed_at")]
     public DateTime? ProcessedAt { get; set; }
 
-    public OutboxMessage(Guid traceId, DateTime createdAt, string type, string data, string partitionKey = "default")
+    public OutboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
     {
-        TraceId = traceId;
+        EventId = eventId;
         CreatedAt = createdAt;
         Type = type;
         PartitionKey = partitionKey;
         Data = data;
     }
 
-    public OutboxMessage(Guid traceId, DateTime createdAt, object data)
+    public OutboxMessage(Guid eventId, DateTime createdAt, object data)
     {
-        TraceId = traceId;
+        EventId = eventId;
         CreatedAt = createdAt;
         Type = data.GetType().AssemblyQualifiedName!;
         PartitionKey = "default";
