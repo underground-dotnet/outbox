@@ -10,8 +10,8 @@ public class OutboxMessageEntityTypeConfiguration : IEntityTypeConfiguration<Out
         // builder.ToTable("outbox_messages");
         builder.HasKey(e => e.Id);
         // builder.Property(e => e.Id).ValueGeneratedNever();
-        builder.Property(e => e.TraceId).ValueGeneratedNever();
-        builder.Property(e => e.TraceId).IsRequired();
+        builder.Property(e => e.EventId).ValueGeneratedNever();
+        builder.Property(e => e.EventId).IsRequired();
         builder.Property(e => e.CreatedAt).IsRequired();
         builder.Property(e => e.Type).IsRequired();
         builder.Property(e => e.Data).IsRequired();

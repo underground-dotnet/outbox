@@ -58,7 +58,7 @@ public class OutboxProcessorTests : DatabaseTest
 
         // Act
         await using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
-        await outbox.AddMessageAsync(context, msg);
+        await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
         await RunBackgroundServiceAsync();
 

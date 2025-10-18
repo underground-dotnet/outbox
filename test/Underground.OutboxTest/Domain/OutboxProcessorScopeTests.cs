@@ -50,8 +50,8 @@ public class OutboxProcessorScopeTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg1);
-            await outbox.AddMessageAsync(context, msg2);
+            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
@@ -73,8 +73,8 @@ public class OutboxProcessorScopeTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg1);
-            await outbox.AddMessageAsync(context, msg2);
+            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
@@ -97,9 +97,9 @@ public class OutboxProcessorScopeTests : DatabaseTest
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
-            await outbox.AddMessageAsync(context, msg1);
-            await outbox.AddMessageAsync(context, msg2);
-            await outbox.AddMessageAsync(context, msg3);
+            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg3, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         // Batch 1
