@@ -5,6 +5,7 @@ using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
+using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 
@@ -233,5 +234,36 @@ public class OutboxProcessorErrorTests : DatabaseTest
 
         // Assert
         Assert.NotNull(UserMessageHandler.CalledWithTransaction);
+    }
+
+    [Fact]
+    public async Task DiscardMessagesOnSpecificException()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.AddHandler<DiscardFailedMessageHandler>();
+        });
+
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+
+        var processor = serviceProvider.GetRequiredService<OutboxProcessor>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 }

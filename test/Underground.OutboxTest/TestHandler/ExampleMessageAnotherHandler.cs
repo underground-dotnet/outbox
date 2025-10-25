@@ -1,6 +1,6 @@
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class ExampleMessageAnotherHandler : IOutboxMessageHandler<ExampleMessage>
 {

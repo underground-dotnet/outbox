@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
-namespace Underground.Outbox.Domain.Dispatcher;
+namespace Underground.Outbox.Domain.Dispatchers;
 
 internal sealed class DirectInvocationDispatcher : IMessageDispatcher
 {
@@ -54,6 +54,8 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
         catch (TargetInvocationException ex)
         {
             throw new MessageHandlerException(
+                handlerObject.GetType(),
+                method,
                 $"Error processing message {message.Id} with handler {handlerObject.GetType().Name}",
                 ex.InnerException ?? ex
             );

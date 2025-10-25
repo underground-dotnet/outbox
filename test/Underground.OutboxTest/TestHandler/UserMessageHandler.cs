@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class UserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<ExampleMessage>
 {

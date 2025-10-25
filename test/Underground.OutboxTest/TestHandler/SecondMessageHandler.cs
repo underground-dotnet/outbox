@@ -1,8 +1,6 @@
-using System;
-
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class SecondMessageHandler : IOutboxMessageHandler<SecondMessage>
 {

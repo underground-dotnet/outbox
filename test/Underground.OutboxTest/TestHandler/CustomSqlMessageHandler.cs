@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class CustomSqlMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<ExampleMessage>
 {

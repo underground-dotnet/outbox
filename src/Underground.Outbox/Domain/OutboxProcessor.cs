@@ -5,8 +5,9 @@ using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 using Microsoft.Extensions.Logging;
 using System.Threading.Tasks.Dataflow;
-using Underground.Outbox.Domain.Dispatcher;
 using Microsoft.Extensions.DependencyInjection;
+using Underground.Outbox.Domain.Dispatchers;
+using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Domain;
 
@@ -19,6 +20,7 @@ internal sealed class OutboxProcessor(
 {
     public async Task ProcessAsync(CancellationToken cancellationToken = default)
     {
+        // TODO: move setup to constructor, then we can allow push based processing as well
         var fetchPartitions = CreateFetchPartitionsBlock(cancellationToken);
         var processPartitions = CreateProcessPartitionsBlock(config.BatchSize, config.ParallelProcessingOfPartitions, cancellationToken);
 
@@ -80,6 +82,8 @@ internal sealed class OutboxProcessor(
 
     private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, IOutboxDbContext dbContext, CancellationToken cancellationToken)
     {
+        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler>();
+
         var savepointName = $"batch_processing";
         var transaction = dbContext.Database.CurrentTransaction!;
         await transaction.CreateSavepointAsync(savepointName, cancellationToken);
@@ -113,8 +117,15 @@ internal sealed class OutboxProcessor(
                 successfulIds.Clear();
                 await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
 
+                if (exception is MessageHandlerException ex)
+                {
+                    await processHandlerException.ExecuteAsync(ex, message, dbContext, cancellationToken);
+                }
+
                 // TODO: decide if max retry count is reached or if a retry makes sense
+                // TODO: remove or move to processHandlerException
                 await IncrementRetryCountAsync(dbContext, message, cancellationToken);
+
                 // Break out of the foreach loop (stop processing on first failure)
                 break;
             }

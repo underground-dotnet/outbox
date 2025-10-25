@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 
 using Underground.Outbox.Data;
+using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
 
