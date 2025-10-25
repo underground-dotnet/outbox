@@ -264,10 +264,6 @@ public class OutboxProcessorErrorTests : DatabaseTest
         await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        // Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
-        var count = await context.Database
-        .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox")
-        .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(0, count);
+        Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 }
