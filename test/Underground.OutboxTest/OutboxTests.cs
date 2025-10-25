@@ -5,6 +5,7 @@ using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
+using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
 

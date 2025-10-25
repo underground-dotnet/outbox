@@ -1,7 +1,6 @@
-using System;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 [Table("Users")]
 public class User

@@ -1,9 +1,8 @@
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {

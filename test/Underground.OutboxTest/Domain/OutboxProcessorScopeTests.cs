@@ -4,6 +4,7 @@ using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
+using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 

@@ -1,11 +1,10 @@
-using System;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 

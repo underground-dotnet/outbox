@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
 
-namespace Underground.Outbox.Domain.Dispatcher;
+namespace Underground.Outbox.Domain.Dispatchers;
 
 public interface IMessageDispatcher
 {

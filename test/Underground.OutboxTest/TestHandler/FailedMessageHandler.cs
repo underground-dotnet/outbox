@@ -2,7 +2,7 @@ using System.Data;
 
 using Underground.Outbox;
 
-namespace Underground.OutboxTest;
+namespace Underground.OutboxTest.TestHandler;
 
 public class FailedMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
