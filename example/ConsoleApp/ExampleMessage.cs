@@ -1,3 +1,3 @@
 namespace ConsoleApp;
 
-public record ExampleMessage(int Id);
+public record ExampleMessage(string Id);

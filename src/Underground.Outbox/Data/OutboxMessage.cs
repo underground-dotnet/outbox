@@ -8,6 +8,7 @@ namespace Underground.Outbox.Data;
 
 // TODO: how to use it from config file? and/or allow it for manual migrations with ef core
 [Table("outbox")]
+// TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
 public class OutboxMessage
 {
@@ -46,12 +47,12 @@ public class OutboxMessage
         Data = data;
     }
 
-    public OutboxMessage(Guid eventId, DateTime createdAt, object data)
+    public OutboxMessage(Guid eventId, DateTime createdAt, object data, string partitionKey = "default")
     {
         EventId = eventId;
         CreatedAt = createdAt;
         Type = data.GetType().AssemblyQualifiedName!;
-        PartitionKey = "default";
+        PartitionKey = partitionKey;
         Data = JsonSerializer.Serialize(data);
     }
 }
