@@ -16,7 +16,7 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
 
     public async Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken)
     {
-        HandlerType? type = HandlerType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
+        MessageType? type = MessageType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
         var fullEvent = JsonSerializer.Deserialize(message.Data, type) ?? throw new ParsingException($"Cannot parse event body '{message.Data} of message: {message.Id}");
 
