@@ -10,7 +10,6 @@ using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.Dispatchers;
 using Underground.Outbox.Domain.ExceptionHandlers;
-using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Configuration;
 
@@ -41,14 +40,7 @@ public static class ConfigureOutboxServices
                 provider.GetRequiredService<ILogger<OutboxProcessor>>()
             )
         );
-        services.AddHostedService(provider =>
-            new OutboxBackgroundService(
-                serviceConfig,
-                provider.GetRequiredService<IServiceScopeFactory>(),
-                provider.GetRequiredService<IDistributedLockProvider>(),
-                provider.GetRequiredService<ILogger<OutboxBackgroundService>>()
-            )
-        );
+        services.AddHostedService<OutboxBackgroundService>();
 
         var serviceProvider = services.BuildServiceProvider();
         var dbContext = serviceProvider.GetRequiredService<IOutboxDbContext>();
