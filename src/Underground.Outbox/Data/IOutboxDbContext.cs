@@ -26,9 +26,4 @@ public interface IOutboxDbContext : IAsyncDisposable
     /// number of state entries written to the database.
     /// </returns>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
-
-    // protected override void OnModelCreating(ModelBuilder modelBuilder)
-    // {
-    //     modelBuilder.ApplyConfiguration(new OutboxMessageEntityTypeConfiguration());
-    // }
 }

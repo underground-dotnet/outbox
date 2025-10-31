@@ -11,7 +11,6 @@ namespace Underground.Outbox.Data;
 [Index(nameof(EventId), IsUnique = true)]
 public class OutboxMessage
 {
-    // TODO: or can we pass use snake case naming somehow to the connection?
     [Column("id")]
     [Key]
     public int Id { get; init; }
