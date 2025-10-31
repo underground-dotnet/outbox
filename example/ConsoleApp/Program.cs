@@ -45,6 +45,10 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
     await transaction.CommitAsync();
 }
 
+// using custom table name "outbox_msgs"
+var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox_msgs").SingleAsync();
+Console.WriteLine($"Added {count} messages to outbox.");
+
 await host.RunAsync();
 
 #pragma warning restore CA1305 // Specify IFormatProvider

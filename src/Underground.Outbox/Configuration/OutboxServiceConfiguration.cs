@@ -4,6 +4,10 @@ namespace Underground.Outbox.Configuration;
 
 public class OutboxServiceConfiguration
 {
+    /// <summary>
+    /// Number of messages to process in a single batch.
+    /// The whole batch is processed within a single transaction. If you want to have a transaction per message, set this to 1.
+    /// </summary>
     public int BatchSize { get; set; } = 5;
 
     public int ParallelProcessingOfPartitions { get; set; } = 4;

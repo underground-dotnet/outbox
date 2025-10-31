@@ -6,7 +6,6 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Underground.Outbox.Data;
 
-// TODO: how to use it from config file? and/or allow it for manual migrations with ef core
 [Table("outbox")]
 // TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
@@ -18,6 +17,7 @@ public class OutboxMessage
     public int Id { get; init; }
 
     [Column("event_id")]
+    [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid EventId { get; init; }
 
     [Column("created_at")]
