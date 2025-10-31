@@ -7,7 +7,7 @@ internal class ProcessExceptionFromHandler(IEnumerable<IMessageExceptionHandler>
 {
     private readonly IEnumerable<IMessageExceptionHandler> _handlers = handlers;
 
-    internal async Task ExecuteAsync(MessageHandlerException ex, OutboxMessage message, IOutboxDbContext dbContext, CancellationToken cancellationToken)
+    internal async Task ExecuteAsync(MessageHandlerException ex, OutboxMessage message, IOutboxDbContext dbContext, CancellationToken cancellationToken = default)
     {
         foreach (var handler in _handlers)
         {

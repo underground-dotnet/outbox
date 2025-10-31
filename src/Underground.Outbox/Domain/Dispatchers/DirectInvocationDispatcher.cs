@@ -14,7 +14,7 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
 
-    public async Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken = default)
     {
         MessageType? type = MessageType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
