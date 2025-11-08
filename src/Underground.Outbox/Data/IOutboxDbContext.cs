@@ -16,6 +16,9 @@ public interface IOutboxDbContext : IAsyncDisposable
 
     public DatabaseFacade Database { get; }
     public ChangeTracker ChangeTracker { get; }
+#pragma warning disable CA1716 // Identifiers should not match keywords
+    public DbSet<TEntity> Set<TEntity>() where TEntity : class;
+#pragma warning restore CA1716 // Identifiers should not match keywords
 
     /// <summary>
     /// Asynchronously saves all changes made in this context to the database.

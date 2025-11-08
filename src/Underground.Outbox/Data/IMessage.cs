@@ -1,0 +1,11 @@
+namespace Underground.Outbox.Data;
+
+public interface IMessage
+{
+    public int Id { get; }
+    public string Type { get; }
+    public string PartitionKey { get; }
+    public string Data { get; }
+    public int RetryCount { get; set; }
+    public DateTime? ProcessedAt { get; set; }
+}

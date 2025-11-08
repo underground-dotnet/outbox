@@ -9,7 +9,7 @@ namespace Underground.Outbox.Data;
 [Table("outbox")]
 // TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
-public class OutboxMessage
+public class OutboxMessage : IMessage
 {
     [Column("id")]
     [Key]

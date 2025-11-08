@@ -30,14 +30,14 @@ public static class ConfigureOutboxServices
         services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
-        services.AddScoped<IMessageExceptionHandler, DiscardMessageOnExceptionHandler>();
-        services.AddScoped<ProcessExceptionFromHandler>();
+        services.AddScoped<IMessageExceptionHandler<OutboxMessage>, DiscardMessageOnExceptionHandler<OutboxMessage>>();
+        services.AddScoped<ProcessExceptionFromHandler<OutboxMessage>>();
         services.AddSingleton(
-            provider => new OutboxProcessor(
+            provider => new OutboxProcessor<OutboxMessage>(
                 serviceConfig,
                 provider.GetRequiredService<IServiceScopeFactory>(),
                 provider.GetRequiredService<IMessageDispatcher>(),
-                provider.GetRequiredService<ILogger<OutboxProcessor>>()
+                provider.GetRequiredService<ILogger<OutboxProcessor<OutboxMessage>>>()
             )
         );
         services.AddHostedService<OutboxBackgroundService>();

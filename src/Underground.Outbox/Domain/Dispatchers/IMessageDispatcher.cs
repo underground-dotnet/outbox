@@ -6,5 +6,5 @@ namespace Underground.Outbox.Domain.Dispatchers;
 
 public interface IMessageDispatcher
 {
-    public Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken = default);
+    public Task ExecuteAsync(IServiceScope scope, IMessage message, CancellationToken cancellationToken = default);
 }

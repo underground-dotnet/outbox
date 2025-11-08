@@ -3,18 +3,19 @@ using Medallion.Threading;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
 internal sealed class OutboxBackgroundService(
-    OutboxProcessor processor,
+    OutboxProcessor<OutboxMessage> processor,
     IDistributedLockProvider synchronizationProvider,
     ILogger<OutboxBackgroundService> logger
 ) : BackgroundService
 {
     private readonly IDistributedLock _distributedLock = synchronizationProvider.CreateLock("OutboxBackgroundServiceLock");
-    private readonly OutboxProcessor _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+    private readonly OutboxProcessor<OutboxMessage> _processor = processor ?? throw new ArgumentNullException(nameof(processor));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

@@ -11,11 +11,11 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class OutboxProcessor
+internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IMessageDispatcher _dispatcher;
-    private readonly ILogger<OutboxProcessor> _logger;
+    private readonly ILogger<OutboxProcessor<TEntity>> _logger;
     private readonly TransformManyBlock<int, string> _processFlow;
     private readonly Lock _lock = new();
     private TaskCompletionSource? _currentProcessingTask;
@@ -25,8 +25,8 @@ internal sealed class OutboxProcessor
         OutboxServiceConfiguration config,
         IServiceScopeFactory scopeFactory,
         IMessageDispatcher dispatcher,
-        ILogger<OutboxProcessor> logger
-)
+        ILogger<OutboxProcessor<TEntity>> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _dispatcher = dispatcher;
@@ -67,7 +67,7 @@ internal sealed class OutboxProcessor
             using var scope = _scopeFactory.CreateScope();
             await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-            var partitions = await dbContext.OutboxMessages
+            var partitions = await dbContext.Set<TEntity>()
                 .Where(message => message.ProcessedAt == null)
                 .Select(message => message.PartitionKey)
                 .Distinct()
@@ -98,19 +98,20 @@ internal sealed class OutboxProcessor
                 await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
                 // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
-                var messages = await dbContext.OutboxMessages
+                var messages = await dbContext.Set<TEntity>()
                     .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
                     .OrderBy(message => message.Id)
                     .Take(batchSize)
                     .AsNoTracking()
                     .ToListAsync();
 
-                _logger.LogInformation("Processing {Count} outbox messages for partition '{Partition}'", messages.Count, partition);
+                // TODO: add inbox or outbox wording to logmessage
+                _logger.LogInformation("Processing {Count} messages for partition '{Partition}'", messages.Count, partition);
 
                 var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
 
                 // mark as processed
-                await dbContext.OutboxMessages
+                await dbContext.Set<TEntity>()
                     .Where(m => successIds.Contains(m.Id))
                     .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
                 await transaction.CommitAsync();
@@ -130,9 +131,9 @@ internal sealed class OutboxProcessor
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions, BoundedCapacity = 1 });
     }
 
-    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, IOutboxDbContext dbContext)
+    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
     {
-        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler>();
+        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
         var savepointName = $"batch_processing";
         var transaction = dbContext.Database.CurrentTransaction!;
@@ -184,9 +185,9 @@ internal sealed class OutboxProcessor
         return successfulIds;
     }
 
-    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, OutboxMessage message)
+    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, IMessage message)
     {
-        await dbContext.OutboxMessages
+        await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)
             .ExecuteUpdateAsync(update => update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1));
     }
