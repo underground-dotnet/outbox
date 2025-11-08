@@ -14,7 +14,7 @@ namespace Underground.Outbox.Domain;
 internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IMessageDispatcher _dispatcher;
+    private readonly IMessageDispatcher<TEntity> _dispatcher;
     private readonly ILogger<OutboxProcessor<TEntity>> _logger;
     private readonly TransformManyBlock<int, string> _processFlow;
     private readonly Lock _lock = new();
@@ -24,7 +24,7 @@ internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
     public OutboxProcessor(
         OutboxServiceConfiguration config,
         IServiceScopeFactory scopeFactory,
-        IMessageDispatcher dispatcher,
+        IMessageDispatcher<TEntity> dispatcher,
         ILogger<OutboxProcessor<TEntity>> logger
     )
     {

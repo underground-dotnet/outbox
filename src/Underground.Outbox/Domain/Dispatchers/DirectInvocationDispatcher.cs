@@ -9,12 +9,16 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Dispatchers;
 
-internal sealed class DirectInvocationDispatcher : IMessageDispatcher
+internal sealed class DirectInvocationDispatcher<THandler, TMessage> : IMessageDispatcher<TMessage>
+    where THandler : IOutboxMessageHandler<>
+    where TMessage : class, IMessage
 {
+#pragma warning disable S2743 // Static fields should not be used in generic types
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
+#pragma warning restore S2743 // Static fields should not be used in generic types
 
-    public async Task ExecuteAsync(IServiceScope scope, IMessage message, CancellationToken cancellationToken = default)
+    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken = default)
     {
         MessageType? type = MessageType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
@@ -24,7 +28,7 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
         // idea from: https://www.youtube.com/watch?v=5yLIzis9Qr0 it also shows more improvements we could do here
         Type interfaceType = HandlerTypeDictionary.GetOrAdd(
             fullEvent.GetType(),
-            eventType => typeof(IOutboxMessageHandler<>).MakeGenericType(eventType)
+            eventType => typeof(THandler).MakeGenericType(eventType)
         );
 
         // TODO: will throw when handler not found...
