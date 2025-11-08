@@ -23,8 +23,6 @@ public class OutboxProcessorErrorTests : DatabaseTest
         FailedMessageHandler.CalledWith.Clear();
         SecondMessageHandler.CalledWith.Clear();
         UserMessageHandler.CalledWithTransaction = null;
-        CustomSqlMessageHandler.CalledWith.Clear();
-        DiscardFailedMessageHandler.CalledWith.Clear();
     }
 
     [Fact]
