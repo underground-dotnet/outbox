@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
@@ -45,6 +46,7 @@ public class OutboxProcessorScopeTests : DatabaseTest
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "B" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<OutboxProcessor>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -53,10 +55,9 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        outbox.ProcessMessages();
+        await processor.ProcessAsync();
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 1, TimeSpan.FromSeconds(3));
         Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
     }
 
@@ -68,6 +69,7 @@ public class OutboxProcessorScopeTests : DatabaseTest
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<OutboxProcessor>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -76,10 +78,9 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        outbox.ProcessMessages();
+        await processor.ProcessAsync();
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(3));
         Assert.Single(ExampleMessageHandler.ObjectIds);
     }
 
@@ -92,6 +93,7 @@ public class OutboxProcessorScopeTests : DatabaseTest
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
         var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { PartitionKey = "A" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<OutboxProcessor>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -102,14 +104,11 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         // Batch 1
-        outbox.ProcessMessages();
-        // TODO: post commit hook
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 2, TimeSpan.FromSeconds(3));
+        await processor.ProcessAsync();
         // Batch 2
-        outbox.ProcessMessages();
+        await processor.ProcessAsync();
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 3, TimeSpan.FromSeconds(3));
         Assert.Equal(3, ExampleMessageHandler.CalledWith.Count);
         Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
     }

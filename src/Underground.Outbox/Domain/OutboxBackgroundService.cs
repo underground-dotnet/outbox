@@ -40,7 +40,7 @@ internal sealed class OutboxBackgroundService(
     {
         try
         {
-            _processor.Process();
+            await _processor.ProcessAsync();
             await Task.Delay(4000, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)

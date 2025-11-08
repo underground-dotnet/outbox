@@ -17,6 +17,9 @@ internal sealed class OutboxProcessor
     private readonly IMessageDispatcher _dispatcher;
     private readonly ILogger<OutboxProcessor> _logger;
     private readonly TransformManyBlock<int, string> _processFlow;
+    private readonly Lock _lock = new();
+    private TaskCompletionSource? _currentProcessingTask;
+    private int _activePartitions;
 
     public OutboxProcessor(
         OutboxServiceConfiguration config,
@@ -42,6 +45,21 @@ internal sealed class OutboxProcessor
         _processFlow.Post(0);
     }
 
+    internal Task ProcessAsync()
+    {
+        lock (_lock)
+        {
+            if (_currentProcessingTask is null || _currentProcessingTask.Task.IsCompleted)
+            {
+                _currentProcessingTask = new TaskCompletionSource();
+            }
+
+            _processFlow.Post(0);
+
+            return _currentProcessingTask.Task;
+        }
+    }
+
     private TransformManyBlock<int, string> CreateFetchPartitionsBlock()
     {
         return new TransformManyBlock<int, string>(async _ =>
@@ -56,6 +74,11 @@ internal sealed class OutboxProcessor
                 .AsNoTracking()
                 .ToListAsync();
 
+            lock (_lock)
+            {
+                _activePartitions = partitions.Count;
+            }
+
             return partitions;
         },
         // limit capacity to 1 to avoid multiple fetches at the same time
@@ -66,29 +89,44 @@ internal sealed class OutboxProcessor
     {
         return new ActionBlock<string>(async partition =>
         {
-            // use separate scope & context for each partition
-            using var scope = _scopeFactory.CreateScope();
-            await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+            try
+            {
+                // use separate scope & context for each partition
+                using var scope = _scopeFactory.CreateScope();
+                await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+                await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
-            // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
-            var messages = await dbContext.OutboxMessages
-                .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
-                .OrderBy(message => message.Id)
-                .Take(batchSize)
-                .AsNoTracking()
-                .ToListAsync();
+                // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
+                var messages = await dbContext.OutboxMessages
+                    .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
+                    .OrderBy(message => message.Id)
+                    .Take(batchSize)
+                    .AsNoTracking()
+                    .ToListAsync();
 
-            _logger.LogInformation("Processing {Count} outbox messages for partition '{Partition}'", messages.Count, partition);
+                _logger.LogInformation("Processing {Count} outbox messages for partition '{Partition}'", messages.Count, partition);
 
-            var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
+                var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
 
-            // mark as processed
-            await dbContext.OutboxMessages
-                .Where(m => successIds.Contains(m.Id))
-                .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
-            await transaction.CommitAsync();
+                // mark as processed
+                await dbContext.OutboxMessages
+                    .Where(m => successIds.Contains(m.Id))
+                    .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
+                await transaction.CommitAsync();
+
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    _activePartitions--;
+                    if (_activePartitions == 0)
+                    {
+                        _currentProcessingTask?.SetResult();
+                    }
+                }
+            }
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions, BoundedCapacity = 1 });
     }
 
