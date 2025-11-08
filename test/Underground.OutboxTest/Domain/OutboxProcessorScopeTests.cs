@@ -55,7 +55,7 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync();
 
         // Assert
         Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
@@ -78,7 +78,7 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync();
 
         // Assert
         Assert.Single(ExampleMessageHandler.ObjectIds);
@@ -104,9 +104,9 @@ public class OutboxProcessorScopeTests : DatabaseTest
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         // Batch 1
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync();
         // Batch 2
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAsync();
 
         // Assert
         Assert.Equal(3, ExampleMessageHandler.CalledWith.Count);

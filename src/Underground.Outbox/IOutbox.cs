@@ -29,4 +29,9 @@ public interface IOutbox
     /// When a message with the same EventId already exists in the outbox.
     /// </exception>
     public Task AddMessagesAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Trigger a processing run of the outbox messages. It will run asynchronously in the background.
+    /// </summary>
+    public void ProcessMessages();
 }
