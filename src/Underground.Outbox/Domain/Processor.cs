@@ -67,28 +67,37 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
     {
         return new TransformManyBlock<int, string>(async _ =>
         {
-            using var scope = _scopeFactory.CreateScope();
-            await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-
-            var partitions = await dbContext.Set<TEntity>()
-                .Where(message => message.ProcessedAt == null)
-                .Select(message => message.PartitionKey)
-                .Distinct()
-                .AsNoTracking()
-                .ToListAsync();
-
-            if (_activePartitions == 0 && partitions.Count == 0)
+            try
             {
-                // processing is completed and no more partitions are found
-                _currentProcessingTask?.SetResult();
-            }
+                using var scope = _scopeFactory.CreateScope();
+                await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-            lock (_lock)
+                var partitions = await dbContext.Set<TEntity>()
+                    .Where(message => message.ProcessedAt == null)
+                    .Select(message => message.PartitionKey)
+                    .Distinct()
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                if (_activePartitions == 0 && partitions.Count == 0)
+                {
+                    // processing is completed and no more partitions are found
+                    _currentProcessingTask?.SetResult();
+                }
+
+                lock (_lock)
+                {
+                    _activePartitions = partitions.Count;
+                }
+
+                return partitions;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _activePartitions = partitions.Count;
+                _logger.LogError(ex, "Error fetching partitions for processing.");
+                _currentProcessingTask?.SetException(ex);
+                return [];
             }
-
-            return partitions;
         },
         // limit capacity to 1 to avoid multiple fetches at the same time
         new ExecutionDataflowBlockOptions { BoundedCapacity = 1 });
