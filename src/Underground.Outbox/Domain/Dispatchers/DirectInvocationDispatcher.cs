@@ -12,10 +12,8 @@ namespace Underground.Outbox.Domain.Dispatchers;
 internal abstract class DirectInvocationDispatcher<TMessage> : IMessageDispatcher<TMessage>
     where TMessage : class, IMessage
 {
-#pragma warning disable S2743 // Static fields should not be used in generic types
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
-#pragma warning restore S2743 // Static fields should not be used in generic types
 
     public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken = default)
     {
