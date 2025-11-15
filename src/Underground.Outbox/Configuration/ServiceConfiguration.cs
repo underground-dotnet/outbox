@@ -1,0 +1,31 @@
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Underground.Outbox.Configuration;
+
+public abstract class ServiceConfiguration
+{
+    /// <summary>
+    /// Number of messages to process in a single batch.
+    /// The whole batch is processed within a single transaction. If you want to have a transaction per message, set this to 1.
+    /// </summary>
+    public int BatchSize { get; set; } = 5;
+
+    public int ParallelProcessingOfPartitions { get; set; } = 4;
+
+    internal List<ServiceDescriptor> HandlersWithLifetime = [];
+
+    // TODO: add constraint on the generic type? like IInboxMessageHandler?
+    public ServiceConfiguration AddHandler<TMessageHandlerType>()
+    {
+        return AddHandler(typeof(TMessageHandlerType));
+    }
+
+    public ServiceConfiguration AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime)
+    {
+        return AddHandler(typeof(TMessageHandlerType), serviceLifetime);
+    }
+
+#pragma warning disable CA1716 // Identifiers should not match keywords
+    public abstract ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient);
+#pragma warning restore CA1716 // Identifiers should not match keywords
+}

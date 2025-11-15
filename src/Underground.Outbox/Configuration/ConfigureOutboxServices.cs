@@ -29,18 +29,9 @@ public static class ConfigureOutboxServices
         services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped<IMessageDispatcher, DirectInvocationDispatcher>();
-        services.AddScoped<IMessageExceptionHandler<OutboxMessage>, DiscardMessageOnExceptionHandler<OutboxMessage>>();
-        services.AddScoped<ProcessExceptionFromHandler<OutboxMessage>>();
-        services.AddSingleton(
-            provider => new OutboxProcessor<OutboxMessage>(
-                serviceConfig,
-                provider.GetRequiredService<IServiceScopeFactory>(),
-                provider.GetRequiredService<IMessageDispatcher>(),
-                provider.GetRequiredService<ILogger<OutboxProcessor<OutboxMessage>>>()
-            )
-        );
-        services.AddHostedService<OutboxBackgroundService>();
+        services.AddScoped<IMessageDispatcher<OutboxMessage>, OutboxDispatcher>();
+
+        AddGenericServices<OutboxMessage>(services, serviceConfig);
 
         var serviceProvider = services.BuildServiceProvider();
         var dbContext = serviceProvider.GetRequiredService<IOutboxDbContext>();
@@ -52,5 +43,50 @@ public static class ConfigureOutboxServices
         services.AddSingleton<IDistributedLockProvider>(_ => new PostgresDistributedSynchronizationProvider(connectionString));
 
         return services;
+    }
+
+    public static IServiceCollection AddInboxServices<TContext>(
+        this IServiceCollection services,
+        Action<InboxServiceConfiguration> configuration
+    ) where TContext : DbContext, IInboxDbContext
+    {
+        var serviceConfig = new InboxServiceConfiguration();
+        configuration.Invoke(serviceConfig);
+
+        // register all assigned handlers
+        services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
+
+        services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
+        services.AddScoped<AddMessageToInbox>();
+        services.AddScoped<IInbox, Inbox>();
+        services.AddScoped<IMessageDispatcher<InboxMessage>, InboxDispatcher>();
+
+        AddGenericServices<InboxMessage>(services, serviceConfig);
+
+        var serviceProvider = services.BuildServiceProvider();
+        var dbContext = serviceProvider.GetRequiredService<IInboxDbContext>();
+        var connectionString = dbContext.Database.GetConnectionString();
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
+        }
+        services.AddSingleton<IDistributedLockProvider>(_ => new PostgresDistributedSynchronizationProvider(connectionString));
+
+        return services;
+    }
+
+    private static void AddGenericServices<TEntity>(this IServiceCollection services, ServiceConfiguration serviceConfig) where TEntity : class, IMessage
+    {
+        services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
+        services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
+        services.AddSingleton(
+            provider => new Processor<TEntity>(
+                serviceConfig,
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IMessageDispatcher<TEntity>>(),
+                provider.GetRequiredService<ILogger<Processor<TEntity>>>()
+            )
+        );
+        services.AddHostedService<BackgroundService<TEntity>>();
     }
 }

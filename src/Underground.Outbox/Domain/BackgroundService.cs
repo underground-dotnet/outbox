@@ -8,14 +8,14 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class OutboxBackgroundService(
-    OutboxProcessor<OutboxMessage> processor,
+internal sealed class BackgroundService<TEntity>(
+    Processor<TEntity> processor,
     IDistributedLockProvider synchronizationProvider,
-    ILogger<OutboxBackgroundService> logger
-) : BackgroundService
+    ILogger<BackgroundService<TEntity>> logger
+) : BackgroundService where TEntity : class, IMessage
 {
-    private readonly IDistributedLock _distributedLock = synchronizationProvider.CreateLock("OutboxBackgroundServiceLock");
-    private readonly OutboxProcessor<OutboxMessage> _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+    private readonly IDistributedLock _distributedLock = synchronizationProvider.CreateLock($"{typeof(TEntity)}BackgroundServiceLock");
+    private readonly Processor<TEntity> _processor = processor ?? throw new ArgumentNullException(nameof(processor));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -46,7 +46,7 @@ internal sealed class OutboxBackgroundService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
         {
-            _logger.LogError(ex, "OutboxBackgroundService Error");
+            _logger.LogError(ex, "BackgroundService Error");
             await Task.Delay(3000, stoppingToken);
         }
     }

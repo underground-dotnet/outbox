@@ -11,21 +11,21 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
+internal sealed class Processor<TEntity> where TEntity : class, IMessage
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IMessageDispatcher _dispatcher;
-    private readonly ILogger<OutboxProcessor<TEntity>> _logger;
+    private readonly IMessageDispatcher<TEntity> _dispatcher;
+    private readonly ILogger<Processor<TEntity>> _logger;
     private readonly TransformManyBlock<int, string> _processFlow;
     private readonly Lock _lock = new();
     private TaskCompletionSource? _currentProcessingTask;
     private int _activePartitions;
 
-    public OutboxProcessor(
-        OutboxServiceConfiguration config,
+    public Processor(
+        ServiceConfiguration config,
         IServiceScopeFactory scopeFactory,
-        IMessageDispatcher dispatcher,
-        ILogger<OutboxProcessor<TEntity>> logger
+        IMessageDispatcher<TEntity> dispatcher,
+        ILogger<Processor<TEntity>> logger
     )
     {
         _scopeFactory = scopeFactory;
@@ -79,6 +79,12 @@ internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
                 _activePartitions = partitions.Count;
             }
 
+            // TODO: can still result in a race condition if no partitions are found after fetching but before processing
+            if (_activePartitions == 0)
+            {
+                _currentProcessingTask?.SetResult();
+            }
+
             return partitions;
         },
         // limit capacity to 1 to avoid multiple fetches at the same time
@@ -105,8 +111,7 @@ internal sealed class OutboxProcessor<TEntity> where TEntity : class, IMessage
                     .AsNoTracking()
                     .ToListAsync();
 
-                // TODO: add inbox or outbox wording to logmessage
-                _logger.LogInformation("Processing {Count} messages for partition '{Partition}'", messages.Count, partition);
+                _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
 
                 var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
 
