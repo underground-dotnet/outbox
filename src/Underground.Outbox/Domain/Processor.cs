@@ -49,10 +49,13 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
     {
         lock (_lock)
         {
-            if (_currentProcessingTask is null || _currentProcessingTask.Task.IsCompleted)
+            if (_currentProcessingTask is not null && !_currentProcessingTask.Task.IsCompleted)
             {
-                _currentProcessingTask = new TaskCompletionSource();
+                // still running
+                return _currentProcessingTask.Task;
             }
+
+            _currentProcessingTask = new TaskCompletionSource();
 
             _processFlow.Post(0);
 
@@ -74,15 +77,15 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
                 .AsNoTracking()
                 .ToListAsync();
 
+            if (_activePartitions == 0 && partitions.Count == 0)
+            {
+                // processing is completed and no more partitions are found
+                _currentProcessingTask?.SetResult();
+            }
+
             lock (_lock)
             {
                 _activePartitions = partitions.Count;
-            }
-
-            // TODO: can still result in a race condition if no partitions are found after fetching but before processing
-            if (_activePartitions == 0)
-            {
-                _currentProcessingTask?.SetResult();
             }
 
             return partitions;
@@ -103,6 +106,7 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
 
                 await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
+                // TODO: repeat until no more messages are found for this partition
                 // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
                 var messages = await dbContext.Set<TEntity>()
                     .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)

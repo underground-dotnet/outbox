@@ -10,11 +10,11 @@ using Underground.OutboxTest.TestHandler;
 namespace Underground.OutboxTest.Domain;
 
 [Collection("ExampleMessageHandler Collection")]
-public class OutboxProcessorErrorTests : DatabaseTest
+public class ProcessorErrorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;
 
-    public OutboxProcessorErrorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
+    public ProcessorErrorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
 

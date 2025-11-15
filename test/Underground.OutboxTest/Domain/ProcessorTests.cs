@@ -9,13 +9,13 @@ using Underground.OutboxTest.TestHandler;
 namespace Underground.OutboxTest.Domain;
 
 [Collection("ExampleMessageHandler Collection")]
-public class OutboxProcessorTests : DatabaseTest
+public class ProcessorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;
 
     private readonly IServiceProvider _serviceProvider;
 
-    public OutboxProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
+    public ProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
         Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
