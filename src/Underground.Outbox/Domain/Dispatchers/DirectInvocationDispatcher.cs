@@ -9,8 +9,7 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Dispatchers;
 
-internal sealed class DirectInvocationDispatcher<THandler, TMessage> : IMessageDispatcher<TMessage>
-    where THandler : IOutboxMessageHandler<>
+internal abstract class DirectInvocationDispatcher<TMessage> : IMessageDispatcher<TMessage>
     where TMessage : class, IMessage
 {
 #pragma warning disable S2743 // Static fields should not be used in generic types
@@ -28,7 +27,7 @@ internal sealed class DirectInvocationDispatcher<THandler, TMessage> : IMessageD
         // idea from: https://www.youtube.com/watch?v=5yLIzis9Qr0 it also shows more improvements we could do here
         Type interfaceType = HandlerTypeDictionary.GetOrAdd(
             fullEvent.GetType(),
-            eventType => typeof(THandler).MakeGenericType(eventType)
+            eventType => CreateGenericType(eventType)
         );
 
         // TODO: will throw when handler not found...
@@ -65,4 +64,6 @@ internal sealed class DirectInvocationDispatcher<THandler, TMessage> : IMessageD
             );
         }
     }
+
+    protected abstract Type CreateGenericType(Type eventType);
 }

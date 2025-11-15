@@ -29,7 +29,7 @@ public static class ConfigureOutboxServices
         services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped<IMessageDispatcher<OutboxMessage>, DirectInvocationDispatcher<IOutboxMessageHandler<OutboxMessage>, OutboxMessage>>();
+        services.AddScoped<IMessageDispatcher<OutboxMessage>, OutboxDispatcher>();
         services.AddScoped<IMessageExceptionHandler<OutboxMessage>, DiscardMessageOnExceptionHandler<OutboxMessage>>();
         services.AddScoped<ProcessExceptionFromHandler<OutboxMessage>>();
         services.AddSingleton(
