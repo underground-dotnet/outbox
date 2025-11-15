@@ -26,10 +26,15 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });
+builder.Services.AddInboxServices<AppDbContext>(cfg =>
+{
+    cfg.AddHandler<InboxMessageHandler>();
+});
 
 IHost host = builder.Build();
 
 var outbox = host.Services.GetRequiredService<IOutbox>();
+var inbox = host.Services.GetRequiredService<IInbox>();
 var dbContext = host.Services.GetRequiredService<AppDbContext>();
 await dbContext.Database.EnsureCreatedAsync();
 
@@ -40,6 +45,9 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         var partition = (i % 3).ToString();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"partition {partition}: {i}"), partition);
         await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
+
+        var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
+        await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
     }
 
     await transaction.CommitAsync();

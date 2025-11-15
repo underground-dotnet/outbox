@@ -9,12 +9,13 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Dispatchers;
 
-internal sealed class DirectInvocationDispatcher : IMessageDispatcher
+internal abstract class DirectInvocationDispatcher<TMessage> : IMessageDispatcher<TMessage>
+    where TMessage : class, IMessage
 {
     private static readonly ConcurrentDictionary<MessageType, HandlerType> HandlerTypeDictionary = new();
     private static readonly ConcurrentDictionary<MessageType, MethodInfo?> HandleMethodDictionary = new();
 
-    public async Task ExecuteAsync(IServiceScope scope, OutboxMessage message, CancellationToken cancellationToken = default)
+    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken = default)
     {
         MessageType? type = MessageType.GetType(message.Type) ?? throw new ParsingException($"Cannot resolve type '{message.Type}' of message: {message.Id}");
 
@@ -24,7 +25,7 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
         // idea from: https://www.youtube.com/watch?v=5yLIzis9Qr0 it also shows more improvements we could do here
         Type interfaceType = HandlerTypeDictionary.GetOrAdd(
             fullEvent.GetType(),
-            eventType => typeof(IOutboxMessageHandler<>).MakeGenericType(eventType)
+            eventType => CreateGenericType(eventType)
         );
 
         // TODO: will throw when handler not found...
@@ -61,4 +62,6 @@ internal sealed class DirectInvocationDispatcher : IMessageDispatcher
             );
         }
     }
+
+    protected abstract Type CreateGenericType(Type eventType);
 }

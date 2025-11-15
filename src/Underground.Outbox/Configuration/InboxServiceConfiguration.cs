@@ -2,11 +2,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Underground.Outbox.Configuration;
 
-public class OutboxServiceConfiguration : ServiceConfiguration
+public class InboxServiceConfiguration : ServiceConfiguration
 {
     public override ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
-        var interfaceType = messageHandlerType.GetInterface("Underground.Outbox.IOutboxMessageHandler`1");
+        var interfaceType = messageHandlerType.GetInterface("Underground.Outbox.IInboxMessageHandler`1");
 
         if (interfaceType?.IsGenericType == true)
         {
