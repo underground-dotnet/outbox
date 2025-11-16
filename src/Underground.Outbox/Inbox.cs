@@ -3,14 +3,14 @@ using Underground.Outbox.Domain;
 
 namespace Underground.Outbox;
 
-internal sealed class Outbox(AddMessageToOutbox addMessage, Processor<OutboxMessage> processor) : IOutbox
+internal sealed class Inbox(AddMessageToInbox addMessage, Processor<InboxMessage> processor) : IInbox
 {
-    public async Task AddMessageAsync(IOutboxDbContext context, OutboxMessage message, CancellationToken cancellationToken)
+    public async Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken)
     {
         await addMessage.ExecuteAsync(context, message, cancellationToken);
     }
 
-    public async Task AddMessagesAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
+    public async Task AddMessagesAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken)
     {
         foreach (var message in messages)
         {

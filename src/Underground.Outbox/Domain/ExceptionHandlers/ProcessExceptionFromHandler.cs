@@ -3,11 +3,11 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.ExceptionHandlers;
 
-internal class ProcessExceptionFromHandler(IEnumerable<IMessageExceptionHandler> handlers)
+internal class ProcessExceptionFromHandler<TEntity>(IEnumerable<IMessageExceptionHandler<TEntity>> handlers) where TEntity : class, IMessage
 {
-    private readonly IEnumerable<IMessageExceptionHandler> _handlers = handlers;
+    private readonly IEnumerable<IMessageExceptionHandler<TEntity>> _handlers = handlers;
 
-    internal async Task ExecuteAsync(MessageHandlerException ex, OutboxMessage message, IOutboxDbContext dbContext, CancellationToken cancellationToken = default)
+    internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IOutboxDbContext dbContext, CancellationToken cancellationToken = default)
     {
         foreach (var handler in _handlers)
         {

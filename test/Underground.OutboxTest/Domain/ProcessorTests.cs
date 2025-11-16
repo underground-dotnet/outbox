@@ -4,18 +4,19 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 
 [Collection("ExampleMessageHandler Collection")]
-public class OutboxProcessorTests : DatabaseTest
+public class ProcessorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;
 
     private readonly IServiceProvider _serviceProvider;
 
-    public OutboxProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
+    public ProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
         Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
@@ -69,5 +70,51 @@ public class OutboxProcessorTests : DatabaseTest
         Assert.Single(ExampleMessageHandler.CalledWith);
         Assert.Empty(ExampleMessageAnotherHandler.CalledWith);
         await StopBackgroundServiceAsync();
+    }
+
+    [Fact]
+    public void Processor_Returns_Same_Task_When_Still_Running()
+    {
+        // Arrange
+        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        // Act
+        var task1 = processor.ProcessAsync();
+        var task2 = processor.ProcessAsync();
+        var task3 = processor.ProcessAsync();
+
+        // Assert
+        Assert.Same(task1, task2);
+        Assert.Same(task1, task3);
+    }
+
+    [Fact]
+    public async Task Processor_Returns_New_Task_For_New_Run()
+    {
+        // Arrange
+        CreateDbContext();
+        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        // Act
+        var task1 = processor.ProcessAsync();
+        await task1;
+        var task2 = processor.ProcessAsync();
+
+        // Assert
+        Assert.NotSame(task1, task2);
+    }
+
+    [Fact]
+    public async Task Processor_Handle_Exceptions_In_Processing_Block()
+    {
+        // Arrange
+        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        // Act
+        var task = processor.ProcessAsync();
+
+        // Assert
+        // DB is not created, since we did not call CreateDbContext
+        await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
     }
 }

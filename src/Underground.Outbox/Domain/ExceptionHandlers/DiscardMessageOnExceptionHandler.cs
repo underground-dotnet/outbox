@@ -9,9 +9,9 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.ExceptionHandlers;
 
-public class DiscardMessageOnExceptionHandler(ILogger<DiscardMessageOnExceptionHandler> logger) : IMessageExceptionHandler
+public class DiscardMessageOnExceptionHandler<TEntity>(ILogger<DiscardMessageOnExceptionHandler<TEntity>> logger) : IMessageExceptionHandler<TEntity> where TEntity : class, IMessage
 {
-    public async Task HandleAsync(MessageHandlerException ex, OutboxMessage message, IOutboxDbContext dbContext, CancellationToken cancellationToken)
+    public async Task HandleAsync(MessageHandlerException ex, TEntity message, IOutboxDbContext dbContext, CancellationToken cancellationToken)
     {
         // TODO: can we make it more type safe? GetMethod(nameof(IOutboxMessageHandler<Message>.HandleAsync))
         // TODO: lookup should be cached
@@ -27,7 +27,7 @@ public class DiscardMessageOnExceptionHandler(ILogger<DiscardMessageOnExceptionH
                 message.Id
             );
 
-            await dbContext.OutboxMessages
+            await dbContext.Set<TEntity>()
                 .Where(m => m.Id == message.Id)
                 .ExecuteDeleteAsync(cancellationToken);
         }

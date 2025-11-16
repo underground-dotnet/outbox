@@ -3,11 +3,11 @@ using Underground.Outbox;
 
 namespace ConsoleApp;
 
-public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
+public class InboxMessageHandler : IInboxMessageHandler<ExampleMessage>
 {
     public Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
     {
-        Console.WriteLine("received outbox: " + message.Id);
+        Console.WriteLine("received inbox: " + message.Id);
         return Task.CompletedTask;
     }
 }

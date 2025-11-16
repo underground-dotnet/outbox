@@ -11,22 +11,22 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class OutboxProcessor
+internal sealed class Processor<TEntity> where TEntity : class, IMessage
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IMessageDispatcher _dispatcher;
-    private readonly ILogger<OutboxProcessor> _logger;
+    private readonly IMessageDispatcher<TEntity> _dispatcher;
+    private readonly ILogger<Processor<TEntity>> _logger;
     private readonly TransformManyBlock<int, string> _processFlow;
     private readonly Lock _lock = new();
     private TaskCompletionSource? _currentProcessingTask;
     private int _activePartitions;
 
-    public OutboxProcessor(
-        OutboxServiceConfiguration config,
+    public Processor(
+        ServiceConfiguration config,
         IServiceScopeFactory scopeFactory,
-        IMessageDispatcher dispatcher,
-        ILogger<OutboxProcessor> logger
-)
+        IMessageDispatcher<TEntity> dispatcher,
+        ILogger<Processor<TEntity>> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _dispatcher = dispatcher;
@@ -49,10 +49,13 @@ internal sealed class OutboxProcessor
     {
         lock (_lock)
         {
-            if (_currentProcessingTask is null || _currentProcessingTask.Task.IsCompleted)
+            if (_currentProcessingTask is not null && !_currentProcessingTask.Task.IsCompleted)
             {
-                _currentProcessingTask = new TaskCompletionSource();
+                // still running
+                return _currentProcessingTask.Task;
             }
+
+            _currentProcessingTask = new TaskCompletionSource();
 
             _processFlow.Post(0);
 
@@ -64,22 +67,37 @@ internal sealed class OutboxProcessor
     {
         return new TransformManyBlock<int, string>(async _ =>
         {
-            using var scope = _scopeFactory.CreateScope();
-            await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-
-            var partitions = await dbContext.OutboxMessages
-                .Where(message => message.ProcessedAt == null)
-                .Select(message => message.PartitionKey)
-                .Distinct()
-                .AsNoTracking()
-                .ToListAsync();
-
-            lock (_lock)
+            try
             {
-                _activePartitions = partitions.Count;
-            }
+                using var scope = _scopeFactory.CreateScope();
+                await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-            return partitions;
+                var partitions = await dbContext.Set<TEntity>()
+                    .Where(message => message.ProcessedAt == null)
+                    .Select(message => message.PartitionKey)
+                    .Distinct()
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                if (_activePartitions == 0 && partitions.Count == 0)
+                {
+                    // processing is completed and no more partitions are found
+                    _currentProcessingTask?.SetResult();
+                }
+
+                lock (_lock)
+                {
+                    _activePartitions = partitions.Count;
+                }
+
+                return partitions;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Error fetching partitions for processing.");
+                _currentProcessingTask?.SetException(ex);
+                return [];
+            }
         },
         // limit capacity to 1 to avoid multiple fetches at the same time
         new ExecutionDataflowBlockOptions { BoundedCapacity = 1 });
@@ -97,20 +115,21 @@ internal sealed class OutboxProcessor
 
                 await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
+                // TODO: repeat until no more messages are found for this partition
                 // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
-                var messages = await dbContext.OutboxMessages
+                var messages = await dbContext.Set<TEntity>()
                     .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
                     .OrderBy(message => message.Id)
                     .Take(batchSize)
                     .AsNoTracking()
                     .ToListAsync();
 
-                _logger.LogInformation("Processing {Count} outbox messages for partition '{Partition}'", messages.Count, partition);
+                _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
 
                 var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
 
                 // mark as processed
-                await dbContext.OutboxMessages
+                await dbContext.Set<TEntity>()
                     .Where(m => successIds.Contains(m.Id))
                     .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
                 await transaction.CommitAsync();
@@ -130,9 +149,9 @@ internal sealed class OutboxProcessor
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions, BoundedCapacity = 1 });
     }
 
-    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<OutboxMessage> messages, IServiceScope scope, IOutboxDbContext dbContext)
+    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
     {
-        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler>();
+        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
         var savepointName = $"batch_processing";
         var transaction = dbContext.Database.CurrentTransaction!;
@@ -184,9 +203,9 @@ internal sealed class OutboxProcessor
         return successfulIds;
     }
 
-    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, OutboxMessage message)
+    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, IMessage message)
     {
-        await dbContext.OutboxMessages
+        await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)
             .ExecuteUpdateAsync(update => update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1));
     }

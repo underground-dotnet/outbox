@@ -6,10 +6,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Underground.Outbox.Data;
 
-[Table("outbox")]
+[Table("inbox")]
 // TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
-public class OutboxMessage : IMessage
+public class InboxMessage : IMessage
 {
     [Column("id")]
     [Key]
@@ -37,7 +37,7 @@ public class OutboxMessage : IMessage
     [Column("processed_at")]
     public DateTime? ProcessedAt { get; set; }
 
-    public OutboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
+    public InboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
     {
         EventId = eventId;
         CreatedAt = createdAt;
@@ -46,7 +46,7 @@ public class OutboxMessage : IMessage
         Data = data;
     }
 
-    public OutboxMessage(Guid eventId, DateTime createdAt, object data, string partitionKey = "default")
+    public InboxMessage(Guid eventId, DateTime createdAt, object data, string partitionKey = "default")
     {
         EventId = eventId;
         CreatedAt = createdAt;
