@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox;
@@ -103,13 +104,39 @@ public class ProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg3, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        // Batch 1
-        await processor.ProcessAsync();
-        // Batch 2
         await processor.ProcessAsync();
 
         // Assert
         Assert.Equal(3, ExampleMessageHandler.CalledWith.Count);
         Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
+    }
+
+    [Fact]
+    public async Task KeepProcessingUntilOutboxIsEmpty()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
+        var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { PartitionKey = "A" };
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg3, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        // Batch 1
+        await processor.ProcessAsync();
+
+        // Assert
+        var completed = await context.Database
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NULL")
+            .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(0, completed);
     }
 }
