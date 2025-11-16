@@ -109,31 +109,12 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
         {
             try
             {
-                // use separate scope & context for each partition
-                using var scope = _scopeFactory.CreateScope();
-                await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-
-                await using var transaction = await dbContext.Database.BeginTransactionAsync();
-
-                // TODO: repeat until no more messages are found for this partition
-                // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
-                var messages = await dbContext.Set<TEntity>()
-                    .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
-                    .OrderBy(message => message.Id)
-                    .Take(batchSize)
-                    .AsNoTracking()
-                    .ToListAsync();
-
-                _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
-
-                var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
-
-                // mark as processed
-                await dbContext.Set<TEntity>()
-                    .Where(m => successIds.Contains(m.Id))
-                    .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
-                await transaction.CommitAsync();
-
+                // repeat until no more messages are found for this partition
+                var messagesProcessed = true;
+                while (messagesProcessed)
+                {
+                    messagesProcessed = await ProcessMessagesAsync(partition, batchSize);
+                }
             }
             finally
             {
@@ -147,6 +128,41 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
                 }
             }
         }, new ExecutionDataflowBlockOptions { MaxDegreeOfParallelism = parallelProcessingOfPartitions, BoundedCapacity = 1 });
+    }
+
+    /// <summary>
+    /// Processes a batch of messages for the given partition using a new scope and DbContext.
+    /// </summary>
+    /// <param name="partition"></param>
+    /// <param name="batchSize"></param>
+    /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
+    private async Task<bool> ProcessMessagesAsync(string partition, int batchSize)
+    {
+        // use separate scope & context for each partition
+        using var scope = _scopeFactory.CreateScope();
+        await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
+        // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
+        var messages = await dbContext.Set<TEntity>()
+            .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
+            .OrderBy(message => message.Id)
+            .Take(batchSize)
+            .AsNoTracking()
+            .ToListAsync();
+
+        _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
+
+        var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
+
+        // mark as processed
+        await dbContext.Set<TEntity>()
+            .Where(m => successIds.Contains(m.Id))
+            .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
+        await transaction.CommitAsync();
+
+        return messages.Count > 0 && messages.Count == successIds.Count();
     }
 
     private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
