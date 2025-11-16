@@ -1,9 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Underground.Outbox.Configuration;
 
-public class OutboxServiceConfiguration(ILogger<OutboxServiceConfiguration> logger) : ServiceConfiguration
+public class OutboxServiceConfiguration : ServiceConfiguration
 {
     public override ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
     {
@@ -11,7 +10,7 @@ public class OutboxServiceConfiguration(ILogger<OutboxServiceConfiguration> logg
 
         if (interfaceType?.IsGenericType == true)
         {
-            logger.LogInformation("Added handler for {InterfaceType} with {MessageHandlerType}", interfaceType, messageHandlerType);
+            Console.WriteLine($"Added handler for {interfaceType} with {messageHandlerType} ");
             HandlersWithLifetime.Add(new ServiceDescriptor(interfaceType, messageHandlerType, serviceLifetime));
         }
 
