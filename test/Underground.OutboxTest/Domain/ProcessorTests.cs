@@ -112,10 +112,9 @@ public class ProcessorTests : DatabaseTest
 
         // Act
         var task = processor.ProcessAsync();
-        await task;
 
         // Assert
         // DB is not created, since we did not call CreateDbContext
-        Assert.True(task.IsFaulted);
+        await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
     }
 }
