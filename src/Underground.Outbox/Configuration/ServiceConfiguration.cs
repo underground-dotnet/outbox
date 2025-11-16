@@ -14,7 +14,6 @@ public abstract class ServiceConfiguration
 
     internal List<ServiceDescriptor> HandlersWithLifetime = [];
 
-    // TODO: add constraint on the generic type? like IInboxMessageHandler?
     public ServiceConfiguration AddHandler<TMessageHandlerType>()
     {
         return AddHandler(typeof(TMessageHandlerType));
