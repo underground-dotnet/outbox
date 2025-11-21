@@ -2,7 +2,6 @@
 
   <PropertyGroup>
     <PackageId>Underground.Outbox</PackageId>
-    <PackageVersion>0.5.0</PackageVersion>
     <Title>Underground.Outbox</Title>
     <Authors>Nils</Authors>
     <Description>Outbox implementation to support Modulith and Microservice development.</Description>

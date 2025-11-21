@@ -22,7 +22,7 @@ jobs:
     - name: Build
       run: dotnet build --configuration Release
     - name: Pack
-      run: dotnet pack src/Underground.Outbox/Underground.Outbox.csproj
+      run: dotnet pack src/Underground.Outbox/Underground.Outbox.csproj /p:Version=${GITHUB_REF#refs/tags/v}
     # Get a short-lived NuGet API key
     - name: NuGet login (OIDC → temp API key)
       uses: NuGet/login@v1
