@@ -7,7 +7,7 @@
     <Description>Outbox implementation to support Modulith and Microservice development.</Description>
     <PackageTags>dotnet;outbox</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReadmeFile>package.readme.md</PackageReadmeFile>
   </PropertyGroup>
 
 
