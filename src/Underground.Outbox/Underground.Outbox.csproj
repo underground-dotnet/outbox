@@ -8,6 +8,7 @@
     <Description>Outbox implementation to support Modulith and Microservice development.</Description>
     <PackageTags>dotnet;outbox</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 
 
@@ -17,6 +18,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
     <PackageReference Include="System.Threading.Tasks.Dataflow" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)package.readme.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
 </Project>
