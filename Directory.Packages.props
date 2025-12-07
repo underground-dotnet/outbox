@@ -17,9 +17,9 @@
     <PackageVersion Include="TngTech.ArchUnitNET.xUnit" Version="0.11.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.16.0.128591" />
-    <PackageVersion Include="xunit.v3" Version="3.2.0" />
-    <PackageVersion Include="xunit.analyzers" Version="1.25.0" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.16.1.129956" />
+    <PackageVersion Include="xunit.v3" Version="3.2.1" />
+    <PackageVersion Include="xunit.analyzers" Version="1.26.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
 </Project>
