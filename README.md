@@ -2,11 +2,30 @@
 
 The Outbox Library is a .NET Core library designed to simplify the implementation of the outbox pattern in your applications. The outbox pattern ensures reliable message delivery by storing messages in a database and processing them asynchronously, making it ideal for distributed systems and event-driven architectures.
 
+## Transactional outbox
+
+There are usually two different types of implementations when it comes to the outbox pattern:
+
+### Using multiple transactions
+
+The outbox processor is fetching a batch of outbox messages and marks them as `in processing` by updating a column in the outbox table. Then using a second transaction to process the messages.
+
+Using this approach you have short lived transactions, but you need to deal with cases of releasing the lock on the rows when a processor fails.
+
+### Using one transaction
+
+The outbox processor is fetching a batch of outbox messages (sometimes with the addition of `SELECT FOR UPDATE SKIP LOCKED`) and uses the same transaction to process the messages.
+
+This ensure an all or nothing approach while processing the messages.
+
+For this library the single transaction approach was chosen.
+
 ## Features
 
 - **EF Core**: This library is fully built on top of EF Core.
 - **Inbox and Outbox Support**: Provides interfaces and implementations for managing inbox and outbox messages.
 - **Transactional**: Message batches are processed within one transaction.
+- **Distributed Lock**: When multiple instances of the application are running then a distributed lock ensures that the outbox is only processed by a single conusmer.
 - **Error Handling**: Built-in exception handling for common scenarios.
 
 ## Getting Started
