@@ -4,7 +4,6 @@ using Medallion.Threading.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
@@ -55,19 +54,14 @@ public static class ConfigureOutboxServices
     where TEntity : class, IMessage
     where TContext : IDbContext
     {
+        services.AddSingleton(serviceConfig);
+
         // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
 
         services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddSingleton(
-            provider => new Processor<TEntity>(
-                serviceConfig,
-                provider.GetRequiredService<IServiceScopeFactory>(),
-                provider.GetRequiredService<IMessageDispatcher<TEntity>>(),
-                provider.GetRequiredService<ILogger<Processor<TEntity>>>()
-            )
-        );
+        services.AddSingleton<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
         var serviceProvider = services.BuildServiceProvider();
