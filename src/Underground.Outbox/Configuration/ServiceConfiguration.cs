@@ -12,6 +12,11 @@ public abstract class ServiceConfiguration
 
     public int ParallelProcessingOfPartitions { get; set; } = 4;
 
+    /// <summary>
+    /// Delay in milliseconds between processing cycles when messages are successfully processed.
+    /// </summary>
+    public int ProcessingDelayMilliseconds { get; set; } = 4000;
+
     internal List<ServiceDescriptor> HandlersWithLifetime = [];
 
     public ServiceConfiguration AddHandler<TMessageHandlerType>()
