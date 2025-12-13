@@ -3,6 +3,7 @@ using Medallion.Threading;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
@@ -11,12 +12,14 @@ namespace Underground.Outbox.Domain;
 internal sealed class BackgroundService<TEntity>(
     Processor<TEntity> processor,
     IDistributedLockProvider synchronizationProvider,
-    ILogger<BackgroundService<TEntity>> logger
+    ILogger<BackgroundService<TEntity>> logger,
+    ServiceConfiguration serviceConfiguration
 ) : BackgroundService where TEntity : class, IMessage
 {
     private readonly IDistributedLock _distributedLock = synchronizationProvider.CreateLock($"{typeof(TEntity)}BackgroundServiceLock");
     private readonly Processor<TEntity> _processor = processor ?? throw new ArgumentNullException(nameof(processor));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    private readonly ServiceConfiguration _serviceConfiguration = serviceConfiguration ?? throw new ArgumentNullException(nameof(serviceConfiguration));
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -42,7 +45,7 @@ internal sealed class BackgroundService<TEntity>(
         try
         {
             await _processor.ProcessAsync();
-            await Task.Delay(4000, stoppingToken);
+            await Task.Delay(_serviceConfiguration.ProcessingDelayMilliseconds, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
         {
