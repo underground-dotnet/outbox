@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/example/">
+    <Project Path="example/ConsoleApp/ConsoleApp.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Underground.Outbox/Underground.Outbox.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Underground.OutboxTest/Underground.OutboxTest.csproj" />
+  </Folder>
+</Solution>
