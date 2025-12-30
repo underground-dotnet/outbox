@@ -149,7 +149,6 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
             .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
             .OrderBy(message => message.Id)
             .Take(batchSize)
-            .AsNoTracking()
             .ToListAsync();
 
         _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
@@ -162,6 +161,9 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
             .ExecuteUpdateAsync(update => update.SetProperty(m => m.ProcessedAt, DateTime.UtcNow));
         await transaction.CommitAsync();
 
+        // remove tracked entities to avoid memory leaks
+        dbContext.ChangeTracker.Clear();
+
         return messages.Count > 0 && messages.Count == successIds.Count();
     }
 
@@ -169,20 +171,22 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
-        var savepointName = $"batch_processing";
         var transaction = dbContext.Database.CurrentTransaction!;
-        await transaction.CreateSavepointAsync(savepointName);
-
         var successfulIds = new List<int>();
+
         foreach (var message in messages)
         {
-            // TODO: if the current message has failed before and is not the first one to process then stop here and commit the previous messages.
+            var savepointName = $"processing_message_{message.Id}";
+            await transaction.CreateSavepointAsync(savepointName);
             Exception? exception = null;
 
             try
             {
                 await _dispatcher.ExecuteAsync(scope, message);
+                // persist all changes from the handler. (in case the handler forgot to call SaveChanges)
+                await dbContext.SaveChangesAsync();
                 successfulIds.Add(message.Id);
+                await transaction.ReleaseSavepointAsync(savepointName);
             }
             catch (MessageHandlerException ex)
             {
@@ -197,9 +201,8 @@ internal sealed class Processor<TEntity> where TEntity : class, IMessage
 
             if (exception is not null)
             {
-                // clear all tracked entities, because the batch processing failed
+                // clear all tracked entities, because the batch processing failed. The ErrorHandler can then use the clean context to perform db operations.
                 dbContext.ChangeTracker.Clear();
-                successfulIds.Clear();
                 await transaction.RollbackToSavepointAsync(savepointName);
 
                 if (exception is MessageHandlerException ex)

@@ -1,22 +1,11 @@
-using System.Data;
-
-using Microsoft.EntityFrameworkCore.Storage;
-
 using Underground.Outbox;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class UserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<ExampleMessage>
+public class UserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<SecondMessage>
 {
-    public static IDbContextTransaction? CalledWithTransaction { get; set; } = null;
-
-    public async Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(SecondMessage message, CancellationToken cancellationToken)
     {
-        CalledWithTransaction = dbContext.Database.CurrentTransaction;
-
-        await dbContext.Users.AddAsync(new User { Name = "Testuser" }, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        throw new DataException("Failed to handle message");
+        await dbContext.Users.AddAsync(new User { Name = "Testuser Success" }, cancellationToken);
     }
 }

@@ -16,9 +16,9 @@ Using this approach you have short lived transactions, but you need to deal with
 
 The outbox processor is fetching a batch of outbox messages (sometimes with the addition of `SELECT FOR UPDATE SKIP LOCKED`) and uses the same transaction to process the messages.
 
-This ensure an all or nothing approach while processing the messages.
+This ensure that updating the messages table as well as any business logic tables is done in the same transaction (all or nothing). For larger batches it increases the risk of long running transactions.
 
-For this library the single transaction approach was chosen.
+For this library the single transaction approach was chosen. Messages in a batch will be processed until processing of one message fails.
 
 ## Features
 

@@ -22,7 +22,7 @@ public class ProcessorErrorTests : DatabaseTest
         ExampleMessageHandler.ObjectIds.Clear();
         FailedMessageHandler.CalledWith.Clear();
         SecondMessageHandler.CalledWith.Clear();
-        UserMessageHandler.CalledWithTransaction = null;
+        FailedUserMessageHandler.CalledWithTransaction = null;
     }
 
     [Fact]
@@ -110,8 +110,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
         var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
@@ -125,15 +125,15 @@ public class ProcessorErrorTests : DatabaseTest
         await processor.ProcessAsync();
 
         // Assert
-        // If one message fails to process all previous successful messages should be rolled back (all or nothing)
+        // First message of type SecondMessage should be processed successfully, the message afterwards failed
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL AND retry_count = 0 AND id = {msg.Id}")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(0, completed);
+        Assert.Equal(1, completed);
 
-        // one message failed and retry count is incremented
+        // second message failed and retry count is incremented
         var notCompleted = await context.Database
-        .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE retry_count > 0")
+        .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NULL AND retry_count > 0 AND id = {msg2.Id}")
         .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(1, notCompleted);
     }
@@ -149,7 +149,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<UserMessageHandler>();
+            cfg.AddHandler<FailedUserMessageHandler>();
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
@@ -204,7 +204,7 @@ public class ProcessorErrorTests : DatabaseTest
     }
 
     [Fact]
-    public async Task OutboxTransactionIsUsedByInjectedDbContext()
+    public async Task KeepDbChangesFromSuccessfullMessagesOnFailure()
     {
         // Arrange
         var context = CreateDbContext();
@@ -215,6 +215,50 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<UserMessageHandler>();
+            cfg.AddHandler<FailedUserMessageHandler>();
+        });
+
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            // first message processing is successful and will insert a new user
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            // second message processing fails and the second inserted user should be rolled back
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        await processor.ProcessAsync();
+
+        // Assert
+        var completed = await context.Database
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.users")
+            .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(1, completed);
+
+        var users = await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Single(users);
+        Assert.Equal("Testuser Success", users[0].Name);
+    }
+
+    [Fact]
+    public async Task OutboxTransactionIsUsedByInjectedDbContext()
+    {
+        // Arrange
+        var context = CreateDbContext();
+
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.AddHandler<FailedUserMessageHandler>();
         });
 
         var serviceProvider = serviceCollection.BuildServiceProvider();
@@ -232,7 +276,7 @@ public class ProcessorErrorTests : DatabaseTest
         await processor.ProcessAsync();
 
         // Assert
-        Assert.NotNull(UserMessageHandler.CalledWithTransaction);
+        Assert.NotNull(FailedUserMessageHandler.CalledWithTransaction);
     }
 
     [Fact]
