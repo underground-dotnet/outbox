@@ -2,9 +2,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Underground.OutboxTest.TestHandler;
 
-[Table("Users")]
+[Table("users")]
 public class User
 {
+    [Column("id")]
     public int Id { get; set; }
+
+    [Column("name")]
     public string Name { get; set; } = string.Empty;
 }
