@@ -52,7 +52,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         // Second message handler should not be called due to error in first message handler
@@ -86,7 +86,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database
@@ -122,7 +122,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
@@ -164,7 +164,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -197,7 +197,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -234,7 +234,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database
@@ -273,7 +273,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(FailedUserMessageHandler.CalledWithTransaction);
@@ -303,7 +303,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync();
+        await processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
