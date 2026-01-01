@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Underground.Outbox.Data;
 
 [Table("outbox")]
-// TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
+[Index(nameof(ProcessedAt), nameof(PartitionKey))]
 public class OutboxMessage : IMessage
 {
     [Column("id")]
@@ -28,6 +28,7 @@ public class OutboxMessage : IMessage
     [Column("partition_key")]
     public string PartitionKey { get; init; }
 
+    // TODO: better to use jsonb here?
     [Column("data")]
     public string Data { get; init; }
 

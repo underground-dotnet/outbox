@@ -64,13 +64,15 @@ public static class ConfigureOutboxServices
         services.AddSingleton<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
-        var serviceProvider = services.BuildServiceProvider();
-        var dbContext = serviceProvider.GetRequiredService<TContext>();
-        var connectionString = dbContext.Database.GetConnectionString();
-        if (string.IsNullOrEmpty(connectionString))
+        services.AddSingleton<IDistributedLockProvider>(sp =>
         {
-            throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
-        }
-        services.AddSingleton<IDistributedLockProvider>(_ => new PostgresDistributedSynchronizationProvider(connectionString));
+            var dbContext = sp.GetRequiredService<TContext>();
+            var connectionString = dbContext.Database.GetConnectionString();
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
+            }
+            return new PostgresDistributedSynchronizationProvider(connectionString);
+        });
     }
 }
