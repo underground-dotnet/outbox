@@ -44,7 +44,7 @@ internal sealed class BackgroundService<TEntity>(
     {
         try
         {
-            await _processor.ProcessAsync();
+            await _processor.ProcessAsync(stoppingToken);
             await Task.Delay(_serviceConfiguration.ProcessingDelayMilliseconds, stoppingToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
