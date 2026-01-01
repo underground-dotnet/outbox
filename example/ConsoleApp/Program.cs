@@ -14,7 +14,7 @@ using Underground.Outbox.Data;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-var postgreSqlContainer = new PostgreSqlBuilder().WithImage("postgres:17.2").Build();
+var postgreSqlContainer = new PostgreSqlBuilder("postgres:18.1").Build();
 await postgreSqlContainer.StartAsync();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
