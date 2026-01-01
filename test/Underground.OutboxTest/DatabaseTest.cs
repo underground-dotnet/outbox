@@ -13,7 +13,7 @@ public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : Containe
 
     protected override PostgreSqlBuilder Configure(PostgreSqlBuilder builder)
     {
-        return builder.WithImage("postgres:17.2").WithLogger(_loggerFactory.CreateLogger<PostgreSqlContainer>());
+        return builder.WithImage("postgres:18.1").WithLogger(_loggerFactory.CreateLogger<PostgreSqlContainer>());
     }
 
     // used only through direct access in the tests. We could also just get it from the service provider.
