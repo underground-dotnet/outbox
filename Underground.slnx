@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/example/">
     <Project Path="example/ConsoleApp/ConsoleApp.csproj" />
+    <Project Path="example/PerformanceApp/PerformanceApp.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Underground.Outbox/Underground.Outbox.csproj" />
