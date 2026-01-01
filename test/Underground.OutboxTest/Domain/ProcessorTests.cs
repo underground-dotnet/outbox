@@ -79,9 +79,9 @@ public class ProcessorTests : DatabaseTest
         var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         // Act
-        var task1 = processor.ProcessAsync();
-        var task2 = processor.ProcessAsync();
-        var task3 = processor.ProcessAsync();
+        var task1 = processor.ProcessAsync(TestContext.Current.CancellationToken);
+        var task2 = processor.ProcessAsync(TestContext.Current.CancellationToken);
+        var task3 = processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(task1, task2);
@@ -96,9 +96,9 @@ public class ProcessorTests : DatabaseTest
         var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         // Act
-        var task1 = processor.ProcessAsync();
+        var task1 = processor.ProcessAsync(TestContext.Current.CancellationToken);
         await task1;
-        var task2 = processor.ProcessAsync();
+        var task2 = processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotSame(task1, task2);
@@ -111,7 +111,7 @@ public class ProcessorTests : DatabaseTest
         var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         // Act
-        var task = processor.ProcessAsync();
+        var task = processor.ProcessAsync(TestContext.Current.CancellationToken);
 
         // Assert
         // DB is not created, since we did not call CreateDbContext
