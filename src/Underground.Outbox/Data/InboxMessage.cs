@@ -7,8 +7,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Underground.Outbox.Data;
 
 [Table("inbox")]
-// TODO: or use EventId + partition?
 [Index(nameof(EventId), IsUnique = true)]
+[Index(nameof(ProcessedAt), nameof(PartitionKey))]
 public class InboxMessage : IMessage
 {
     [Column("id")]

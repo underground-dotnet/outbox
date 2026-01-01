@@ -11,9 +11,9 @@ public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : Containe
 {
     private readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.ConfigureTestLogger(testOutputHelper));
 
-    protected override PostgreSqlBuilder Configure(PostgreSqlBuilder builder)
+    protected override PostgreSqlBuilder Configure()
     {
-        return builder.WithImage("postgres:18.1").WithLogger(_loggerFactory.CreateLogger<PostgreSqlContainer>());
+        return new PostgreSqlBuilder("postgres:18.1").WithLogger(_loggerFactory.CreateLogger<PostgreSqlContainer>());
     }
 
     // used only through direct access in the tests. We could also just get it from the service provider.
