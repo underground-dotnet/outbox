@@ -11,8 +11,8 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="17.14.2" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageVersion Include="System.Threading.Tasks.Dataflow" Version="10.0.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.9.0" />
-    <PackageVersion Include="Testcontainers.XunitV3" Version="4.9.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.10.0" />
+    <PackageVersion Include="Testcontainers.XunitV3" Version="4.10.0" />
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.11.0" />
     <PackageVersion Include="TngTech.ArchUnitNET.xUnit" Version="0.11.0" />
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />
