@@ -18,8 +18,8 @@ internal sealed class Outbox(AddMessageToOutbox addMessage, Processor<OutboxMess
         }
     }
 
-    public void ProcessMessages()
+    public Task ProcessMessagesAsync(CancellationToken cancellationToken = default)
     {
-        processor.Process();
+        return processor.ProcessAsync(cancellationToken);
     }
 }
