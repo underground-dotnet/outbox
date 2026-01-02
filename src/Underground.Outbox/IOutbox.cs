@@ -33,5 +33,5 @@ public interface IOutbox
     /// <summary>
     /// Trigger a processing run of the outbox messages. It will run asynchronously in the background.
     /// </summary>
-    public void ProcessMessages();
+    public Task ProcessMessagesAsync(CancellationToken cancellationToken = default);
 }

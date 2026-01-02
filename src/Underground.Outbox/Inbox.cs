@@ -18,8 +18,8 @@ internal sealed class Inbox(AddMessageToInbox addMessage, Processor<InboxMessage
         }
     }
 
-    public void ProcessMessages()
+    public Task ProcessMessagesAsync(CancellationToken cancellationToken = default)
     {
-        processor.Process();
+        return processor.ProcessAsync(cancellationToken);
     }
 }

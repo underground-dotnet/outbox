@@ -24,11 +24,6 @@ internal sealed class Processor<TEntity>(
     private readonly Lock _lock = new();
     private Task? _currentTask = null;
 
-    internal void Process()
-    {
-        ProcessAsync(CancellationToken.None);
-    }
-
     internal Task ProcessAsync(CancellationToken cancellationToken)
     {
         lock (_lock)
@@ -73,7 +68,7 @@ internal sealed class Processor<TEntity>(
     {
         // repeat until no more messages are found for this partition
         var messagesProcessed = true;
-        while (messagesProcessed)
+        while (messagesProcessed && !cancellationToken.IsCancellationRequested)
         {
             messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
         }
