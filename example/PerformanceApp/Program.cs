@@ -61,8 +61,6 @@ await using (var dataSource = NpgsqlDataSource.Create(postgreSqlContainer.GetCon
     await writer.CompleteAsync();
 }
 
-outbox.ProcessMessages();
-
 await host.RunAsync();
 
 #pragma warning restore CA1305 // Specify IFormatProvider
