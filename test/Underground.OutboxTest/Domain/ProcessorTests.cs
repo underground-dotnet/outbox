@@ -117,4 +117,34 @@ public class ProcessorTests : DatabaseTest
         // DB is not created, since we did not call CreateDbContext
         await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
     }
+
+    [Fact]
+    public async Task Processor_Supports_Cancellation_Token()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            foreach (var i in Enumerable.Range(1, 100))
+            {
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i));
+                await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            }
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        using var cts = new CancellationTokenSource();
+        var task = processor.ProcessAsync(cts.Token);
+        // cancel processing early
+        await cts.CancelAsync();
+
+        // Assert
+        await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
+        Assert.True(ExampleMessageHandler.CalledWith.Count < 100);
+    }
 }
