@@ -30,8 +30,6 @@ internal class ConcurrentProcessor<TEntity>(
         SingleWriter = false
     });
 
-    internal int ActivePartitions = 0;
-
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
         _ = CreateWorkers(cancellationToken);
@@ -74,10 +72,6 @@ internal class ConcurrentProcessor<TEntity>(
                     // re-enqueue the partition for further processing, because there might be more messages
                     Channel.Writer.TryWrite(partitionKey);
                 }
-                else
-                {
-                    Interlocked.Decrement(ref ActivePartitions);
-                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
             {
@@ -96,10 +90,22 @@ internal class ConcurrentProcessor<TEntity>(
             return false;
         }
 
-        Interlocked.Increment(ref ActivePartitions);
+        ProcessingPartitionStarted();
 
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        return await processor.ProcessPartitionBatchAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
+        var messagesProcessed = await processor.ProcessPartitionBatchAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
+
+        ProcessingPartitionCompleted(messagesProcessed);
+
+        return messagesProcessed;
+    }
+
+    protected virtual void ProcessingPartitionStarted()
+    {
+    }
+
+    protected virtual void ProcessingPartitionCompleted(bool messagesProcessed)
+    {
     }
 }
