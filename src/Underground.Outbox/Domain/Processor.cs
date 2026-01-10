@@ -11,67 +11,89 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 namespace Underground.Outbox.Domain;
 
 internal sealed class Processor<TEntity>(
-    ServiceConfiguration config,
-    IServiceScopeFactory scopeFactory,
+    // ServiceConfiguration config,
+    // IServiceScopeFactory scopeFactory,
     IMessageDispatcher<TEntity> dispatcher,
+    IDbContext dbContext,
     ILogger<Processor<TEntity>> logger
     ) where TEntity : class, IMessage
 {
-    private readonly ServiceConfiguration _config = config;
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
+    // private readonly ServiceConfiguration _config = config;
+    // private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
     private readonly ILogger<Processor<TEntity>> _logger = logger;
-    private readonly Lock _lock = new();
-    private Task? _currentTask = null;
+    // private readonly Lock _lock = new();
+    // private Task? _currentTask = null;
 
-    internal Task ProcessAsync(CancellationToken cancellationToken)
-    {
-        lock (_lock)
-        {
-            if (_currentTask is not null && !_currentTask.IsCompleted)
-            {
-                // still running
-                return _currentTask;
-            }
+    // private TaskCompletionSource<bool>? _processingTCS = null;
 
-            _currentTask = FetchPartitionsAndProcess(cancellationToken);
+    // internal Task ProcessAsync(CancellationToken cancellationToken)
+    // {
+    //     lock (_lock)
+    //     {
+    //         if (_processingTCS is not null && !_processingTCS.Task.IsCompleted)
+    //         {
+    //             // still running
+    //             return _processingTCS.Task;
+    //         }
 
-            return _currentTask;
-        }
-    }
+    //         _processingTCS = new TaskCompletionSource<bool>();
+    //         FetchPartitionsAndProcess(cancellationToken);
 
-    private async Task FetchPartitionsAndProcess(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+    //         return _processingTCS.Task;
+    //     }
+    // }
 
-        var partitions = await dbContext.Set<TEntity>()
-            .Where(message => message.ProcessedAt == null)
-            .Select(message => message.PartitionKey)
-            .Distinct()
-            .AsNoTracking()
-            .ToListAsync(cancellationToken: cancellationToken);
+    // internal async Task FetchPartitionsAndProcess(CancellationToken cancellationToken)
+    // {
+    //     var partitions = await FetchPartitionsAsync(cancellationToken);
 
-        var parallellOptions = new ParallelOptions
-        {
-            MaxDegreeOfParallelism = _config.ParallelProcessingOfPartitions,
-            CancellationToken = cancellationToken
-        };
+    //     if (!partitions.Any())
+    //     {
+    //         // no more partitions to process
+    //         _processingTCS?.SetResult(true);
+    //         return;
+    //     }
 
-        await Parallel.ForEachAsync(partitions, parallellOptions, async (partition, ct) =>
-        {
-            await ProcessPartitionAsync(partition, ct);
-        });
-    }
+    //     foreach (var partition in partitions)
+    //     {
+    //         await _channel.Writer.WriteAsync(partition, cancellationToken);
+    //     }
+    // }
 
-    private async Task ProcessPartitionAsync(string partition, CancellationToken cancellationToken)
+    // internal async Task<IEnumerable<string>> FetchPartitionsAsync(CancellationToken cancellationToken)
+    // {
+    //     await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+
+    //     return await dbContext.Set<TEntity>()
+    //         .Where(message => message.ProcessedAt == null)
+    //         .Select(message => message.PartitionKey)
+    //         .Distinct()
+    //         .AsNoTracking()
+    //         .ToListAsync(cancellationToken: cancellationToken);
+
+    //     // var parallellOptions = new ParallelOptions
+    //     // {
+    //     //     MaxDegreeOfParallelism = _config.ParallelProcessingOfPartitions,
+    //     //     CancellationToken = cancellationToken
+    //     // };
+
+    //     // await Parallel.ForEachAsync(partitions, parallellOptions, async (partition, ct) =>
+    //     // {
+    //     //     await ProcessPartitionAsync(partition, ct);
+    //     // });
+    // }
+
+    internal async Task<bool> ProcessPartitionBatchAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
         // repeat until no more messages are found for this partition
-        var messagesProcessed = true;
-        while (messagesProcessed && !cancellationToken.IsCancellationRequested)
-        {
-            messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
-        }
+        // var messagesProcessed = true;
+        // while (messagesProcessed && !cancellationToken.IsCancellationRequested)
+        // {
+        // messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
+        // }
+
+        return await ProcessMessagesAsync(partition, batchSize, scope, cancellationToken);
     }
 
     /// <summary>
@@ -79,13 +101,14 @@ internal sealed class Processor<TEntity>(
     /// </summary>
     /// <param name="partition"></param>
     /// <param name="batchSize"></param>
+    /// <param name="scope"></param>
     /// <param name="cancellationToken"></param>
     /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
-    private async Task<bool> ProcessMessagesAsync(string partition, int batchSize, CancellationToken cancellationToken)
+    private async Task<bool> ProcessMessagesAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
         // use separate scope & context for each partition
-        using var scope = _scopeFactory.CreateScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+        // using var scope = _scopeFactory.CreateScope();
+        // await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
@@ -113,7 +136,7 @@ internal sealed class Processor<TEntity>(
     }
 
     // TODO: use cancellation token
-    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
+    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IDbContext dbContext)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
@@ -168,7 +191,7 @@ internal sealed class Processor<TEntity>(
         return successfulIds;
     }
 
-    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, IMessage message)
+    private static async Task IncrementRetryCountAsync(IDbContext dbContext, IMessage message)
     {
         await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)

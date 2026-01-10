@@ -3,7 +3,7 @@ using Underground.Outbox.Domain;
 
 namespace Underground.Outbox;
 
-internal sealed class Inbox(AddMessageToInbox addMessage, Processor<InboxMessage> processor) : IInbox
+internal sealed class Inbox(AddMessageToInbox addMessage, ConcurrentProcessor<InboxMessage> processor) : IInbox
 {
     public async Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken)
     {
@@ -18,8 +18,8 @@ internal sealed class Inbox(AddMessageToInbox addMessage, Processor<InboxMessage
         }
     }
 
-    public Task ProcessMessagesAsync(CancellationToken cancellationToken = default)
+    public async Task ProcessMessagesAsync(CancellationToken cancellationToken = default)
     {
-        return processor.ProcessAsync(cancellationToken);
+        await processor.StartProcessingRunAsync(cancellationToken);
     }
 }
