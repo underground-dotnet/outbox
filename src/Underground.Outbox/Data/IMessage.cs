@@ -2,7 +2,7 @@ namespace Underground.Outbox.Data;
 
 public interface IMessage
 {
-    public int Id { get; }
+    public long Id { get; }
     public string Type { get; }
     public string PartitionKey { get; }
     public string Data { get; }
