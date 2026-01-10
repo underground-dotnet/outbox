@@ -113,12 +113,12 @@ internal sealed class Processor<TEntity>(
     }
 
     // TODO: use cancellation token
-    private async Task<IEnumerable<int>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
+    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
         var transaction = dbContext.Database.CurrentTransaction!;
-        var successfulIds = new List<int>();
+        var successfulIds = new List<long>();
 
         foreach (var message in messages)
         {

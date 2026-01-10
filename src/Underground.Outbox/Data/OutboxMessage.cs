@@ -13,7 +13,7 @@ public class OutboxMessage : IMessage
 {
     [Column("id")]
     [Key]
-    public int Id { get; init; }
+    public long Id { get; init; }
 
     [Column("event_id")]
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
