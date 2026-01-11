@@ -56,6 +56,5 @@ internal sealed class SynchronousProcessor<TEntity>(
 
         _ = StartProcessingRunAsync(cancellationToken);
         return _processingTCS.Task;
-        // return Task.Delay(8000, cancellationToken);
     }
 }

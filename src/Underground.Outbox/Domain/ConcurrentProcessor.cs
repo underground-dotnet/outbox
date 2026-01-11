@@ -20,8 +20,8 @@ internal class ConcurrentProcessor<TEntity>(
 {
     private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    internal readonly ServiceConfiguration Config = config;
-    internal readonly Channel<string> Channel = System.Threading.Channels.Channel.CreateBounded<string>(new BoundedChannelOptions(10)
+    private readonly ServiceConfiguration _config = config;
+    private readonly Channel<string> _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(10)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
         SingleReader = false,
@@ -36,10 +36,11 @@ internal class ConcurrentProcessor<TEntity>(
         {
             await StartProcessingRunAsync(cancellationToken);
 
-            await Task.Delay(Config.ProcessingDelayMilliseconds, cancellationToken);
+            await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken);
         }
     }
 
+    // TODO: some sort of locking? or second channel? When this method gets called like from a dbcontext interceptor then it will be a lot of calls and can result in some wait time.
     internal async Task StartProcessingRunAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
@@ -47,7 +48,7 @@ internal class ConcurrentProcessor<TEntity>(
 
         foreach (var partition in partitions)
         {
-            await Channel.Writer.WriteAsync(partition, cancellationToken);
+            await _channel.Writer.WriteAsync(partition, cancellationToken);
         }
 
         if (!partitions.Any())
@@ -58,14 +59,14 @@ internal class ConcurrentProcessor<TEntity>(
 
     internal async Task<IEnumerable<Task>> CreateWorkers(CancellationToken cancellationToken)
     {
-        return Enumerable.Range(0, Config.ParallelProcessingOfPartitions)
+        return Enumerable.Range(0, _config.ParallelProcessingOfPartitions)
                     .Select(_ => CreatePartitionWorker(cancellationToken))
                     .ToArray();
     }
 
-    internal async Task CreatePartitionWorker(CancellationToken cancellationToken)
+    private async Task CreatePartitionWorker(CancellationToken cancellationToken)
     {
-        await foreach (var partitionKey in Channel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var partitionKey in _channel.Reader.ReadAllAsync(cancellationToken))
         {
             try
             {
@@ -74,7 +75,7 @@ internal class ConcurrentProcessor<TEntity>(
                 if (messagesProcessed)
                 {
                     // re-enqueue the partition for further processing, because there might be more messages
-                    Channel.Writer.TryWrite(partitionKey);
+                    _channel.Writer.TryWrite(partitionKey);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
@@ -99,7 +100,7 @@ internal class ConcurrentProcessor<TEntity>(
         // use separate scope & context for each partition
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        var messagesProcessed = await processor.ProcessMessagesAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
+        var messagesProcessed = await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken);
 
         ProcessingPartitionCompleted(messagesProcessed);
 
