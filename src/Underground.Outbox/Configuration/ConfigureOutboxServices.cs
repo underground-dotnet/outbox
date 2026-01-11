@@ -62,7 +62,7 @@ public static class ConfigureOutboxServices
         services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
 
         services.AddScoped<FetchPartitions<TEntity>>();
-        services.AddScoped<ConcurrentProcessor<TEntity>>();
+        services.AddSingleton<ConcurrentProcessor<TEntity>>();
         services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<Processor<TEntity>>();

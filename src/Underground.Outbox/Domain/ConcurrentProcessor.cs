@@ -37,6 +37,7 @@ internal class ConcurrentProcessor<TEntity>(
         SingleWriter = false
     });
 
+    // called only on startup in the BackgroundWorker
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
         // TODO: monitor workers?
@@ -54,7 +55,7 @@ internal class ConcurrentProcessor<TEntity>(
         _triggerChannel.Writer.TryWrite(1);
     }
 
-    internal async Task<IEnumerable<Task>> CreateWorkers(CancellationToken cancellationToken)
+    private async Task<IEnumerable<Task>> CreateWorkers(CancellationToken cancellationToken)
     {
         var triggerWorker = CreateTriggerWorker(cancellationToken);
 
