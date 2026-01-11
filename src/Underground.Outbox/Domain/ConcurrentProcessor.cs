@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
@@ -21,7 +20,17 @@ internal class ConcurrentProcessor<TEntity>(
     private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ServiceConfiguration _config = config;
-    private readonly Channel<string> _channel = Channel.CreateBounded<string>(new BoundedChannelOptions(10)
+
+    // used to trigger processing runs, making sure only a limited number of runs can be queued
+    private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(2)
+    {
+        FullMode = BoundedChannelFullMode.DropWrite,
+        SingleReader = true,
+        SingleWriter = false
+    });
+
+    // contains partitions to be processed
+    private readonly Channel<string> _partitionsChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(20)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
         SingleReader = false,
@@ -30,43 +39,62 @@ internal class ConcurrentProcessor<TEntity>(
 
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
+        // TODO: monitor workers?
         _ = await CreateWorkers(cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            await StartProcessingRunAsync(cancellationToken);
-
+            ScheduleProcessingRun();
             await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken);
         }
     }
 
-    // TODO: some sort of locking? or second channel? When this method gets called like from a dbcontext interceptor then it will be a lot of calls and can result in some wait time.
-    internal async Task StartProcessingRunAsync(CancellationToken cancellationToken)
+    internal void ScheduleProcessingRun()
     {
-        using var scope = _scopeFactory.CreateScope();
-        var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
-
-        foreach (var partition in partitions)
-        {
-            await _channel.Writer.WriteAsync(partition, cancellationToken);
-        }
-
-        if (!partitions.Any())
-        {
-            ProcessingPartitionCompleted(false);
-        }
+        _triggerChannel.Writer.TryWrite(1);
     }
 
     internal async Task<IEnumerable<Task>> CreateWorkers(CancellationToken cancellationToken)
     {
-        return Enumerable.Range(0, _config.ParallelProcessingOfPartitions)
+        var triggerWorker = CreateTriggerWorker(cancellationToken);
+
+        var partitionsWorkers = Enumerable.Range(0, _config.ParallelProcessingOfPartitions)
                     .Select(_ => CreatePartitionWorker(cancellationToken))
                     .ToArray();
+
+        return [.. partitionsWorkers, triggerWorker];
+    }
+
+    private async Task CreateTriggerWorker(CancellationToken cancellationToken)
+    {
+        await foreach (var _ in _triggerChannel.Reader.ReadAllAsync(cancellationToken))
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
+
+                foreach (var partition in partitions)
+                {
+                    await _partitionsChannel.Writer.WriteAsync(partition, cancellationToken);
+                }
+
+                if (!partitions.Any())
+                {
+                    NoMessagesForProcessingFound();
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Error fetching partitions for processing");
+                NoMessagesForProcessingFound();
+            }
+        }
     }
 
     private async Task CreatePartitionWorker(CancellationToken cancellationToken)
     {
-        await foreach (var partitionKey in _channel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var partitionKey in _partitionsChannel.Reader.ReadAllAsync(cancellationToken))
         {
             try
             {
@@ -75,10 +103,10 @@ internal class ConcurrentProcessor<TEntity>(
                 if (messagesProcessed)
                 {
                     // re-enqueue the partition for further processing, because there might be more messages
-                    _channel.Writer.TryWrite(partitionKey);
+                    _partitionsChannel.Writer.TryWrite(partitionKey);
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException && ex is not NoDbContextAssignedException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Error processing partition {PartitionKey}", partitionKey);
             }
@@ -95,25 +123,14 @@ internal class ConcurrentProcessor<TEntity>(
             return false;
         }
 
-        ProcessingPartitionStarted();
-
         // use separate scope & context for each partition
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        var messagesProcessed = await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken);
-
-        ProcessingPartitionCompleted(messagesProcessed);
-
-        return messagesProcessed;
+        return await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken);
     }
 
-    protected virtual void ProcessingPartitionStarted()
+    protected virtual void NoMessagesForProcessingFound()
     {
         // only used to improve test setup with async processes
-    }
-
-    protected virtual void ProcessingPartitionCompleted(bool messagesProcessed)
-    {
-
     }
 }

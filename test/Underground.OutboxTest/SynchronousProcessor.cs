@@ -16,26 +16,14 @@ internal sealed class SynchronousProcessor<TEntity>(
     IDistributedLockProvider synchronizationProvider
 ) : ConcurrentProcessor<TEntity>(logger, scopeFactory, config, synchronizationProvider) where TEntity : class, IMessage
 {
-
-    private int _activePartitions = 0;
     private TaskCompletionSource<bool>? _processingTCS = null;
     private readonly Lock _lock = new();
 
-    protected override void ProcessingPartitionStarted()
+    protected override void NoMessagesForProcessingFound()
     {
-        Interlocked.Increment(ref _activePartitions);
-    }
-
-    protected override void ProcessingPartitionCompleted(bool messagesProcessed)
-    {
-        Interlocked.Decrement(ref _activePartitions);
-
-        if (!messagesProcessed && _activePartitions <= 0)
+        lock (_lock)
         {
-            lock (_lock)
-            {
-                _processingTCS?.SetResult(true);
-            }
+            _processingTCS?.SetResult(true);
         }
     }
 
@@ -43,18 +31,25 @@ internal sealed class SynchronousProcessor<TEntity>(
     {
         lock (_lock)
         {
-            if (_processingTCS is not null && !_processingTCS.Task.IsCompleted)
+            if (_processingTCS is null)
+            {
+                // only executed on first call
+                _processingTCS = new TaskCompletionSource<bool>();
+                _ = StartAsync(cancellationToken);
+            }
+            else if (_processingTCS is not null && !_processingTCS.Task.IsCompleted)
             {
                 // still running
                 return _processingTCS.Task;
             }
-
-            _processingTCS = new TaskCompletionSource<bool>();
-            _activePartitions = 0;
-            _ = CreateWorkers(cancellationToken);
+            else
+            {
+                // completed, start new run
+                _processingTCS = new TaskCompletionSource<bool>();
+                ScheduleProcessingRun();
+            }
         }
 
-        _ = StartProcessingRunAsync(cancellationToken);
         return _processingTCS.Task;
     }
 }

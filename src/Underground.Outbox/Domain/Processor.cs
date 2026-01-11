@@ -13,7 +13,7 @@ internal sealed class Processor<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
     IDbContext dbContext,
     ILogger<Processor<TEntity>> logger
-    ) where TEntity : class, IMessage
+) where TEntity : class, IMessage
 {
     private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
     private readonly ILogger<Processor<TEntity>> _logger = logger;
