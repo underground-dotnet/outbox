@@ -4,7 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
@@ -18,8 +17,6 @@ public class ProcessorTests : DatabaseTest
 
     public ProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         _testOutputHelper = testOutputHelper;
 
         // clear the static lists to avoid interference between tests
@@ -28,13 +25,13 @@ public class ProcessorTests : DatabaseTest
 
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<ExampleMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
@@ -73,57 +70,11 @@ public class ProcessorTests : DatabaseTest
     }
 
     [Fact]
-    public void Processor_Returns_Same_Task_When_Still_Running()
-    {
-        // Arrange
-        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
-
-        // Act
-        var task1 = processor.ProcessAsync(TestContext.Current.CancellationToken);
-        var task2 = processor.ProcessAsync(TestContext.Current.CancellationToken);
-        var task3 = processor.ProcessAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Same(task1, task2);
-        Assert.Same(task1, task3);
-    }
-
-    [Fact]
-    public async Task Processor_Returns_New_Task_For_New_Run()
-    {
-        // Arrange
-        CreateDbContext();
-        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
-
-        // Act
-        var task1 = processor.ProcessAsync(TestContext.Current.CancellationToken);
-        await task1;
-        var task2 = processor.ProcessAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.NotSame(task1, task2);
-    }
-
-    [Fact]
-    public async Task Processor_Handle_Exceptions_In_Processing_Block()
-    {
-        // Arrange
-        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
-
-        // Act
-        var task = processor.ProcessAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        // DB is not created, since we did not call CreateDbContext
-        await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
-    }
-
-    [Fact]
     public async Task Processor_Supports_Cancellation_Token()
     {
         // Arrange
         var context = CreateDbContext();
-        var processor = _serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -139,7 +90,7 @@ public class ProcessorTests : DatabaseTest
 
         // Act
         using var cts = new CancellationTokenSource();
-        var task = processor.ProcessAsync(cts.Token);
+        var task = processor.StartAsync(cts.Token);
         // cancel processing early
         await cts.CancelAsync();
 

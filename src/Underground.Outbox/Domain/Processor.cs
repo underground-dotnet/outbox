@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 
-using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -11,82 +10,24 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 namespace Underground.Outbox.Domain;
 
 internal sealed class Processor<TEntity>(
-    ServiceConfiguration config,
-    IServiceScopeFactory scopeFactory,
     IMessageDispatcher<TEntity> dispatcher,
+    IDbContext dbContext,
     ILogger<Processor<TEntity>> logger
-    ) where TEntity : class, IMessage
+) where TEntity : class, IMessage
 {
-    private readonly ServiceConfiguration _config = config;
-    private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
     private readonly ILogger<Processor<TEntity>> _logger = logger;
-    private readonly Lock _lock = new();
-    private Task? _currentTask = null;
-
-    internal Task ProcessAsync(CancellationToken cancellationToken)
-    {
-        lock (_lock)
-        {
-            if (_currentTask is not null && !_currentTask.IsCompleted)
-            {
-                // still running
-                return _currentTask;
-            }
-
-            _currentTask = FetchPartitionsAndProcess(cancellationToken);
-
-            return _currentTask;
-        }
-    }
-
-    private async Task FetchPartitionsAndProcess(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-
-        var partitions = await dbContext.Set<TEntity>()
-            .Where(message => message.ProcessedAt == null)
-            .Select(message => message.PartitionKey)
-            .Distinct()
-            .AsNoTracking()
-            .ToListAsync(cancellationToken: cancellationToken);
-
-        var parallellOptions = new ParallelOptions
-        {
-            MaxDegreeOfParallelism = _config.ParallelProcessingOfPartitions,
-            CancellationToken = cancellationToken
-        };
-
-        await Parallel.ForEachAsync(partitions, parallellOptions, async (partition, ct) =>
-        {
-            await ProcessPartitionAsync(partition, ct);
-        });
-    }
-
-    private async Task ProcessPartitionAsync(string partition, CancellationToken cancellationToken)
-    {
-        // repeat until no more messages are found for this partition
-        var messagesProcessed = true;
-        while (messagesProcessed && !cancellationToken.IsCancellationRequested)
-        {
-            messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
-        }
-    }
 
     /// <summary>
     /// Processes a batch of messages for the given partition using a new scope and DbContext.
     /// </summary>
     /// <param name="partition"></param>
     /// <param name="batchSize"></param>
+    /// <param name="scope"></param>
     /// <param name="cancellationToken"></param>
     /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
-    private async Task<bool> ProcessMessagesAsync(string partition, int batchSize, CancellationToken cancellationToken)
+    internal async Task<bool> ProcessMessagesAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
-        // use separate scope & context for each partition
-        using var scope = _scopeFactory.CreateScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
@@ -113,7 +54,7 @@ internal sealed class Processor<TEntity>(
     }
 
     // TODO: use cancellation token
-    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IOutboxDbContext dbContext)
+    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IDbContext dbContext)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
@@ -168,7 +109,7 @@ internal sealed class Processor<TEntity>(
         return successfulIds;
     }
 
-    private static async Task IncrementRetryCountAsync(IOutboxDbContext dbContext, IMessage message)
+    private static async Task IncrementRetryCountAsync(IDbContext dbContext, IMessage message)
     {
         await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)

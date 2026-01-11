@@ -23,6 +23,7 @@ public static class ConfigureOutboxServices
         configuration.Invoke(serviceConfig);
 
         services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
+        services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
         services.AddScoped<IMessageDispatcher<OutboxMessage>, OutboxDispatcher>();
@@ -41,6 +42,7 @@ public static class ConfigureOutboxServices
         configuration.Invoke(serviceConfig);
 
         services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
+        services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToInbox>();
         services.AddScoped<IInbox, Inbox>();
         services.AddScoped<IMessageDispatcher<InboxMessage>, InboxDispatcher>();
@@ -59,9 +61,11 @@ public static class ConfigureOutboxServices
         // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
 
+        services.AddScoped<FetchPartitions<TEntity>>();
+        services.AddSingleton<ConcurrentProcessor<TEntity>>();
         services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddSingleton<Processor<TEntity>>();
+        services.AddScoped<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
         services.AddSingleton<IDistributedLockProvider>(sp =>

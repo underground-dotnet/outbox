@@ -30,7 +30,6 @@ public class ProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -38,12 +37,12 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -52,7 +51,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // Second message handler should not be called due to error in first message handler
@@ -64,7 +63,6 @@ public class ProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -72,12 +70,13 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -86,7 +85,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database
@@ -100,7 +99,6 @@ public class ProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -108,12 +106,12 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -122,7 +120,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
@@ -145,17 +143,16 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<FailedUserMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -164,7 +161,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -177,7 +174,6 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -185,10 +181,10 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<CustomSqlMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -197,7 +193,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -210,7 +206,6 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -218,11 +213,11 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<FailedUserMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -234,7 +229,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database
@@ -254,17 +249,16 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<FailedUserMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -273,7 +267,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(FailedUserMessageHandler.CalledWithTransaction);
@@ -284,18 +278,18 @@ public class ProcessorErrorTests : DatabaseTest
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<DiscardFailedMessageHandler>();
         });
 
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -303,7 +297,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));

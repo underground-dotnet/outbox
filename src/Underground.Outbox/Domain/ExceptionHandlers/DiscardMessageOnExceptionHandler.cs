@@ -11,7 +11,7 @@ namespace Underground.Outbox.Domain.ExceptionHandlers;
 
 public class DiscardMessageOnExceptionHandler<TEntity>(ILogger<DiscardMessageOnExceptionHandler<TEntity>> logger) : IMessageExceptionHandler<TEntity> where TEntity : class, IMessage
 {
-    public async Task HandleAsync(MessageHandlerException ex, TEntity message, IOutboxDbContext dbContext, CancellationToken cancellationToken)
+    public async Task HandleAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken)
     {
         // TODO: can we make it more type safe? GetMethod(nameof(IOutboxMessageHandler<Message>.HandleAsync))
         // TODO: lookup should be cached
