@@ -95,7 +95,6 @@ public class ProcessorScopeTests : DatabaseTest
         var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { PartitionKey = "A" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
         var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-        var logger = _serviceProvider.GetRequiredService<ILogger<ProcessorScopeTests>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -106,7 +105,6 @@ public class ProcessorScopeTests : DatabaseTest
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-        logger.LogInformation("Test finished");
 
         // Assert
         Assert.Equal(3, ExampleMessageHandler.CalledWith.Count);

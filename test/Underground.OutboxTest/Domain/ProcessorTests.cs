@@ -71,52 +71,6 @@ public class ProcessorTests : DatabaseTest
         await StopBackgroundServiceAsync();
     }
 
-    // [Fact]
-    // public void Processor_Returns_Same_Task_When_Still_Running()
-    // {
-    //     // Arrange
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-
-    //     // Act
-    //     var task1 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-    //     var task2 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-    //     var task3 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-
-    //     // Assert
-    //     Assert.Same(task1, task2);
-    //     Assert.Same(task1, task3);
-    // }
-
-    // [Fact]
-    // public async Task Processor_Returns_New_Task_For_New_Run()
-    // {
-    //     // Arrange
-    //     CreateDbContext();
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-
-    //     // Act
-    //     var task1 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-    //     await task1;
-    //     var task2 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-
-    //     // Assert
-    //     Assert.NotSame(task1, task2);
-    // }
-
-    // [Fact]
-    // public async Task Processor_Handle_Exceptions_In_Processing_Block()
-    // {
-    //     // Arrange
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-
-    //     // Act
-    //     var task = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-
-    //     // Assert
-    //     // DB is not created, since we did not call CreateDbContext
-    //     await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
-    // }
-
     [Fact]
     public async Task Processor_Supports_Cancellation_Token()
     {
