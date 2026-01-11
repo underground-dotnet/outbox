@@ -87,63 +87,63 @@ public class ProcessorTests : DatabaseTest
         Assert.Same(task1, task3);
     }
 
-    // [Fact]
-    // public async Task Processor_Returns_New_Task_For_New_Run()
-    // {
-    //     // Arrange
-    //     CreateDbContext();
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+    [Fact]
+    public async Task Processor_Returns_New_Task_For_New_Run()
+    {
+        // Arrange
+        CreateDbContext();
+        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
 
-    //     // Act
-    //     var task1 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-    //     await task1;
-    //     var task2 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        // Act
+        var task1 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await task1;
+        var task2 = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
 
-    //     // Assert
-    //     Assert.NotSame(task1, task2);
-    // }
+        // Assert
+        Assert.NotSame(task1, task2);
+    }
 
-    // [Fact]
-    // public async Task Processor_Handle_Exceptions_In_Processing_Block()
-    // {
-    //     // Arrange
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+    [Fact]
+    public async Task Processor_Handle_Exceptions_In_Processing_Block()
+    {
+        // Arrange
+        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
 
-    //     // Act
-    //     var task = processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        // Act
+        var task = processor.StartAsync(TestContext.Current.CancellationToken);
 
-    //     // Assert
-    //     // DB is not created, since we did not call CreateDbContext
-    //     await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
-    // }
+        // Assert
+        // DB is not created, since we did not call CreateDbContext
+        await Assert.ThrowsAsync<Npgsql.PostgresException>(async () => await task);
+    }
 
-    // [Fact]
-    // public async Task Processor_Supports_Cancellation_Token()
-    // {
-    //     // Arrange
-    //     var context = CreateDbContext();
-    //     var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-    //     var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+    [Fact]
+    public async Task Processor_Supports_Cancellation_Token()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
-    //     await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
-    //     {
-    //         foreach (var i in Enumerable.Range(1, 100))
-    //         {
-    //             var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i));
-    //             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
-    //         }
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            foreach (var i in Enumerable.Range(1, 100))
+            {
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i));
+                await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            }
 
-    //         await transaction.CommitAsync(TestContext.Current.CancellationToken);
-    //     }
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
 
-    //     // Act
-    //     using var cts = new CancellationTokenSource();
-    //     var task = processor.ProcessAndWaitAsync(cts.Token);
-    //     // cancel processing early
-    //     await cts.CancelAsync();
+        // Act
+        using var cts = new CancellationTokenSource();
+        var task = processor.StartAsync(cts.Token);
+        // cancel processing early
+        await cts.CancelAsync();
 
-    //     // Assert
-    //     await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
-    //     Assert.True(ExampleMessageHandler.CalledWith.Count < 100);
-    // }
+        // Assert
+        await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
+        Assert.True(ExampleMessageHandler.CalledWith.Count < 100);
+    }
 }

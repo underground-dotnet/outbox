@@ -30,7 +30,7 @@ internal sealed class SynchronousProcessor<TEntity>(
     {
         Interlocked.Decrement(ref _activePartitions);
 
-        if (!messagesProcessed && _activePartitions == 0)
+        if (!messagesProcessed && _activePartitions <= 0)
         {
             lock (_lock)
             {
@@ -50,10 +50,12 @@ internal sealed class SynchronousProcessor<TEntity>(
             }
 
             _processingTCS = new TaskCompletionSource<bool>();
+            _activePartitions = 0;
             _ = CreateWorkers(cancellationToken);
         }
 
         _ = StartProcessingRunAsync(cancellationToken);
         return _processingTCS.Task;
+        // return Task.Delay(8000, cancellationToken);
     }
 }

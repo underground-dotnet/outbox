@@ -2,7 +2,6 @@ using System.Threading.Channels;
 
 using Medallion.Threading;
 
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -44,20 +43,16 @@ internal class ConcurrentProcessor<TEntity>(
     internal async Task StartProcessingRunAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        await using var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
-
-
-        // var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
-        var partitions = await dbContext.Set<TEntity>()
-                    .Where(message => message.ProcessedAt == null)
-                    .Select(message => message.PartitionKey)
-                    .Distinct()
-                    .AsNoTracking()
-                    .ToListAsync(cancellationToken: cancellationToken);
+        var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
 
         foreach (var partition in partitions)
         {
             await Channel.Writer.WriteAsync(partition, cancellationToken);
+        }
+
+        if (!partitions.Any())
+        {
+            ProcessingPartitionCompleted(false);
         }
     }
 
@@ -91,9 +86,6 @@ internal class ConcurrentProcessor<TEntity>(
 
     private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
     {
-        // using var scope = _scopeFactory.CreateScope();
-        // var syncProvider = scope.ServiceProvider.GetRequiredService<IDistributedLockProvider>();
-
         var lockKey = $"{typeof(TEntity)}-{partitionKey}";
         await using var handle = await synchronizationProvider.TryAcquireLockAsync(lockKey, cancellationToken: cancellationToken);
         if (handle is null)
@@ -103,6 +95,8 @@ internal class ConcurrentProcessor<TEntity>(
         }
 
         ProcessingPartitionStarted();
+
+        // use separate scope & context for each partition
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
         var messagesProcessed = await processor.ProcessMessagesAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
