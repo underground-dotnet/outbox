@@ -17,8 +17,6 @@ public class ProcessorTests : DatabaseTest
 
     public ProcessorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         _testOutputHelper = testOutputHelper;
 
         // clear the static lists to avoid interference between tests
