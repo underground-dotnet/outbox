@@ -84,17 +84,17 @@ internal sealed class Processor<TEntity>(
     //     // });
     // }
 
-    internal async Task<bool> ProcessPartitionBatchAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
-    {
-        // repeat until no more messages are found for this partition
-        // var messagesProcessed = true;
-        // while (messagesProcessed && !cancellationToken.IsCancellationRequested)
-        // {
-        // messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
-        // }
+    // internal async Task<bool> ProcessPartitionBatchAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
+    // {
+    //     // repeat until no more messages are found for this partition
+    //     // var messagesProcessed = true;
+    //     // while (messagesProcessed && !cancellationToken.IsCancellationRequested)
+    //     // {
+    //     // messagesProcessed = await ProcessMessagesAsync(partition, _config.BatchSize, cancellationToken);
+    //     // }
 
-        return await ProcessMessagesAsync(partition, batchSize, scope, cancellationToken);
-    }
+    //     return await ProcessMessagesAsync(partition, batchSize, scope, cancellationToken);
+    // }
 
     /// <summary>
     /// Processes a batch of messages for the given partition using a new scope and DbContext.
@@ -104,11 +104,11 @@ internal sealed class Processor<TEntity>(
     /// <param name="scope"></param>
     /// <param name="cancellationToken"></param>
     /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
-    private async Task<bool> ProcessMessagesAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
+    internal async Task<bool> ProcessMessagesAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
         // use separate scope & context for each partition
         // using var scope = _scopeFactory.CreateScope();
-        // await using var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+        // await using var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 

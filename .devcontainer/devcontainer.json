@@ -9,6 +9,11 @@
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2.13.0": {}
   },
+  "containerEnv": {
+    // handles some issues with Testcontainers networking in devcontainers (Docker-in-Docker)
+    "TESTCONTAINERS_RYUK_DISABLED": "true",
+    "TESTCONTAINERS_HOST_OVERRIDE": "localhost"
+  },
   // Configure tool-specific properties.
   "customizations": {
     "vscode": {

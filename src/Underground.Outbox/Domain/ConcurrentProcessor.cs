@@ -2,6 +2,7 @@ using System.Threading.Channels;
 
 using Medallion.Threading;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -15,14 +16,12 @@ internal class ConcurrentProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
     ServiceConfiguration config,
-    IDistributedLockProvider synchronizationProvider,
-    FetchPartitions<TEntity> fetchPartitions
+    IDistributedLockProvider synchronizationProvider
 ) where TEntity : class, IMessage
 {
     private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     internal readonly ServiceConfiguration Config = config;
-    private readonly FetchPartitions<TEntity> _fetchPartitions = fetchPartitions;
     internal readonly Channel<string> Channel = System.Threading.Channels.Channel.CreateBounded<string>(new BoundedChannelOptions(10)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
@@ -32,7 +31,7 @@ internal class ConcurrentProcessor<TEntity>(
 
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
-        _ = CreateWorkers(cancellationToken);
+        _ = await CreateWorkers(cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -44,7 +43,17 @@ internal class ConcurrentProcessor<TEntity>(
 
     internal async Task StartProcessingRunAsync(CancellationToken cancellationToken)
     {
-        var partitions = await _fetchPartitions.ExecuteAsync(cancellationToken);
+        using var scope = _scopeFactory.CreateScope();
+        await using var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
+
+
+        // var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
+        var partitions = await dbContext.Set<TEntity>()
+                    .Where(message => message.ProcessedAt == null)
+                    .Select(message => message.PartitionKey)
+                    .Distinct()
+                    .AsNoTracking()
+                    .ToListAsync(cancellationToken: cancellationToken);
 
         foreach (var partition in partitions)
         {
@@ -82,6 +91,9 @@ internal class ConcurrentProcessor<TEntity>(
 
     private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
     {
+        // using var scope = _scopeFactory.CreateScope();
+        // var syncProvider = scope.ServiceProvider.GetRequiredService<IDistributedLockProvider>();
+
         var lockKey = $"{typeof(TEntity)}-{partitionKey}";
         await using var handle = await synchronizationProvider.TryAcquireLockAsync(lockKey, cancellationToken: cancellationToken);
         if (handle is null)
@@ -91,10 +103,9 @@ internal class ConcurrentProcessor<TEntity>(
         }
 
         ProcessingPartitionStarted();
-
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        var messagesProcessed = await processor.ProcessPartitionBatchAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
+        var messagesProcessed = await processor.ProcessMessagesAsync(partitionKey, Config.BatchSize, scope, cancellationToken);
 
         ProcessingPartitionCompleted(messagesProcessed);
 
@@ -103,9 +114,11 @@ internal class ConcurrentProcessor<TEntity>(
 
     protected virtual void ProcessingPartitionStarted()
     {
+        // only used to improve test setup with async processes
     }
 
     protected virtual void ProcessingPartitionCompleted(bool messagesProcessed)
     {
+
     }
 }

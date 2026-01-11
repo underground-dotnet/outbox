@@ -65,7 +65,7 @@ public static class ConfigureOutboxServices
         services.AddScoped<ConcurrentProcessor<TEntity>>();
         services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddSingleton<Processor<TEntity>>();
+        services.AddScoped<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
         services.AddSingleton<IDistributedLockProvider>(sp =>
