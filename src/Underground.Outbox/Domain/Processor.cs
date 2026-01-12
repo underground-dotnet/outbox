@@ -12,7 +12,8 @@ namespace Underground.Outbox.Domain;
 internal sealed class Processor<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
     IDbContext dbContext,
-    ILogger<Processor<TEntity>> logger
+    ILogger<Processor<TEntity>> logger,
+    FetchMessages<TEntity> fetchMessages
 ) where TEntity : class, IMessage
 {
     private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
@@ -30,16 +31,14 @@ internal sealed class Processor<TEntity>(
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
-        // no need for "SELECT FOR UPDATE" since we have a distributed lock which only has one runner active
-        var messages = await dbContext.Set<TEntity>()
-            .Where(message => message.ProcessedAt == null && message.PartitionKey == partition)
-            .OrderBy(message => message.Id)
-            .Take(batchSize)
-            .ToListAsync(cancellationToken: cancellationToken);
-
+        var messages = await fetchMessages.ExecuteAsync(partition, batchSize, cancellationToken);
+        if (messages.Count == 0)
+        {
+            return false;
+        }
         _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
 
-        var successIds = await CallMessageHandlersAsync(messages, scope, dbContext);
+        var successIds = await CallMessageHandlersAsync(messages, scope);
 
         // mark as processed
         await dbContext.Set<TEntity>()
@@ -54,7 +53,7 @@ internal sealed class Processor<TEntity>(
     }
 
     // TODO: use cancellation token
-    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, IDbContext dbContext)
+    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
