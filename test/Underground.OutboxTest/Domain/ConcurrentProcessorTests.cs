@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
@@ -27,6 +28,7 @@ public class ConcurrentProcessorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
+            cfg.ParallelProcessingOfPartitions = 4;
             cfg.AddHandler<PartitionedMessageHandler>();
         });
 
@@ -93,5 +95,49 @@ public class ConcurrentProcessorTests : DatabaseTest
                      .Where(n => n % 4 == 3)
                      .ToList();
         Assert.Equal(partitionD, PartitionedMessageHandler.CalledWith["D"]);
+    }
+
+    [Fact]
+    public async Task DoNotProcessMessagesTwice()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+
+        var partitions = new[] { "A", "B" };
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            for (int i = 0; i < 200; i++)
+            {
+                var partition = partitions[i % partitions.Length];
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i)) { PartitionKey = partition };
+                await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            }
+
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        using var cts = new CancellationTokenSource();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        _ = processor.StartAsync(cts.Token);
+        processor.ScheduleProcessingRun();
+        processor.ScheduleProcessingRun();
+        processor.ScheduleProcessingRun();
+
+        // Assert
+        SpinWait.SpinUntil(() => PartitionedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
+        await cts.CancelAsync();
+        Assert.Equal(200, PartitionedMessageHandler.TotalCount);
+
+        var partitionA = Enumerable.Range(0, 200)
+                     .Where(n => n % 4 == 0)
+                     .ToList();
+        Assert.Equal(partitionA, PartitionedMessageHandler.CalledWith["A"]);
+
+        var partitionB = Enumerable.Range(0, 200)
+                     .Where(n => n % 4 == 1)
+                     .ToList();
+        Assert.Equal(partitionB, PartitionedMessageHandler.CalledWith["B"]);
     }
 }

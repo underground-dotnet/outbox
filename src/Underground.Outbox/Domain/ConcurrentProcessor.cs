@@ -1,7 +1,5 @@
 using System.Threading.Channels;
 
-using Medallion.Threading;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -13,8 +11,7 @@ namespace Underground.Outbox.Domain;
 internal class ConcurrentProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
-    ServiceConfiguration config,
-    IDistributedLockProvider synchronizationProvider
+    ServiceConfiguration config
 ) where TEntity : class, IMessage
 {
     private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
@@ -116,14 +113,6 @@ internal class ConcurrentProcessor<TEntity>(
 
     private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
     {
-        var lockKey = $"{typeof(TEntity)}-{partitionKey}";
-        await using var handle = await synchronizationProvider.TryAcquireLockAsync(lockKey, cancellationToken: cancellationToken);
-        if (handle is null)
-        {
-            // another instance is already processing the partition
-            return false;
-        }
-
         // use separate scope & context for each partition
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
