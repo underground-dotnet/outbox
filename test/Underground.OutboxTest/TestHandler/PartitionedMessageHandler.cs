@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 
 using Underground.Outbox;
+using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
@@ -10,7 +11,7 @@ public class PartitionedMessageHandler : IOutboxMessageHandler<ExampleMessage>
     public static ConcurrentDictionary<string, List<int>> CalledWith { get; set; } = [];
     public static int TotalCount => CalledWith.Values.Sum(list => list.Count);
 
-    public Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
+    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         CalledWith.AddOrUpdate(
             GetPartitionKey(message),

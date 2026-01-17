@@ -3,6 +3,7 @@ using System.Data;
 using Microsoft.EntityFrameworkCore.Storage;
 
 using Underground.Outbox;
+using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
@@ -10,7 +11,7 @@ public class FailedUserMessageHandler(TestDbContext dbContext) : IOutboxMessageH
 {
     public static IDbContextTransaction? CalledWithTransaction { get; set; } = null;
 
-    public async Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
+    public async Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         CalledWithTransaction = dbContext.Database.CurrentTransaction;
 

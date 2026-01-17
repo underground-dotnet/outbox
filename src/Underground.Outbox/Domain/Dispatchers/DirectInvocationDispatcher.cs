@@ -46,7 +46,8 @@ internal abstract class DirectInvocationDispatcher<TMessage> : IMessageDispatche
 
         try
         {
-            var task = (Task?)method.Invoke(handlerObject, [fullEvent, cancellationToken]);
+            var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);
+            var task = (Task?)method.Invoke(handlerObject, [fullEvent, metadata, cancellationToken]);
             if (task is not null)
             {
                 await task;
