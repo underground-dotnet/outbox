@@ -1,8 +1,10 @@
-﻿using ConsoleApp;
-
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+
+using MultiProjectApp;
+
+using MultiProjectLib;
 
 using Testcontainers.PostgreSql;
 
@@ -26,10 +28,7 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });
-builder.Services.AddInboxServices<AppDbContext>(cfg =>
-{
-    cfg.AddHandler<InboxMessageHandler>();
-});
+
 
 IHost host = builder.Build();
 

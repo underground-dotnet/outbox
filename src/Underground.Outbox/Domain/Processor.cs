@@ -69,7 +69,7 @@ internal sealed class Processor<TEntity>(
             try
             {
                 // await OutboxHandlers<TEntity>.CallHandlerAsync(message, scope, cancellationToken);
-                // await _dispatcher.ExecuteAsync(scope, message, cancellationToken);
+                await _dispatcher.ExecuteAsync(scope, message, cancellationToken);
                 // persist all changes from the handler. (in case the handler forgot to call SaveChanges)
                 await dbContext.SaveChangesAsync(cancellationToken);
                 successfulIds.Add(message.Id);
