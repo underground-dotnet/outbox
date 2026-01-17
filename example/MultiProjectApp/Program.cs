@@ -11,6 +11,7 @@ using Testcontainers.PostgreSql;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 
 #pragma warning disable CA1305 // Specify IFormatProvider
 
@@ -28,7 +29,6 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler>();
 });
-
 
 IHost host = builder.Build();
 

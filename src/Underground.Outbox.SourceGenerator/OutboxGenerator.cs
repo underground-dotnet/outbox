@@ -45,13 +45,12 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             var typeInfo = context.SemanticModel.GetTypeInfo(baseType.Type);
             if (typeInfo.Type is INamedTypeSymbol typeSymbol
             && typeSymbol.IsGenericType
-            // && typeSymbol.OriginalDefinition.ToDisplayString().Contains("IOutboxMessageHandler"))
             && typeSymbol.OriginalDefinition.ToDisplayString() == "Underground.Outbox.IOutboxMessageHandler<T>")
             {
                 return new HandlerClassInfo(
                     typeSymbol.ContainingNamespace.ToDisplayString(),
-                    // classDeclaration.Identifier.Text,
-                    typeSymbol.OriginalDefinition.ToDisplayString(),
+                    classDeclaration.Identifier.Text,
+                    // typeSymbol.OriginalDefinition.ToDisplayString(),
                     typeSymbol.TypeArguments[0].ToDisplayString()
                 );
             }
