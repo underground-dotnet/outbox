@@ -12,10 +12,10 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
 
-public static class ConfigureOutboxServices
+public static class SetupOutboxServices
 {
-    public static IServiceCollection AddOutboxServices<TContext>(
-        this IServiceCollection services,
+    public static void SetupInternalOutboxServices<TContext>(
+        IServiceCollection services,
         Action<OutboxServiceConfiguration> configuration
     ) where TContext : DbContext, IOutboxDbContext
     {
@@ -26,15 +26,12 @@ public static class ConfigureOutboxServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped<IMessageDispatcher<OutboxMessage>, OutboxDispatcher>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
-
-        return services;
     }
 
-    public static IServiceCollection AddInboxServices<TContext>(
-        this IServiceCollection services,
+    public static void SetupInternalInboxServices<TContext>(
+        IServiceCollection services,
         Action<InboxServiceConfiguration> configuration
     ) where TContext : DbContext, IInboxDbContext
     {
@@ -45,11 +42,8 @@ public static class ConfigureOutboxServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessageToInbox>();
         services.AddScoped<IInbox, Inbox>();
-        services.AddScoped<IMessageDispatcher<InboxMessage>, InboxDispatcher>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
-
-        return services;
     }
 
     private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration serviceConfig)

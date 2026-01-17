@@ -38,7 +38,7 @@ internal sealed class Processor<TEntity>(
         }
         _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
 
-        var successIds = await CallMessageHandlersAsync(messages, scope);
+        var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken);
 
         // mark as processed
         await dbContext.Set<TEntity>()
@@ -53,7 +53,7 @@ internal sealed class Processor<TEntity>(
     }
 
     // TODO: use cancellation token
-    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope)
+    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, CancellationToken cancellationToken)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
@@ -63,16 +63,17 @@ internal sealed class Processor<TEntity>(
         foreach (var message in messages)
         {
             var savepointName = $"processing_message_{message.Id}";
-            await transaction.CreateSavepointAsync(savepointName);
+            await transaction.CreateSavepointAsync(savepointName, cancellationToken);
             Exception? exception = null;
 
             try
             {
-                await _dispatcher.ExecuteAsync(scope, message);
+                // await OutboxHandlers<TEntity>.CallHandlerAsync(message, scope, cancellationToken);
+                await _dispatcher.ExecuteAsync(scope, message, cancellationToken);
                 // persist all changes from the handler. (in case the handler forgot to call SaveChanges)
-                await dbContext.SaveChangesAsync();
+                await dbContext.SaveChangesAsync(cancellationToken);
                 successfulIds.Add(message.Id);
-                await transaction.ReleaseSavepointAsync(savepointName);
+                await transaction.ReleaseSavepointAsync(savepointName, cancellationToken);
             }
             catch (MessageHandlerException ex)
             {
@@ -89,11 +90,11 @@ internal sealed class Processor<TEntity>(
             {
                 // clear all tracked entities, because the batch processing failed. The ErrorHandler can then use the clean context to perform db operations.
                 dbContext.ChangeTracker.Clear();
-                await transaction.RollbackToSavepointAsync(savepointName);
+                await transaction.RollbackToSavepointAsync(savepointName, cancellationToken);
 
                 if (exception is MessageHandlerException ex)
                 {
-                    await processHandlerException.ExecuteAsync(ex, message, dbContext);
+                    await processHandlerException.ExecuteAsync(ex, message, dbContext, cancellationToken);
                 }
 
                 // TODO: decide if max retry count is reached or if a retry makes sense

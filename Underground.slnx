@@ -1,8 +1,11 @@
 <Solution>
   <Folder Name="/example/">
     <Project Path="example/ConsoleApp/ConsoleApp.csproj" />
+    <Project Path="example/MultiProjectApp/MultiProjectApp.csproj" />
+    <Project Path="example/MultiProjectLib/MultiProjectLib.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Underground.Outbox.SourceGenerator/Underground.Outbox.SourceGenerator.csproj" />
     <Project Path="src/Underground.Outbox/Underground.Outbox.csproj" />
   </Folder>
   <Folder Name="/test/">
