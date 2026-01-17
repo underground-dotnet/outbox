@@ -16,4 +16,8 @@
     <ProjectReference Include="../../src/Underground.Outbox/Underground.Outbox.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../src/Underground.Outbox.SourceGenerator/Underground.Outbox.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
 </Project>

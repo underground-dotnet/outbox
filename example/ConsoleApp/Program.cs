@@ -9,6 +9,7 @@ using Testcontainers.PostgreSql;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 
 #pragma warning disable CA1305 // Specify IFormatProvider
 
@@ -52,6 +53,8 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
 
     await transaction.CommitAsync();
 }
+
+var t = typeof(OutboxHandlers<OutboxMessage>);
 
 // using custom table name "outbox_msgs"
 var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox_msgs").SingleAsync();
