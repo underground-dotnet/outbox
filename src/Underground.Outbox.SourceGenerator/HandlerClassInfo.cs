@@ -1,15 +1,21 @@
 namespace Underground.Outbox.SourceGenerator;
 
+internal enum HandlerKind
+{
+    Outbox,
+    Inbox
+}
+
 internal readonly record struct HandlerClassInfo
 {
-    internal readonly string FullNamespace;
-    internal readonly string ClassName { get; }
-    internal readonly string MessageType;
+    internal string HandlerFullName { get; }
+    internal string MessageTypeFullName { get; }
+    internal HandlerKind Kind { get; }
 
-    public HandlerClassInfo(string fullNamespace, string className, string messageType)
+    public HandlerClassInfo(string handlerFullName, string messageTypeFullName, HandlerKind kind)
     {
-        FullNamespace = fullNamespace;
-        ClassName = className;
-        MessageType = messageType;
+        HandlerFullName = handlerFullName;
+        MessageTypeFullName = messageTypeFullName;
+        Kind = kind;
     }
 }
