@@ -3,6 +3,7 @@
     <Project Path="example/ConsoleApp/ConsoleApp.csproj" />
     <Project Path="example/MultiProjectApp/MultiProjectApp.csproj" />
     <Project Path="example/MultiProjectLib/MultiProjectLib.csproj" />
+    <Project Path="example/MultiProjectNoHandler/MultiProjectNoHandler.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Underground.Outbox.SourceGenerator/Underground.Outbox.SourceGenerator.csproj" />

@@ -16,6 +16,7 @@
     <ProjectReference Include="../../src/Underground.Outbox.SourceGenerator/Underground.Outbox.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="../../src/Underground.Outbox/Underground.Outbox.csproj" />
     <ProjectReference Include="../MultiProjectLib/MultiProjectLib.csproj" />
+    <ProjectReference Include="../MultiProjectNoHandler/MultiProjectNoHandler.csproj" />
   </ItemGroup>
 
 </Project>

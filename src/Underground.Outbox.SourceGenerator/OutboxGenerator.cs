@@ -2,6 +2,7 @@
 using System.Text;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -10,8 +11,9 @@ namespace Underground.Outbox.SourceGenerator;
 [Generator]
 public sealed class OutboxGenerator : IIncrementalGenerator
 {
-    private const string OutboxHandlerInterface = "Underground.Outbox.IOutboxMessageHandler<T>";
-    private const string InboxHandlerInterface = "Underground.Outbox.IInboxMessageHandler<T>";
+    // when using CSharpCompilation vs CompilationProvider we loose some information from the type. Therefore we need to use <> instead of <T>.
+    private const string OutboxHandlerInterface = "Underground.Outbox.IOutboxMessageHandler<>";
+    private const string InboxHandlerInterface = "Underground.Outbox.IInboxMessageHandler<>";
     private const string MarkerAttributeFullName = "Underground.Outbox.Attributes.ContainsOutboxHandlersAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -50,9 +52,24 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         //     .Combine(markerAttribute)
         //     .Select(static (input, ct) => ScanReferencedAssemblies(input.Left, input.Right!, ct));
 
+        // var externalHandlers = context.MetadataReferencesProvider
+        //     .Collect()
+        //     .Select(static (references, ct) =>
+        //     {
+        //         // LogToFile("Metadata");
+        //         // var list = new EquatableList<HandlerClassInfo>();
+        //         // return list;
+        //         return ScanReferencedAssemblies(references, ct);
+        //     });
 
-        var externalHandlers = context.CompilationProvider
-            .Select(static (compilation, ct) => ScanReferencedAssemblies(compilation, ct));
+        var externalHandlers = context.MetadataReferencesProvider
+            .Select(static (reference, ct) => ScanReferencedAssembly(reference, ct))
+            .SelectMany(static (handlers, _) => handlers)
+            .Collect();
+
+        // var externalHandlers = context.CompilationProvider
+        //     .Select(static (compilation, ct) => ScanReferencedAssemblies(compilation, ct));
+
         // var externalHandlers = context.MetadataReferencesProvider
         // // .Combine(markerAttribute)
         // .Collect()
@@ -65,13 +82,13 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         var allHandlers = localHandlers.Combine(externalHandlers);
 
         context.RegisterSourceOutput(allHandlers, static (spc, source) =>
-                {
-                    var (local, external) = source;
-                    var combined = new EquatableList<HandlerClassInfo>();
-                    combined.AddRange(local);
-                    combined.AddRange(external);
-                    Execute(combined, spc);
-                });
+            {
+                var (local, external) = source;
+                var combined = new EquatableList<HandlerClassInfo>();
+                combined.AddRange(local);
+                combined.AddRange(external);
+                Execute(combined, spc);
+            });
     }
 
     private static EquatableList<HandlerClassInfo> ToEquatableList(ImmutableArray<HandlerClassInfo> handlers)
@@ -107,15 +124,53 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     /// Scans referenced assemblies marked with [ContainsOutboxHandlers] for handler types.
     /// Only called when MetadataReferencesProvider detects a change in references.
     /// </summary>
-    private static EquatableList<HandlerClassInfo> ScanReferencedAssemblies(Compilation compilation, CancellationToken ct)
+    private static EquatableList<HandlerClassInfo> ScanReferencedAssembly(MetadataReference reference, CancellationToken ct)
+    {
+        // Create a minimal compilation just to resolve symbols from metadata
+        // This is cheaper than using the full project compilation
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "temp",
+            references: [reference]
+        );
+
+        if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+            return [];
+
+        // Only scan assemblies marked with [ContainsOutboxHandlers]
+        bool hasMarker = assembly.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == MarkerAttributeFullName);
+
+        if (!hasMarker)
+            return [];
+
+        LogToFile($"ScanReferencedAssembly {reference.Display}");
+
+        var handlers = new EquatableList<HandlerClassInfo>();
+        ScanNamespaceForHandlers(assembly.GlobalNamespace, handlers, ct);
+
+        return handlers;
+    }
+
+    private static EquatableList<HandlerClassInfo> ScanReferencedAssemblies(ImmutableArray<MetadataReference> references, CancellationToken ct)
     {
         var handlers = new EquatableList<HandlerClassInfo>();
+
+        // Create a minimal compilation just to resolve symbols from metadata
+        // This is cheaper than using the full project compilation
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "temp",
+            references: references
+        );
+
+        // TODO: cachen
         var markerAttribute = compilation.GetTypeByMetadataName(MarkerAttributeFullName);
 
         if (markerAttribute is null)
             return handlers;
 
-        foreach (var reference in compilation.References)
+        LogToFile("ScanReferencedAssemblies");
+
+        foreach (var reference in references)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -135,12 +190,51 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return handlers;
     }
 
+    // private static EquatableList<HandlerClassInfo> ScanReferencedAssemblies(Compilation compilation, CancellationToken ct)
+    // {
+    //     var handlers = new EquatableList<HandlerClassInfo>();
+    //     var markerAttribute = compilation.GetTypeByMetadataName(MarkerAttributeFullName);
+
+    //     if (markerAttribute is null)
+    //         return handlers;
+
+    //     LogToFile("ScanReferencedAssemblies");
+
+    //     foreach (var reference in compilation.References)
+    //     {
+    //         ct.ThrowIfCancellationRequested();
+
+    //         if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
+    //             continue;
+
+    //         // Only scan assemblies marked with [ContainsOutboxHandlers]
+    //         bool hasMarker = assembly.GetAttributes()
+    //             .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, markerAttribute));
+
+    //         if (!hasMarker)
+    //             continue;
+
+    //         ScanNamespaceForHandlers(assembly.GlobalNamespace, handlers, ct);
+    //     }
+
+    //     return handlers;
+    // }
+
+    private static void LogToFile(string message)
+    {
+#pragma warning disable RS1035 // Do not use APIs banned for analyzers
+        File.AppendAllText(@"/workspaces/outbox/example/MultiProjectApp/generator-log.txt",
+            $"{DateTime.Now:HH:mm:ss.fff} - {message}\n");
+#pragma warning restore RS1035 // Do not use APIs banned for analyzers
+    }
+
     /// <summary>
     /// Recursively scans a namespace for handler implementations.
     /// </summary>
     private static void ScanNamespaceForHandlers(INamespaceSymbol ns, EquatableList<HandlerClassInfo> handlers, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        LogToFile($"ScanNamespaceForHandlers: {ns.Name}");
 
         foreach (var type in ns.GetTypeMembers())
         {
@@ -165,11 +259,12 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     /// </summary>
     private static HandlerClassInfo? GetHandlerInfo(INamedTypeSymbol typeSymbol)
     {
-        foreach (var iface in typeSymbol.AllInterfaces)
+        foreach (var iface in typeSymbol.Interfaces)
         {
             if (!iface.IsGenericType)
                 continue;
 
+            LogToFile($"Scanning: {typeSymbol.Name} - {iface.Name}");
             var originalDef = iface.OriginalDefinition.ToDisplayString();
 
             if (originalDef == OutboxHandlerInterface)
@@ -227,7 +322,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken)");
         sb.AppendLine("    {");
 
-        sb.AppendLine($"// {handlers.Count}");
+        sb.AppendLine($"// {DateTime.UtcNow}");
 
         foreach (var classInfo in handlers)
         {
