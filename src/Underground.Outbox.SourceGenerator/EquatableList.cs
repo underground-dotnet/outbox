@@ -4,6 +4,9 @@ namespace Underground.Outbox.SourceGenerator;
 /// A list with value-based equality for proper incremental generator caching.
 /// Based on Microsoft's recommended implementation.
 /// https://github.com/dotnet/roslyn/blob/NET-SDK-10.0.101/docs/features/incremental-generators.cookbook.md#auto-interface-implementation
+/// Alternatives:
+/// - https://github.com/andrewlock/StronglyTypedId/blob/master/src/StronglyTypedIds/EquatableArray.cs
+/// - https://github.com/CommunityToolkit/dotnet/blob/main/src/CommunityToolkit.Mvvm.SourceGenerators/Helpers/EquatableArray%7BT%7D.cs
 /// </summary>
 /// <remarks>
 /// ImmutableArray uses reference equality which breaks incremental caching.

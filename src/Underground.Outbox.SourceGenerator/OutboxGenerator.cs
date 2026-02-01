@@ -20,7 +20,8 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     {
         context.RegisterPostInitializationOutput(ctx => ctx.AddSource(
             "OutboxDependencyInjection.g.cs",
-            SourceText.From(GenerateDIMethod, Encoding.UTF8)));
+            SourceText.From(GenerateDIMethod, Encoding.UTF8))
+        );
 
         // Phase 1: Local handlers via SyntaxProvider
         // - Cached at syntax level (per-file changes)
@@ -32,49 +33,17 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             .Where(static m => m is not null)
             // convert to non-nullable
             .Select(static (m, _) => m!.Value)
-            .Collect();
-        // TODO: is this needed?
-        // .Select(static (handlers, _) => ToEquatableList(handlers));
+            .Collect()
+            // convert to EquatableList for proper cache comparison
+            .Select(static (handlers, _) => ToEquatableList(handlers));
 
         // Phase 2: External handlers via MetadataReferencesProvider
         // - Only re-runs when referenced assemblies actually change (not on every keystroke)
-        // - MetadataReferencesProvider is stable - it doesn't fire on source code edits
-        // - Combined with CompilationProvider only to resolve type symbols
-        // var markerAttribute = context.CompilationProvider.Select(static (c, _) => c.GetTypeByMetadataName(MarkerAttributeFullName));
-        // var references = context.CompilationProvider.Select(static (c, ct) =>
-        // {
-        //     var list = new EquatableList<MetadataReference>();
-        //     list.AddRange(c.References);
-        //     return list;
-        // });
-
-        // var externalHandlers = references
-        //     .Combine(markerAttribute)
-        //     .Select(static (input, ct) => ScanReferencedAssemblies(input.Left, input.Right!, ct));
-
-        // var externalHandlers = context.MetadataReferencesProvider
-        //     .Collect()
-        //     .Select(static (references, ct) =>
-        //     {
-        //         // LogToFile("Metadata");
-        //         // var list = new EquatableList<HandlerClassInfo>();
-        //         // return list;
-        //         return ScanReferencedAssemblies(references, ct);
-        //     });
-
         var externalHandlers = context.MetadataReferencesProvider
             .Select(static (reference, ct) => ScanReferencedAssembly(reference, ct))
             .SelectMany(static (handlers, _) => handlers)
-            .Collect();
-
-        // var externalHandlers = context.CompilationProvider
-        //     .Select(static (compilation, ct) => ScanReferencedAssemblies(compilation, ct));
-
-        // var externalHandlers = context.MetadataReferencesProvider
-        // // .Combine(markerAttribute)
-        // .Collect()
-        // .Combine(context.CompilationProvider)
-        // .Select(static (input, ct) => ScanReferencedAssemblies(input.Right, ct));
+            .Collect()
+            .Select(static (handlers, _) => ToEquatableList(handlers));
 
         // Phase 3: Combine and generate
         // - EquatableList ensures proper cache comparison
@@ -100,7 +69,29 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 
     private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
     {
-        return node is ClassDeclarationSyntax { BaseList.Types.Count: > 0 };
+        // return node is ClassDeclarationSyntax { BaseList.Types.Count: > 0 };
+
+        if (node is not ClassDeclarationSyntax classDecl || classDecl.BaseList is null)
+        {
+            return false;
+        }
+
+        foreach (var baseType in classDecl.BaseList.Types)
+        {
+            // IOutboxMessageHandler<T> or IInboxMessageHandler<T>
+            if (baseType.Type is GenericNameSyntax { Identifier.ValueText: "IOutboxMessageHandler" or "IInboxMessageHandler" })
+            {
+                return true;
+            }
+
+            // Namespace.IOutboxMessageHandler<T>
+            if (baseType.Type is QualifiedNameSyntax { Right: GenericNameSyntax { Identifier.ValueText: "IOutboxMessageHandler" or "IInboxMessageHandler" } })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static HandlerClassInfo? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
@@ -151,75 +142,6 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return handlers;
     }
 
-    private static EquatableList<HandlerClassInfo> ScanReferencedAssemblies(ImmutableArray<MetadataReference> references, CancellationToken ct)
-    {
-        var handlers = new EquatableList<HandlerClassInfo>();
-
-        // Create a minimal compilation just to resolve symbols from metadata
-        // This is cheaper than using the full project compilation
-        var compilation = CSharpCompilation.Create(
-            assemblyName: "temp",
-            references: references
-        );
-
-        // TODO: cachen
-        var markerAttribute = compilation.GetTypeByMetadataName(MarkerAttributeFullName);
-
-        if (markerAttribute is null)
-            return handlers;
-
-        LogToFile("ScanReferencedAssemblies");
-
-        foreach (var reference in references)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
-                continue;
-
-            // Only scan assemblies marked with [ContainsOutboxHandlers]
-            bool hasMarker = assembly.GetAttributes()
-                .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, markerAttribute));
-
-            if (!hasMarker)
-                continue;
-
-            ScanNamespaceForHandlers(assembly.GlobalNamespace, handlers, ct);
-        }
-
-        return handlers;
-    }
-
-    // private static EquatableList<HandlerClassInfo> ScanReferencedAssemblies(Compilation compilation, CancellationToken ct)
-    // {
-    //     var handlers = new EquatableList<HandlerClassInfo>();
-    //     var markerAttribute = compilation.GetTypeByMetadataName(MarkerAttributeFullName);
-
-    //     if (markerAttribute is null)
-    //         return handlers;
-
-    //     LogToFile("ScanReferencedAssemblies");
-
-    //     foreach (var reference in compilation.References)
-    //     {
-    //         ct.ThrowIfCancellationRequested();
-
-    //         if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol assembly)
-    //             continue;
-
-    //         // Only scan assemblies marked with [ContainsOutboxHandlers]
-    //         bool hasMarker = assembly.GetAttributes()
-    //             .Any(a => SymbolEqualityComparer.Default.Equals(a.AttributeClass, markerAttribute));
-
-    //         if (!hasMarker)
-    //             continue;
-
-    //         ScanNamespaceForHandlers(assembly.GlobalNamespace, handlers, ct);
-    //     }
-
-    //     return handlers;
-    // }
-
     private static void LogToFile(string message)
     {
 #pragma warning disable RS1035 // Do not use APIs banned for analyzers
@@ -261,10 +183,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     {
         foreach (var iface in typeSymbol.Interfaces)
         {
+            LogToFile($"Scanning: {typeSymbol.Name} - {iface.Name}");
             if (!iface.IsGenericType)
                 continue;
 
-            LogToFile($"Scanning: {typeSymbol.Name} - {iface.Name}");
             var originalDef = iface.OriginalDefinition.ToDisplayString();
 
             if (originalDef == OutboxHandlerInterface)
