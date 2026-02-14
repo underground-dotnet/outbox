@@ -6,7 +6,7 @@ namespace Underground.Outbox.Domain;
 internal sealed class AddMessageToOutbox
 {
 #pragma warning disable CA1822, S2325 // Mark members as static
-    public async Task ExecuteAsync(IOutboxDbContext context, OutboxMessage message, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
 #pragma warning restore CA1822, S2325 // Mark members as static
     {
         if (!HasActiveTransaction(context))
@@ -14,7 +14,7 @@ internal sealed class AddMessageToOutbox
             throw new NoActiveTransactionException();
         }
 
-        await context.OutboxMessages.AddAsync(message, cancellationToken);
+        await context.OutboxMessages.AddRangeAsync(messages, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 
