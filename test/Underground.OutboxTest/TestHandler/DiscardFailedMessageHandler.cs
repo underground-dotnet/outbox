@@ -6,10 +6,10 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class DiscardFailedMessageHandler : IOutboxMessageHandler<ExampleMessage>
+public class DiscardFailedMessageHandler : IOutboxMessageHandler<DiscardMessage>
 {
     [DiscardOn(typeof(DataException))]
-    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public Task HandleAsync(DiscardMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         throw new DataException("Failed to handle message");
     }

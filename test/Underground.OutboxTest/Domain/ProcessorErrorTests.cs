@@ -40,7 +40,7 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
@@ -110,7 +110,7 @@ public class ProcessorErrorTests : DatabaseTest
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
         // Act
@@ -151,7 +151,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -183,7 +183,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new CustomSqlMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -215,8 +215,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new UserMessage(10));
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -257,7 +257,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -287,7 +287,7 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
-        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
         var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
 

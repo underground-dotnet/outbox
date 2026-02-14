@@ -11,9 +11,9 @@ namespace Underground.Outbox.SourceGenerator;
 [Generator]
 public sealed class OutboxGenerator : IIncrementalGenerator
 {
-    // when using CSharpCompilation vs CompilationProvider we loose some information from the type. Therefore we need to use <> instead of <T>.
-    private const string OutboxHandlerInterface = "Underground.Outbox.IOutboxMessageHandler<>";
-    private const string InboxHandlerInterface = "Underground.Outbox.IInboxMessageHandler<>";
+    // when using CSharpCompilation vs CompilationProvider we loose some information from the type. Therefore we need to use < instead of <T>.
+    private const string OutboxHandlerInterface = "Underground.Outbox.IOutboxMessageHandler<";
+    private const string InboxHandlerInterface = "Underground.Outbox.IInboxMessageHandler<";
     private const string MarkerAttributeFullName = "Underground.Outbox.Attributes.ContainsOutboxHandlersAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -188,8 +188,9 @@ public sealed class OutboxGenerator : IIncrementalGenerator
                 continue;
 
             var originalDef = iface.OriginalDefinition.ToDisplayString();
+            LogToFile($"Test: {originalDef}");
 
-            if (originalDef == OutboxHandlerInterface)
+            if (originalDef.StartsWith(OutboxHandlerInterface, StringComparison.Ordinal))
             {
                 return new HandlerClassInfo(
                     typeSymbol.ToDisplayString(),
@@ -198,7 +199,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
                 );
             }
 
-            if (originalDef == InboxHandlerInterface)
+            if (originalDef.StartsWith(InboxHandlerInterface, StringComparison.Ordinal))
             {
                 return new HandlerClassInfo(
                     typeSymbol.ToDisplayString(),
@@ -257,13 +258,25 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"        if (message.Type == \"{classInfo.MessageTypeFullName}\")");
             sb.AppendLine("        {");
-            //  new ParsingException($"Cannot parse event body '{message.Data} of message: {message.Id}");
-            sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException(\"Cannot parse event body\");");
+            sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException($\"Cannot parse event body {{message.Data}} of message: {{message.Id}}\");");
             sb.AppendLine($"            var handler = serviceProvider.GetRequiredService<IInboxMessageHandler<{classInfo.MessageTypeFullName}>>();");
-            sb.AppendLine($"            await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
-            sb.AppendLine($"            return;");
+            sb.AppendLine();
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
+            sb.AppendLine($"                return;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            catch (Exception ex)"); // TODO: concrete type??
+            sb.AppendLine("            {");
+            sb.AppendLine("                throw new MessageHandlerException(");
+            sb.AppendLine("                    handler.GetType(),");
+            sb.AppendLine("                    $\"Error processing message {message.Id} with handler {handler.GetType().Name}\",");
+            sb.AppendLine("                    ex");
+            sb.AppendLine("                );");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
+
             //     var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
             //     var classSymbol = model.GetDeclaredSymbol(classDecl);
 
@@ -278,11 +291,22 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"        if (message.Type == \"{classInfo.MessageTypeFullName}\")");
             sb.AppendLine("        {");
-            //  new ParsingException($"Cannot parse event body '{message.Data} of message: {message.Id}");
-            sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException(\"Cannot parse event body\");");
+            sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException($\"Cannot parse event body {{message.Data}} of message: {{message.Id}}\");");
             sb.AppendLine($"            var handler = serviceProvider.GetRequiredService<IOutboxMessageHandler<{classInfo.MessageTypeFullName}>>();");
-            sb.AppendLine($"            await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
-            sb.AppendLine($"            return;");
+            sb.AppendLine();
+            sb.AppendLine("            try");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
+            sb.AppendLine($"                return;");
+            sb.AppendLine("            }");
+            sb.AppendLine("            catch (Exception ex)"); // TODO: concrete type??
+            sb.AppendLine("            {");
+            sb.AppendLine("                throw new MessageHandlerException(");
+            sb.AppendLine("                    handler.GetType(),");
+            sb.AppendLine("                    $\"Error processing message {message.Id} with handler {handler.GetType().Name}\",");
+            sb.AppendLine("                    ex");
+            sb.AppendLine("                );");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine();
             //     var model = compilation.GetSemanticModel(classDecl.SyntaxTree);

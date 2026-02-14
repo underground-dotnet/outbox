@@ -51,7 +51,8 @@ public class OutboxMessage : IMessage
     {
         EventId = eventId;
         CreatedAt = createdAt;
-        Type = data.GetType().AssemblyQualifiedName!;
+        // TODO: AssemblyQualifiedName? would also require changes in source generator
+        Type = data.GetType().FullName!;
         PartitionKey = partitionKey;
         Data = JsonSerializer.Serialize(data);
     }

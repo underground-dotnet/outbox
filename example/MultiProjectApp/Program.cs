@@ -33,7 +33,6 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 IHost host = builder.Build();
 
 var outbox = host.Services.GetRequiredService<IOutbox>();
-var inbox = host.Services.GetRequiredService<IInbox>();
 var dbContext = host.Services.GetRequiredService<AppDbContext>();
 await dbContext.Database.EnsureCreatedAsync();
 
@@ -44,17 +43,10 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         var partition = (i % 3).ToString();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"partition {partition}: {i}"), partition);
         await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
-
-        var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
-        await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
     }
 
     await transaction.CommitAsync();
 }
-
-// using custom table name "outbox_msgs"
-var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox_msgs").SingleAsync();
-Console.WriteLine($"Added {count} messages to outbox.");
 
 await host.RunAsync();
 
