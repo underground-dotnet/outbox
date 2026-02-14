@@ -67,6 +67,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return list;
     }
 
+    // right now only supports direct implementations of the handler interfaces, but could be extended to support inherited classes as well if needed
     private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
     {
         // return node is ClassDeclarationSyntax { BaseList.Types.Count: > 0 };
@@ -144,10 +145,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 
     private static void LogToFile(string message)
     {
-#pragma warning disable RS1035 // Do not use APIs banned for analyzers
-        File.AppendAllText(@"/workspaces/outbox/example/MultiProjectApp/generator-log.txt",
-            $"{DateTime.Now:HH:mm:ss.fff} - {message}\n");
-#pragma warning restore RS1035 // Do not use APIs banned for analyzers
+// #pragma warning disable RS1035 // Do not use APIs banned for analyzers
+//         File.AppendAllText(@"/workspaces/outbox/example/MultiProjectApp/generator-log.txt",
+//             $"{DateTime.Now:HH:mm:ss.fff} - {message}\n");
+// #pragma warning restore RS1035 // Do not use APIs banned for analyzers
     }
 
     /// <summary>
@@ -246,17 +247,20 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("namespace Underground.Outbox.Domain;");
         sb.AppendLine();
         sb.AppendLine("#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member");
-        sb.AppendLine("public class GeneratedDispatcher<TMessage>(IServiceProvider serviceProvider) : IMessageDispatcher<TMessage> where TMessage : class, IMessage");
+        sb.AppendLine("public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where TMessage : class, IMessage");
         sb.AppendLine("{");
         sb.AppendLine("    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken)");
         sb.AppendLine("    {");
 
         sb.AppendLine($"// {DateTime.UtcNow}");
         sb.AppendLine("        var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);");
+        sb.AppendLine("        var serviceProvider = scope.ServiceProvider;");
+        sb.AppendLine("        var isInboxMessage = typeof(TMessage) == typeof(InboxMessage);");
+        sb.AppendLine("        var isOutboxMessage = typeof(TMessage) == typeof(OutboxMessage);");
 
         foreach (var classInfo in kindInbox)
         {
-            sb.AppendLine($"        if (message.Type == \"{classInfo.MessageTypeFullName}\")");
+            sb.AppendLine($"        if (isInboxMessage && message.Type == \"{classInfo.MessageTypeFullName}\")");
             sb.AppendLine("        {");
             sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException($\"Cannot parse event body {{message.Data}} of message: {{message.Id}}\");");
             sb.AppendLine($"            var handler = serviceProvider.GetRequiredService<IInboxMessageHandler<{classInfo.MessageTypeFullName}>>();");
@@ -289,7 +293,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 
         foreach (var classInfo in kindOutbox)
         {
-            sb.AppendLine($"        if (message.Type == \"{classInfo.MessageTypeFullName}\")");
+            sb.AppendLine($"        if (isOutboxMessage && message.Type == \"{classInfo.MessageTypeFullName}\")");
             sb.AppendLine("        {");
             sb.AppendLine($"            var fullEvent = JsonSerializer.Deserialize<{classInfo.MessageTypeFullName}>(message.Data) ?? throw new ParsingException($\"Cannot parse event body {{message.Data}} of message: {{message.Id}}\");");
             sb.AppendLine($"            var handler = serviceProvider.GetRequiredService<IOutboxMessageHandler<{classInfo.MessageTypeFullName}>>();");
@@ -319,6 +323,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             //     }
         }
 
+        sb.AppendLine("        throw new ParsingException($\"No handler configured for message type {message.Type} of message: {message.Id}\");");
         sb.AppendLine("    }");
         sb.AppendLine("}");
         sb.AppendLine("#pragma warning restore CS1591");
