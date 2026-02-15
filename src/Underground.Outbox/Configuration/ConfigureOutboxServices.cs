@@ -21,6 +21,7 @@ public static class SetupOutboxServices
     {
         var serviceConfig = new OutboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
+        serviceConfig.Validate();
 
         services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
@@ -37,6 +38,7 @@ public static class SetupOutboxServices
     {
         var serviceConfig = new InboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
+        serviceConfig.Validate();
 
         services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
