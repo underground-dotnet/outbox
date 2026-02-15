@@ -3,10 +3,10 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class AddMessageToInbox
+internal sealed class AddMessagesToOutbox
 {
 #pragma warning disable CA1822, S2325 // Mark members as static
-    public async Task ExecuteAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
 #pragma warning restore CA1822, S2325 // Mark members as static
     {
         if (!HasActiveTransaction(context))
@@ -14,7 +14,7 @@ internal sealed class AddMessageToInbox
             throw new NoActiveTransactionException();
         }
 
-        await context.InboxMessages.AddRangeAsync(messages, cancellationToken);
+        await context.OutboxMessages.AddRangeAsync(messages, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
     }
 

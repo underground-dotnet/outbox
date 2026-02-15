@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using System.Runtime.CompilerServices;
 
 using Npgsql;
-using System.Runtime.CompilerServices;
 
 using Underground.Outbox.Data;
 
@@ -10,7 +10,9 @@ namespace Underground.Outbox.Domain;
 
 internal sealed class FetchMessages<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
 {
+    #pragma warning disable S2743 // A static field in a generic type is not shared among instances of different close constructed types.
     private static readonly ConditionalWeakTable<IModel, string> SqlByModel = new();
+    #pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
 
     internal async Task<List<TEntity>> ExecuteAsync(string partition, int batchSize, CancellationToken cancellationToken)
     {
@@ -36,10 +38,8 @@ internal sealed class FetchMessages<TEntity>(IDbContext dbContext) where TEntity
     private static string BuildSql(IModel model)
     {
         // dynamically extract table and column names to build the SQL query, since those can be overriden via EF Core mappings
-        var entityType = model.FindEntityType(typeof(TEntity))
-            ?? throw new InvalidOperationException($"Entity type {typeof(TEntity)} not found in DbContext model.");
-        var tableName = entityType.GetTableName()
-            ?? throw new InvalidOperationException($"Table name for entity type {typeof(TEntity)} is not configured.");
+        var entityType = model.FindEntityType(typeof(TEntity)) ?? throw new InvalidOperationException($"Entity type {typeof(TEntity)} not found in DbContext model.");
+        var tableName = entityType.GetTableName() ?? throw new InvalidOperationException($"Table name for entity type {typeof(TEntity)} is not configured.");
         var schema = entityType.GetSchema();
         var fullTableName = string.IsNullOrEmpty(schema) ? $"\"{tableName}\"" : $"\"{schema}\".\"{tableName}\"";
         var tableIdentifier = StoreObjectIdentifier.Table(tableName, schema);
