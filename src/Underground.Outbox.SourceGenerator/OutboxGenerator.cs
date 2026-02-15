@@ -135,20 +135,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         if (!hasMarker)
             return [];
 
-        LogToFile($"ScanReferencedAssembly {reference.Display}");
-
         var handlers = new EquatableList<HandlerClassInfo>();
         ScanNamespaceForHandlers(assembly.GlobalNamespace, handlers, ct);
 
         return handlers;
-    }
-
-    private static void LogToFile(string message)
-    {
-// #pragma warning disable RS1035 // Do not use APIs banned for analyzers
-//         File.AppendAllText(@"/workspaces/outbox/example/MultiProjectApp/generator-log.txt",
-//             $"{DateTime.Now:HH:mm:ss.fff} - {message}\n");
-// #pragma warning restore RS1035 // Do not use APIs banned for analyzers
     }
 
     /// <summary>
@@ -157,7 +147,6 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     private static void ScanNamespaceForHandlers(INamespaceSymbol ns, EquatableList<HandlerClassInfo> handlers, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        LogToFile($"ScanNamespaceForHandlers: {ns.Name}");
 
         foreach (var type in ns.GetTypeMembers())
         {
@@ -184,12 +173,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     {
         foreach (var iface in typeSymbol.Interfaces)
         {
-            LogToFile($"Scanning: {typeSymbol.Name} - {iface.Name}");
             if (!iface.IsGenericType)
                 continue;
 
             var originalDef = iface.OriginalDefinition.ToDisplayString();
-            LogToFile($"Test: {originalDef}");
 
             if (originalDef.StartsWith(OutboxHandlerInterface, StringComparison.Ordinal))
             {
