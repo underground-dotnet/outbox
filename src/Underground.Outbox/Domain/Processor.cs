@@ -32,11 +32,13 @@ internal sealed class Processor<TEntity>(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var messages = await fetchMessages.ExecuteAsync(partition, batchSize, cancellationToken);
-        if (messages.Count == 0)
+        var numberOfMessages = messages.Count;
+        if (numberOfMessages == 0)
         {
             return false;
+
         }
-        _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
+        _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", numberOfMessages, typeof(TEntity), partition);
 
         var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken);
 
