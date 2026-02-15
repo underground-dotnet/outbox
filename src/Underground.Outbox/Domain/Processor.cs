@@ -38,7 +38,9 @@ internal sealed class Processor<TEntity>(
             return false;
 
         }
+#pragma warning disable CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
         _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", numberOfMessages, typeof(TEntity), partition);
+#pragma warning restore CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
 
         var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken);
 
