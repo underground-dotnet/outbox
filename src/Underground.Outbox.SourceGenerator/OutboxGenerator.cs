@@ -29,10 +29,8 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         var localHandlers = context.SyntaxProvider
             .CreateSyntaxProvider(
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
-                transform: static (ctx, _) => GetSemanticTargetForGeneration(ctx))
-            .Where(static m => m is not null)
-            // convert to non-nullable
-            .Select(static (m, _) => m!.Value)
+                transform: static (ctx, _) => GetSemanticTargetsForGeneration(ctx))
+            .SelectMany(static (handlers, _) => handlers)
             .Collect()
             // convert to EquatableList for proper cache comparison
             .Select(static (handlers, _) => ToEquatableList(handlers));
@@ -95,21 +93,21 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static HandlerClassInfo? GetSemanticTargetForGeneration(GeneratorSyntaxContext context)
+    private static ImmutableArray<HandlerClassInfo> GetSemanticTargetsForGeneration(GeneratorSyntaxContext context)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
 
         if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol classSymbol)
         {
-            return null;
+            return [];
         }
 
         if (classSymbol.IsAbstract)
         {
-            return null;
+            return [];
         }
 
-        return GetHandlerInfo(classSymbol);
+        return GetHandlerInfos(classSymbol).ToImmutableArray();
     }
 
     /// <summary>
@@ -152,10 +150,9 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         {
             if (type.TypeKind == TypeKind.Class && !type.IsAbstract)
             {
-                var info = GetHandlerInfo(type);
-                if (info.HasValue)
+                foreach (var info in GetHandlerInfos(type))
                 {
-                    handlers.Add(info.Value);
+                    handlers.Add(info);
                 }
             }
         }
@@ -169,35 +166,36 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     /// <summary>
     /// Extracts handler information from a type symbol if it implements a handler interface.
     /// </summary>
-    private static HandlerClassInfo? GetHandlerInfo(INamedTypeSymbol typeSymbol)
+    private static IEnumerable<HandlerClassInfo> GetHandlerInfos(INamedTypeSymbol typeSymbol)
     {
         foreach (var iface in typeSymbol.Interfaces)
         {
             if (!iface.IsGenericType)
+            {
                 continue;
+            }
 
             var originalDef = iface.OriginalDefinition.ToDisplayString();
 
             if (originalDef.StartsWith(OutboxHandlerInterface, StringComparison.Ordinal))
             {
-                return new HandlerClassInfo(
+                yield return new HandlerClassInfo(
                     typeSymbol.ToDisplayString(),
                     iface.TypeArguments[0].ToDisplayString(),
                     HandlerKind.Outbox
                 );
+                continue;
             }
 
             if (originalDef.StartsWith(InboxHandlerInterface, StringComparison.Ordinal))
             {
-                return new HandlerClassInfo(
+                yield return new HandlerClassInfo(
                     typeSymbol.ToDisplayString(),
                     iface.TypeArguments[0].ToDisplayString(),
                     HandlerKind.Inbox
                 );
             }
         }
-
-        return null;
 
         // foreach (var baseType in classDeclaration.BaseList!.Types)
         // {
