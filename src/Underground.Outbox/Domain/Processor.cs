@@ -56,7 +56,6 @@ internal sealed class Processor<TEntity>(
         return messages.Count > 0 && messages.Count == successIds.Count();
     }
 
-    // TODO: use cancellation token
     private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, CancellationToken cancellationToken)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
