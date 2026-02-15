@@ -32,11 +32,15 @@ internal sealed class Processor<TEntity>(
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var messages = await fetchMessages.ExecuteAsync(partition, batchSize, cancellationToken);
-        if (messages.Count == 0)
+        var numberOfMessages = messages.Count;
+        if (numberOfMessages == 0)
         {
             return false;
+
         }
-        _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", messages.Count, typeof(TEntity), partition);
+#pragma warning disable CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
+        _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", numberOfMessages, typeof(TEntity), partition);
+#pragma warning restore CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
 
         var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken);
 
@@ -52,7 +56,6 @@ internal sealed class Processor<TEntity>(
         return messages.Count > 0 && messages.Count == successIds.Count();
     }
 
-    // TODO: use cancellation token
     private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, CancellationToken cancellationToken)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
