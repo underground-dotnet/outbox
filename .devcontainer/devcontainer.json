@@ -7,7 +7,7 @@
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2.14.0": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2.16.0": {}
   },
   "containerEnv": {
     // handles some issues with Testcontainers networking in devcontainers (Docker-in-Docker)
