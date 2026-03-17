@@ -32,4 +32,22 @@ public abstract class ServiceConfiguration
 #pragma warning disable CA1716 // Identifiers should not match keywords
     public abstract ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient);
 #pragma warning restore CA1716 // Identifiers should not match keywords
+
+    internal void Validate()
+    {
+        if (BatchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException($"BatchSize ({BatchSize}) must be greater than 0.");
+        }
+
+        if (ParallelProcessingOfPartitions <= 0)
+        {
+            throw new ArgumentOutOfRangeException($"ParallelProcessingOfPartitions ({ParallelProcessingOfPartitions}) must be greater than 0.");
+        }
+
+        if (ProcessingDelayMilliseconds < 0)
+        {
+            throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+        }
+    }
 }

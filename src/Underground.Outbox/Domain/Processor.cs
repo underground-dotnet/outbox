@@ -71,7 +71,6 @@ internal sealed class Processor<TEntity>(
 
             try
             {
-                // await OutboxHandlers<TEntity>.CallHandlerAsync(message, scope, cancellationToken);
                 await _dispatcher.ExecuteAsync(scope, message, cancellationToken);
                 // persist all changes from the handler. (in case the handler forgot to call SaveChanges)
                 await dbContext.SaveChangesAsync(cancellationToken);
@@ -85,7 +84,7 @@ internal sealed class Processor<TEntity>(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Error processing message {MessageId}. Probably a reflection issue.", message.Id);
+                _logger.LogError(ex, "Error processing message {MessageId}.", message.Id);
                 exception = ex;
             }
 
