@@ -37,17 +37,17 @@ public abstract class ServiceConfiguration
     {
         if (BatchSize <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(BatchSize), BatchSize, "BatchSize must be greater than 0.");
+            throw new ArgumentOutOfRangeException($"BatchSize ({BatchSize}) must be greater than 0.");
         }
 
         if (ParallelProcessingOfPartitions <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(ParallelProcessingOfPartitions), ParallelProcessingOfPartitions, "ParallelProcessingOfPartitions must be greater than 0.");
+            throw new ArgumentOutOfRangeException($"ParallelProcessingOfPartitions ({ParallelProcessingOfPartitions}) must be greater than 0.");
         }
 
         if (ProcessingDelayMilliseconds < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(ProcessingDelayMilliseconds), ProcessingDelayMilliseconds, "ProcessingDelayMilliseconds cannot be negative.");
+            throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
         }
     }
 }
