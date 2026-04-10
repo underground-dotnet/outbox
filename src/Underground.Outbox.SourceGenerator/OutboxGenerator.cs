@@ -236,8 +236,6 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine("    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken)");
         sb.AppendLine("    {");
-
-        sb.AppendLine($"// {DateTime.UtcNow}");
         sb.AppendLine("        var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);");
         sb.AppendLine("        var serviceProvider = scope.ServiceProvider;");
         sb.AppendLine("        if (typeof(TMessage) == typeof(InboxMessage))");
