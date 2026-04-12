@@ -4,6 +4,8 @@
 ## Get latest from `dotnet new gitignore`
 
 .DS_Store
+# Snapshot testing files
+*.received.*
 
 # dotenv files
 .env

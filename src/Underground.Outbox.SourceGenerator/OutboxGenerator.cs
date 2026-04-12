@@ -236,8 +236,6 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine("    public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken)");
         sb.AppendLine("    {");
-
-        sb.AppendLine($"// {DateTime.UtcNow}");
         sb.AppendLine("        var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);");
         sb.AppendLine("        var serviceProvider = scope.ServiceProvider;");
         sb.AppendLine("        if (typeof(TMessage) == typeof(InboxMessage))");
@@ -255,7 +253,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                        await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
             sb.AppendLine("                        return;");
             sb.AppendLine("                    }");
-            sb.AppendLine("                    catch (Exception ex)");
+            sb.AppendLine("                    catch (Exception ex) when (ex is not OperationCanceledException)");
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");
@@ -285,7 +283,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                        await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
             sb.AppendLine("                        return;");
             sb.AppendLine("                    }");
-            sb.AppendLine("                    catch (Exception ex)");
+            sb.AppendLine("                    catch (Exception ex) when (ex is not OperationCanceledException)");
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");
