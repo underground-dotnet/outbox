@@ -253,7 +253,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                        await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
             sb.AppendLine("                        return;");
             sb.AppendLine("                    }");
-            sb.AppendLine("                    catch (Exception ex)");
+            sb.AppendLine("                    catch (Exception ex) when (ex is not OperationCanceledException)");
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");
@@ -283,7 +283,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                        await handler.HandleAsync(fullEvent, metadata, cancellationToken);");
             sb.AppendLine("                        return;");
             sb.AppendLine("                    }");
-            sb.AppendLine("                    catch (Exception ex)");
+            sb.AppendLine("                    catch (Exception ex) when (ex is not OperationCanceledException)");
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");

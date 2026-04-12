@@ -1,27 +1,33 @@
+using Microsoft.CodeAnalysis;
+
+using VerifyXunit;
+
 namespace Underground.Outbox.SourceGeneratorTest;
 
 public class OutboxGeneratorTest
 {
+    private static Task VerifySubset(GeneratorDriver driver) =>
+        Verify(driver).IgnoreGeneratedResult(_ =>
+            // this file is the same for every run
+            _.HintName.Equals("OutboxDependencyInjection.g.cs", StringComparison.OrdinalIgnoreCase)
+        );
+
     [Fact]
-    public void Generates_dependency_injection_source_even_without_handlers()
+    public Task Generates_dependency_injection_source_even_without_handlers()
     {
-        var result = GeneratorTestHelper.Run("""
+        var driver = GeneratorTestHelper.Run("""
             namespace Sample;
 
             public sealed class Placeholder;
             """);
 
-        var source = result.GetGeneratedSource("OutboxDependencyInjection.g.cs");
-
-        Assert.Contains("public static class ConfigureOutboxServices", source);
-        Assert.Contains("AddOutboxServices<TContext>", source);
-        Assert.Contains("AddInboxServices<TContext>", source);
+        return Verify(driver);
     }
 
     [Fact]
-    public void Generates_dispatcher_for_local_outbox_handler()
+    public Task Generates_dispatcher_for_local_outbox_handler()
     {
-        var result = GeneratorTestHelper.Run("""
+        var driver = GeneratorTestHelper.Run("""
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -30,16 +36,7 @@ public class OutboxGeneratorTest
 
             namespace Sample;
 
-            public sealed record TestMessage : IMessage
-            {
-                public long Id { get; }
-                public Guid EventId { get; init; }
-                public string Type => "Sample.TestMessage";
-                public string PartitionKey => "partition";
-                public string Data => "{}";
-                public int RetryCount { get; set; }
-                public DateTime? ProcessedAt { get; set; }
-            }
+            public sealed record TestMessage(string Text);
 
             public sealed class TestMessageHandler : IOutboxMessageHandler<TestMessage>
             {
@@ -47,18 +44,13 @@ public class OutboxGeneratorTest
             }
             """);
 
-        var source = result.GetGeneratedSource("GeneratedDispatcher.g.cs");
-
-        Assert.Contains("case \"Sample.TestMessage\":", source);
-        Assert.Contains("JsonSerializer.Deserialize<Sample.TestMessage>(message.Data)", source);
-        Assert.Contains("GetRequiredService<IOutboxMessageHandler<Sample.TestMessage>>()", source);
-        Assert.DoesNotContain("DateTime.UtcNow", source);
+        return Verify(driver);
     }
 
     [Fact]
-    public void Generates_dispatcher_for_local_inbox_and_outbox_handlers()
+    public Task Generates_dispatcher_for_local_inbox_and_outbox_handlers()
     {
-        var result = GeneratorTestHelper.Run("""
+        var driver = GeneratorTestHelper.Run("""
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -67,51 +59,28 @@ public class OutboxGeneratorTest
 
             namespace Sample;
 
-            public sealed record InboxMessageType : IMessage
-            {
-                public long Id { get; }
-                public Guid EventId { get; init; }
-                public string Type => "Sample.InboxMessageType";
-                public string PartitionKey => "partition";
-                public string Data => "{}";
-                public int RetryCount { get; set; }
-                public DateTime? ProcessedAt { get; set; }
-            }
+            public sealed record InboxMessageType(int Id);
 
-            public sealed record OutboxMessageType : IMessage
-            {
-                public long Id { get; }
-                public Guid EventId { get; init; }
-                public string Type => "Sample.OutboxMessageType";
-                public string PartitionKey => "partition";
-                public string Data => "{}";
-                public int RetryCount { get; set; }
-                public DateTime? ProcessedAt { get; set; }
-            }
+            public sealed record OutboxMessageType(int Id);
 
             public sealed class InboxHandler : IInboxMessageHandler<InboxMessageType>
             {
                 public Task HandleAsync(InboxMessageType message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
 
-            public sealed class OutboxHandler : IOutboxMessageHandler<OutboxMessageType>
+            public sealed class OutboxHandler : Underground.Outbox.IOutboxMessageHandler<OutboxMessageType>
             {
                 public Task HandleAsync(OutboxMessageType message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
             """);
 
-        var source = result.GetGeneratedSource("GeneratedDispatcher.g.cs");
-
-        Assert.Contains("case \"Sample.InboxMessageType\":", source);
-        Assert.Contains("GetRequiredService<IInboxMessageHandler<Sample.InboxMessageType>>()", source);
-        Assert.Contains("case \"Sample.OutboxMessageType\":", source);
-        Assert.Contains("GetRequiredService<IOutboxMessageHandler<Sample.OutboxMessageType>>()", source);
+        return VerifySubset(driver);
     }
 
     [Fact]
-    public void Ignores_abstract_handler_classes()
+    public Task Ignores_abstract_handler_classes()
     {
-        var result = GeneratorTestHelper.Run("""
+        var driver = GeneratorTestHelper.Run("""
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -120,16 +89,7 @@ public class OutboxGeneratorTest
 
             namespace Sample;
 
-            public sealed record TestMessage : IMessage
-            {
-                public long Id { get; }
-                public Guid EventId { get; init; }
-                public string Type => "Sample.TestMessage";
-                public string PartitionKey => "partition";
-                public string Data => "{}";
-                public int RetryCount { get; set; }
-                public DateTime? ProcessedAt { get; set; }
-            }
+            public sealed record TestMessage(int Id);
 
             public abstract class AbstractHandler : IOutboxMessageHandler<TestMessage>
             {
@@ -137,16 +97,13 @@ public class OutboxGeneratorTest
             }
             """);
 
-        var source = result.GetGeneratedSource("GeneratedDispatcher.g.cs");
-
-        Assert.DoesNotContain("case \"Sample.TestMessage\":", source);
-        Assert.DoesNotContain("AbstractHandler", source);
+        return VerifySubset(driver);
     }
 
     [Fact]
-    public void Ignores_non_handler_classes()
+    public Task Ignores_non_handler_classes()
     {
-        var result = GeneratorTestHelper.Run("""
+        var driver = GeneratorTestHelper.Run("""
             namespace Sample;
 
             public interface IOutboxMessageHandler<T>;
@@ -156,47 +113,6 @@ public class OutboxGeneratorTest
             public sealed class LooksLikeHandler : IOutboxMessageHandler<TestMessage>;
             """);
 
-        var source = result.GetGeneratedSource("GeneratedDispatcher.g.cs");
-
-        Assert.DoesNotContain("case \"Sample.TestMessage\":", source);
-        Assert.DoesNotContain("LooksLikeHandler", source);
-    }
-
-    [Fact]
-    public void Supports_fully_qualified_handler_interfaces()
-    {
-        var result = GeneratorTestHelper.Run("""
-            using System.Threading;
-            using System.Threading.Tasks;
-
-            namespace Sample;
-
-            public sealed record QualifiedMessage : Underground.Outbox.Data.IMessage
-            {
-                public long Id { get; }
-                public Guid EventId { get; init; }
-                public string Type => "Sample.QualifiedMessage";
-                public string PartitionKey => "partition";
-                public string Data => "{}";
-                public int RetryCount { get; set; }
-                public DateTime? ProcessedAt { get; set; }
-            }
-
-            public sealed class QualifiedInboxHandler : Underground.Outbox.IInboxMessageHandler<QualifiedMessage>
-            {
-                public Task HandleAsync(QualifiedMessage message, Underground.Outbox.Data.MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
-            }
-
-            public sealed class QualifiedOutboxHandler : Underground.Outbox.IOutboxMessageHandler<QualifiedMessage>
-            {
-                public Task HandleAsync(QualifiedMessage message, Underground.Outbox.Data.MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
-            }
-            """);
-
-        var source = result.GetGeneratedSource("GeneratedDispatcher.g.cs");
-
-        Assert.Contains("case \"Sample.QualifiedMessage\":", source);
-        Assert.Contains("GetRequiredService<IInboxMessageHandler<Sample.QualifiedMessage>>()", source);
-        Assert.Contains("GetRequiredService<IOutboxMessageHandler<Sample.QualifiedMessage>>()", source);
+        return VerifySubset(driver);
     }
 }
