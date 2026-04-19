@@ -196,22 +196,6 @@ public sealed class OutboxGenerator : IIncrementalGenerator
                 );
             }
         }
-
-        // foreach (var baseType in classDeclaration.BaseList!.Types)
-        // {
-        //     var typeInfo = context.SemanticModel.GetTypeInfo(baseType.Type);
-        //     if (typeInfo.Type is INamedTypeSymbol typeSymbol
-        //     && typeSymbol.IsGenericType
-        //     && typeSymbol.OriginalDefinition.ToDisplayString() == "Underground.Outbox.IOutboxMessageHandler<T>")
-        //     {
-        //         return new HandlerClassInfo(
-        //             typeSymbol.ContainingNamespace.ToDisplayString(),
-        //             classDeclaration.Identifier.Text,
-        //             // typeSymbol.OriginalDefinition.ToDisplayString(),
-        //             typeSymbol.TypeArguments[0].ToDisplayString()
-        //         );
-        //     }
-        // }
     }
 
     private static void Execute(EquatableList<HandlerClassInfo> handlers, SourceProductionContext context)
@@ -358,48 +342,4 @@ public static class ConfigureOutboxServices
     }
 }
 ";
-
-    // https://andrewlock.net/creating-a-source-generator-part-5-finding-a-type-declarations-namespace-and-type-hierarchy/
-    // static string GetNamespace(BaseTypeDeclarationSyntax syntax)
-    // {
-    //     string nameSpace = string.Empty;
-
-    //     // Get the containing syntax node for the type declaration
-    //     // (could be a nested type, for example)
-    //     SyntaxNode? potentialNamespaceParent = syntax.Parent;
-
-    //     // Keep moving "out" of nested classes etc until we get to a namespace
-    //     // or until we run out of parents
-    //     while (potentialNamespaceParent != null &&
-    //             potentialNamespaceParent is not NamespaceDeclarationSyntax
-    //             && potentialNamespaceParent is not FileScopedNamespaceDeclarationSyntax)
-    //     {
-    //         potentialNamespaceParent = potentialNamespaceParent.Parent;
-    //     }
-
-    //     // Build up the final namespace by looping until we no longer have a namespace declaration
-    //     if (potentialNamespaceParent is BaseNamespaceDeclarationSyntax namespaceParent)
-    //     {
-    //         // We have a namespace. Use that as the type
-    //         nameSpace = namespaceParent.Name.ToString();
-
-    //         // Keep moving "out" of the namespace declarations until we
-    //         // run out of nested namespace declarations
-    //         while (true)
-    //         {
-    //             if (namespaceParent.Parent is not NamespaceDeclarationSyntax parent)
-    //             {
-    //                 break;
-    //             }
-
-    //             // Add the outer namespace as a prefix to the final namespace
-    //             nameSpace = $"{namespaceParent.Name}.{nameSpace}";
-    //             namespaceParent = parent;
-    //         }
-    //     }
-
-    //     // return the final namespace
-    //     return nameSpace;
-    // }
-
 }
