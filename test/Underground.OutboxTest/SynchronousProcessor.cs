@@ -1,5 +1,3 @@
-using Medallion.Threading;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 

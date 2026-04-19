@@ -27,16 +27,20 @@ For this library the single transaction approach was chosen. Messages in a batch
 - **Transactional**: Message batches are processed within one transaction.
 - **Distributed Lock**: When multiple instances of the application are running then a distributed lock ensures that the outbox is only processed by a single conusmer.
 - **Error Handling**: Built-in exception handling for common scenarios.
+- **Source Generation**: Uses C# source generators to eliminate reflection overhead and improve performance.
 
 ## Getting Started
 
 ### Installation
 
-To use the Underground Outbox Library in your project, add the NuGet package:
+To use the Underground Outbox Library in your project, add the NuGet packages:
 
 ```bash
 dotnet add package Underground.Outbox
+dotnet add package Underground.Outbox.SourceGenerator
 ```
+
+**Important**: The source generator package must be added to the root/main project where dependency injection is configured. Other referenced projects only need to import the main `Underground.Outbox` package.
 
 ### Configuration
 

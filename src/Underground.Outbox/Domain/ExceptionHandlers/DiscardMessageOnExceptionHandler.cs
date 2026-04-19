@@ -19,6 +19,7 @@ public class DiscardMessageOnExceptionHandler<TEntity>(ILogger<DiscardMessageOnE
         var attribute = methodInfo?.GetCustomAttribute<DiscardOnAttribute>();
         if (attribute != null && attribute.ExceptionTypes.Any(et => et.IsInstanceOfType(ex.InnerException)))
         {
+#pragma warning disable CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
             logger.LogInformation(
                 ex.InnerException,
                 "Handler {HandlerType} has DiscardOnAttribute for {ExceptionType}. Discarding message {MessageId}",
@@ -26,6 +27,7 @@ public class DiscardMessageOnExceptionHandler<TEntity>(ILogger<DiscardMessageOnE
                 ex.InnerException,
                 message.Id
             );
+#pragma warning restore CA1873 // Evaluation of this argument may be expensive and unnecessary if logging is disabled
 
             await dbContext.Set<TEntity>()
                 .Where(m => m.Id == message.Id)

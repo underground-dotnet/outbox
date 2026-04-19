@@ -1,11 +1,12 @@
-using System.Reflection;
-
 namespace Underground.Outbox.Exceptions;
 
-public class MessageHandlerException(HandlerType handlerType, MethodInfo methodInfo, string message, Exception innerException) : Exception(message)
+public class MessageHandlerException : Exception
 {
-    public HandlerType HandlerType { get; } = handlerType;
-    public MethodInfo MethodInfo { get; } = methodInfo;
+    public HandlerType HandlerType { get; }
 
-    public new Exception InnerException => innerException;
+    public MessageHandlerException(HandlerType handlerType, string message, Exception innerException)
+        : base(message, innerException)
+    {
+        HandlerType = handlerType;
+    }
 }

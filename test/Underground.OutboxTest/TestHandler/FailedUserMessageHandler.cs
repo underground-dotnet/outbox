@@ -7,11 +7,11 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class FailedUserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<ExampleMessage>
+public class FailedUserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<FailedUserMessage>
 {
     public static IDbContextTransaction? CalledWithTransaction { get; set; } = null;
 
-    public async Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public async Task HandleAsync(FailedUserMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         CalledWithTransaction = dbContext.Database.CurrentTransaction;
 

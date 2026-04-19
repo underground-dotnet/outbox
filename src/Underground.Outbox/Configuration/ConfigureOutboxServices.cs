@@ -1,58 +1,52 @@
-using Medallion.Threading;
-using Medallion.Threading.Postgres;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
-using Underground.Outbox.Domain.Dispatchers;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
 
-public static class ConfigureOutboxServices
+public static class SetupOutboxServices
 {
-    public static IServiceCollection AddOutboxServices<TContext>(
-        this IServiceCollection services,
+    public static void SetupInternalOutboxServices<TContext>(
+        IServiceCollection services,
         Action<OutboxServiceConfiguration> configuration
     ) where TContext : DbContext, IOutboxDbContext
     {
         var serviceConfig = new OutboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
+        serviceConfig.Validate();
 
         services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<AddMessageToOutbox>();
+        services.AddScoped<AddMessagesToOutbox>();
         services.AddScoped<IOutbox, Outbox>();
-        services.AddScoped<IMessageDispatcher<OutboxMessage>, OutboxDispatcher>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
-
-        return services;
     }
 
-    public static IServiceCollection AddInboxServices<TContext>(
-        this IServiceCollection services,
+    public static void SetupInternalInboxServices<TContext>(
+        IServiceCollection services,
         Action<InboxServiceConfiguration> configuration
     ) where TContext : DbContext, IInboxDbContext
     {
         var serviceConfig = new InboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
+        serviceConfig.Validate();
 
         services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<AddMessageToInbox>();
+        services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, Inbox>();
-        services.AddScoped<IMessageDispatcher<InboxMessage>, InboxDispatcher>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
-
-        return services;
     }
 
+#pragma warning disable S2326 // Unused type parameters should be removed
     private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration serviceConfig)
+#pragma warning restore S2326 // Unused type parameters should be removed
     where TEntity : class, IMessage
     where TContext : IDbContext
     {
@@ -69,15 +63,15 @@ public static class ConfigureOutboxServices
         services.AddScoped<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
-        services.AddSingleton<IDistributedLockProvider>(sp =>
-        {
-            var dbContext = sp.GetRequiredService<TContext>();
-            var connectionString = dbContext.Database.GetConnectionString();
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
-            }
-            return new PostgresDistributedSynchronizationProvider(connectionString);
-        });
+        // services.AddSingleton<IDistributedLockProvider>(sp =>
+        // {
+        //     var dbContext = sp.GetRequiredService<TContext>();
+        //     var connectionString = dbContext.Database.GetConnectionString();
+        //     if (string.IsNullOrEmpty(connectionString))
+        //     {
+        //         throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
+        //     }
+        //     return new PostgresDistributedSynchronizationProvider(connectionString);
+        // });
     }
 }

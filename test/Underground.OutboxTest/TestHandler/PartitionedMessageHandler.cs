@@ -6,12 +6,12 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class PartitionedMessageHandler : IOutboxMessageHandler<ExampleMessage>
+public class PartitionedMessageHandler : IOutboxMessageHandler<PartitionedMessage>
 {
     public static ConcurrentDictionary<string, List<int>> CalledWith { get; set; } = [];
     public static int TotalCount => CalledWith.Values.Sum(list => list.Count);
 
-    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public Task HandleAsync(PartitionedMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         CalledWith.AddOrUpdate(
             GetPartitionKey(message),
@@ -25,7 +25,7 @@ public class PartitionedMessageHandler : IOutboxMessageHandler<ExampleMessage>
         return Task.CompletedTask;
     }
 
-    private static string GetPartitionKey(ExampleMessage message)
+    private static string GetPartitionKey(PartitionedMessage message)
     {
         return (message.Id % 4) switch
         {

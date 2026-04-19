@@ -61,7 +61,7 @@ public class ConcurrentProcessorTests : DatabaseTest
             for (int i = 0; i < 200; i++)
             {
                 var partition = partitions[i % partitions.Length];
-                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i)) { PartitionKey = partition };
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new PartitionedMessage(i)) { PartitionKey = partition };
                 await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             }
 
@@ -110,7 +110,7 @@ public class ConcurrentProcessorTests : DatabaseTest
             for (int i = 0; i < 200; i++)
             {
                 var partition = partitions[i % partitions.Length];
-                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(i)) { PartitionKey = partition };
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new PartitionedMessage(i)) { PartitionKey = partition };
                 await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             }
 

@@ -7,9 +7,9 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class CustomSqlMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<ExampleMessage>
+public class CustomSqlMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<CustomSqlMessage>
 {
-    public async Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public async Task HandleAsync(CustomSqlMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         await dbContext.Database.ExecuteSqlAsync(
             $"""INSERT INTO "Users" ("Id", "Name") VALUES (100, 'CustomSqlUser')""",

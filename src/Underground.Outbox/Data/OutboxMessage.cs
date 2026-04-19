@@ -51,7 +51,7 @@ public class OutboxMessage : IMessage
     {
         EventId = eventId;
         CreatedAt = createdAt;
-        Type = data.GetType().AssemblyQualifiedName!;
+        Type = data.GetType().FullName!;
         PartitionKey = partitionKey;
         Data = JsonSerializer.Serialize(data);
     }

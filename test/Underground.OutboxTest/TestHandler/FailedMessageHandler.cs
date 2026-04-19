@@ -5,11 +5,11 @@ using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
-public class FailedMessageHandler : IOutboxMessageHandler<ExampleMessage>
+public class FailedMessageHandler : IOutboxMessageHandler<FailedMessage>
 {
-    public static List<ExampleMessage> CalledWith { get; set; } = [];
+    public static List<FailedMessage> CalledWith { get; set; } = [];
 
-    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public Task HandleAsync(FailedMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         CalledWith.Add(message);
         throw new DataException("Failed to handle message");
