@@ -12,7 +12,7 @@ namespace Underground.Outbox.Domain;
 internal sealed class FetchMessages<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
 {
 #pragma warning disable S2743 // A static field in a generic type is not shared among instances of different close constructed types.
-    private static readonly ConditionalWeakTable<IModel, string> SqlByModel = new();
+    private static readonly ConditionalWeakTable<IModel, string> SqlByModel = [];
 #pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
 
     internal async Task<List<TEntity>> ExecuteAsync(string partition, int batchSize, CancellationToken cancellationToken)

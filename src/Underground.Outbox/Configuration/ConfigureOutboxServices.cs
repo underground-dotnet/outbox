@@ -1,13 +1,9 @@
-using Medallion.Threading;
-using Medallion.Threading.Postgres;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
-using Underground.Outbox.Domain.Dispatchers;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
@@ -48,7 +44,9 @@ public static class SetupOutboxServices
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
     }
 
+#pragma warning disable S2326 // Unused type parameters should be removed
     private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration serviceConfig)
+#pragma warning restore S2326 // Unused type parameters should be removed
     where TEntity : class, IMessage
     where TContext : IDbContext
     {
@@ -65,15 +63,15 @@ public static class SetupOutboxServices
         services.AddScoped<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
 
-        services.AddSingleton<IDistributedLockProvider>(sp =>
-        {
-            var dbContext = sp.GetRequiredService<TContext>();
-            var connectionString = dbContext.Database.GetConnectionString();
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
-            }
-            return new PostgresDistributedSynchronizationProvider(connectionString);
-        });
+        // services.AddSingleton<IDistributedLockProvider>(sp =>
+        // {
+        //     var dbContext = sp.GetRequiredService<TContext>();
+        //     var connectionString = dbContext.Database.GetConnectionString();
+        //     if (string.IsNullOrEmpty(connectionString))
+        //     {
+        //         throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
+        //     }
+        //     return new PostgresDistributedSynchronizationProvider(connectionString);
+        // });
     }
 }
