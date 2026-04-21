@@ -78,6 +78,81 @@ public class OutboxGeneratorTest
     }
 
     [Fact]
+    public Task Generates_discard_mapping_for_outbox_handler()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Data;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Attributes;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            public sealed class TestHandler : IOutboxMessageHandler<TestMessage>
+            {
+                [DiscardOn(typeof(DataException))]
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return Verify(driver);
+    }
+
+    [Fact]
+    public Task Generates_discard_mapping_for_inbox_handler()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Data;
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Attributes;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            public sealed class TestHandler : IInboxMessageHandler<TestMessage>
+            {
+                [DiscardOn(typeof(DataException))]
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return Verify(driver);
+    }
+
+    [Fact]
+    public Task Omits_discard_mapping_for_handler_without_attribute()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            public sealed class TestHandler : IOutboxMessageHandler<TestMessage>
+            {
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return Verify(driver);
+    }
+
+    [Fact]
     public Task Ignores_abstract_handler_classes()
     {
         var driver = GeneratorTestHelper.Run("""
