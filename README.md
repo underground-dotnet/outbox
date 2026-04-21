@@ -70,13 +70,27 @@ dotnet add package Underground.Outbox.SourceGenerator
 
 3. **Handle Messages**: Create message handlers by implementing `IInboxMessageHandler` and `IOutboxMessageHandler`.
 
+### Message Metadata
+
+The handlers receive a `MessageMetadata` parameter containing:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `EventId` | `Guid` | Unique identifier for the message |
+| `PartitionKey` | `string` | Partition key used for message routing |
+| `RetryCount` | `int` | Number of times this message has been retried (0 initially) |
+
     ```csharp
     using Underground.Outbox;
 
     public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
     {
-        public Task HandleAsync(ExampleMessage message, CancellationToken cancellationToken)
+        public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
         {
+            var eventId = metadata.EventId;
+            var partitionKey = metadata.PartitionKey;
+            var retryCount = metadata.RetryCount;
+
             // Process the message
             return Task.CompletedTask;
         }
@@ -89,7 +103,7 @@ dotnet add package Underground.Outbox.SourceGenerator
 
     ```csharp
     using var transaction = await dbContext.Database.BeginTransactionAsync();
-    await outbox.AddMessageAsync(new ExampleMessage { Content = "Hello, World!" });
+    await outbox.AddMessageAsync(dbContext, new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage { Content = "Hello, World!" }));
     await transaction.CommitAsync();
     ```
 2. **The background processor will call the handlers during the next run.**
