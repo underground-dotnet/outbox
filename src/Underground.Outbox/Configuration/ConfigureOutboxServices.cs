@@ -53,7 +53,7 @@ public static class SetupOutboxServices
         services.AddSingleton(serviceConfig);
 
         // register all assigned handlers
-        services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
+        services.TryAddEnumerable(serviceConfig.HandlerRegistrations.Select(static registration => registration.ToServiceDescriptor()));
 
         services.AddScoped<FetchPartitions<TEntity>>();
         services.AddScoped<FetchMessages<TEntity>>();

@@ -17,20 +17,20 @@ public abstract class ServiceConfiguration
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
-    internal List<ServiceDescriptor> HandlersWithLifetime = [];
+    internal List<HandlerRegistration> HandlerRegistrations { get; } = [];
 
-    public ServiceConfiguration AddHandler<TMessageHandlerType>()
+    public HandlerRegistrationBuilder AddHandler<TMessageHandlerType>()
     {
         return AddHandler(typeof(TMessageHandlerType));
     }
 
-    public ServiceConfiguration AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime)
+    public HandlerRegistrationBuilder AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime)
     {
         return AddHandler(typeof(TMessageHandlerType), serviceLifetime);
     }
 
 #pragma warning disable CA1716 // Identifiers should not match keywords
-    public abstract ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient);
+    public abstract HandlerRegistrationBuilder AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient);
 #pragma warning restore CA1716 // Identifiers should not match keywords
 
     internal void Validate()
@@ -48,6 +48,17 @@ public abstract class ServiceConfiguration
         if (ProcessingDelayMilliseconds < 0)
         {
             throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+        }
+
+        foreach (var registration in HandlerRegistrations)
+        {
+            foreach (var policy in registration.ExceptionPolicies)
+            {
+                if (!typeof(Exception).IsAssignableFrom(policy.ExceptionType))
+                {
+                    throw new ArgumentException($"Configured type {policy.ExceptionType} must derive from Exception.");
+                }
+            }
         }
     }
 }
