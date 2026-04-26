@@ -29,7 +29,7 @@ public class ConcurrentProcessorTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.ParallelProcessingOfPartitions = 4;
-            cfg.AddHandler<PartitionedMessageHandler>();
+            cfg.AddHandler<PartitionedMessageHandler, PartitionedMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);

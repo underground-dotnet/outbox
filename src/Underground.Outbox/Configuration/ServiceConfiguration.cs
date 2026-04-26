@@ -19,20 +19,6 @@ public abstract class ServiceConfiguration
 
     internal List<ServiceDescriptor> HandlersWithLifetime = [];
 
-    public ServiceConfiguration AddHandler<TMessageHandlerType>()
-    {
-        return AddHandler(typeof(TMessageHandlerType));
-    }
-
-    public ServiceConfiguration AddHandler<TMessageHandlerType>(ServiceLifetime serviceLifetime)
-    {
-        return AddHandler(typeof(TMessageHandlerType), serviceLifetime);
-    }
-
-#pragma warning disable CA1716 // Identifiers should not match keywords
-    public abstract ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient);
-#pragma warning restore CA1716 // Identifiers should not match keywords
-
     internal void Validate()
     {
         if (BatchSize <= 0)

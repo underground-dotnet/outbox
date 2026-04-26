@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
@@ -31,7 +30,7 @@ public class ProcessorScopeTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler>(ServiceLifetime.Scoped);
+            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped);
             cfg.BatchSize = 2;
         });
 

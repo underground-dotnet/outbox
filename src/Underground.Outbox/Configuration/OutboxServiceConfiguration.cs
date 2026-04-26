@@ -1,18 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Underground.Outbox.Configuration;
 
 public class OutboxServiceConfiguration : ServiceConfiguration
 {
-    public override ServiceConfiguration AddHandler(HandlerType messageHandlerType, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    public ServiceConfiguration AddHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TH, TM>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) where TH : class, IOutboxMessageHandler<TM>
     {
-        var interfaceType = messageHandlerType.GetInterface("Underground.Outbox.IOutboxMessageHandler`1");
-
-        if (interfaceType?.IsGenericType == true)
-        {
-            Console.WriteLine($"Added handler for {interfaceType} with {messageHandlerType} ");
-            HandlersWithLifetime.Add(new ServiceDescriptor(interfaceType, messageHandlerType, serviceLifetime));
-        }
+        Console.WriteLine($"Added handler for {typeof(IOutboxMessageHandler<TM>)} with {typeof(TH)} ");
+        HandlersWithLifetime.Add(new ServiceDescriptor(typeof(IOutboxMessageHandler<TM>), typeof(TH), serviceLifetime));
 
         return this;
     }
