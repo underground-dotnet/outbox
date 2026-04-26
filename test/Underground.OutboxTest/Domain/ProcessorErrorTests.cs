@@ -33,8 +33,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler>();
-            cfg.AddHandler<SecondMessageHandler>();
+            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
+            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -66,8 +66,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler>();
-            cfg.AddHandler<SecondMessageHandler>();
+            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -102,8 +102,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler>();
-            cfg.AddHandler<SecondMessageHandler>();
+            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
+            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -146,7 +146,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedUserMessageHandler>();
+            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -178,7 +178,7 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             // tries to insert a user via raw SQL
-            cfg.AddHandler<CustomSqlMessageHandler>();
+            cfg.AddHandler<CustomSqlMessageHandler, CustomSqlMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -209,8 +209,8 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<UserMessageHandler>();
-            cfg.AddHandler<FailedUserMessageHandler>();
+            cfg.AddHandler<UserMessageHandler, UserMessage>();
+            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -252,7 +252,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedUserMessageHandler>();
+            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -281,7 +281,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<DiscardFailedMessageHandler>();
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);

@@ -49,12 +49,13 @@ dotnet add package Underground.Outbox.SourceGenerator
     ```csharp
     builder.Services.AddOutboxServices<AppDbContext>(cfg =>
     {
-        cfg.AddHandler<ExampleMessageHandler>();
+        cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+        cfg.AddHandler<ExampleMessageHandler, AnotherMessage>();
     });
 
     builder.Services.AddInboxServices<AppDbContext>(cfg =>
     {
-        cfg.AddHandler<InboxMessageHandler>();
+        cfg.AddHandler<InboxMessageHandler, InboxMessage>();
     });
     ```
 

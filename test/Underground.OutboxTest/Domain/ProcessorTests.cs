@@ -28,7 +28,9 @@ public class ProcessorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler>();
+            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+            cfg.AddHandler<MultipleMessagesHandler, MultiMessageA>();
+            cfg.AddHandler<MultipleMessagesHandler, MultiMessageB>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -96,5 +98,30 @@ public class ProcessorTests : DatabaseTest
         // Assert
         await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
         Assert.True(ExampleMessageHandler.CalledWith.Count < 100);
+    }
+
+    [Fact]
+    public async Task Processor_With_MultipleMessages()
+    {
+        // Arrange
+        var context = CreateDbContext();
+        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageA(10));
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageB(20));
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
+            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Act
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(MultipleMessagesHandler.CalledWithA);
+        Assert.Single(MultipleMessagesHandler.CalledWithB);
     }
 }

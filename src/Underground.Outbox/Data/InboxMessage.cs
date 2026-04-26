@@ -52,6 +52,9 @@ public class InboxMessage : IMessage
         CreatedAt = createdAt;
         Type = data.GetType().FullName!;
         PartitionKey = partitionKey;
+        // TODO: move to AOT safe approach:
+        // https://the-runtime.dev/articles/json-source-generator-system-text-json/
+        // https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation
         Data = JsonSerializer.Serialize(data);
     }
 }

@@ -24,11 +24,12 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
-    cfg.AddHandler<ExampleMessageHandler>();
+    cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+    cfg.AddHandler<ExampleMessageHandler, SecondMessage>();
 });
 builder.Services.AddInboxServices<AppDbContext>(cfg =>
 {
-    cfg.AddHandler<InboxMessageHandler>();
+    cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
 });
 
 IHost host = builder.Build();
@@ -49,6 +50,9 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
         var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
         await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
     }
+
+    var secondMessage = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage("Test Message"));
+    await outbox.AddMessageAsync(dbContext, secondMessage, CancellationToken.None);
 
     await transaction.CommitAsync();
 }
