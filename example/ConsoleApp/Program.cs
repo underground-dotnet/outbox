@@ -25,7 +25,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-    cfg.AddHandler<ExampleMessageHandler, SecondMessage>();
+    cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
+        .OnException<InvalidOperationException>().Discard();
 });
 builder.Services.AddInboxServices<AppDbContext>(cfg =>
 {

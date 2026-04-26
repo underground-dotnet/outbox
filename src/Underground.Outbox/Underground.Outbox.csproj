@@ -8,8 +8,8 @@
     <PackageTags>dotnet;outbox</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
     <PackageReadmeFile>package.readme.md</PackageReadmeFile>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
-
 
   <ItemGroup>
     <!-- <PackageReference Include="DistributedLock.Postgres" /> -->
@@ -24,6 +24,10 @@
 
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)package.readme.md" Pack="true" PackagePath="" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Configuration/HandlerRegistrations/" />
   </ItemGroup>
 
 </Project>

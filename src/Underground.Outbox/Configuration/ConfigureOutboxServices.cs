@@ -45,7 +45,7 @@ public static class SetupOutboxServices
     }
 
 #pragma warning disable S2326 // Unused type parameters should be removed
-    private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration serviceConfig)
+    private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration<TEntity> serviceConfig)
 #pragma warning restore S2326 // Unused type parameters should be removed
     where TEntity : class, IMessage
     where TContext : IDbContext
@@ -53,7 +53,7 @@ public static class SetupOutboxServices
         services.AddSingleton(serviceConfig);
 
         // register all assigned handlers
-        services.TryAddEnumerable(serviceConfig.HandlersWithLifetime);
+        services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
 
         services.AddScoped<FetchPartitions<TEntity>>();
         services.AddScoped<FetchMessages<TEntity>>();
