@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Configuration;
-using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
@@ -24,29 +23,18 @@ internal class ProcessExceptionFromHandler<TEntity>(
 
         foreach (var policy in policies)
         {
-            await ExecutePolicy(policy, ex, message, dbContext, cancellationToken);
-        }
-    }
-
-    private async Task ExecutePolicy<THandler>(
-        ExceptionPolicy<TEntity, THandler> policy,
-        MessageHandlerException ex,
-        TEntity message,
-        IDbContext dbContext,
-        CancellationToken cancellationToken
-    ) where THandler : IMessageExceptionHandler<TEntity>
-    {
 #pragma warning disable CA1873 // Avoid potentially expensive logging
-        logger.LogInformation(
-            "Executing exception policy {PolicyType} for handler {HandlerType} and exception {ExceptionType} on message {MessageId}",
-            policy.GetType().Name,
-            ex.HandlerType.Name,
-            ex.InnerException?.GetType().Name,
-            message.Id
-        );
+            logger.LogInformation(
+                "Executing exception policy {PolicyType} for handler {HandlerType} and exception {ExceptionType} on message {MessageId}",
+                policy.GetType().Name,
+                ex.HandlerType.Name,
+                ex.InnerException?.GetType().Name,
+                message.Id
+            );
 #pragma warning restore CA1873 // Avoid potentially expensive logging
 
-        var exceptionHandler = serviceProvider.GetRequiredService<THandler>();
-        await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken);
+            var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
+            await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken);
+        }
     }
 }

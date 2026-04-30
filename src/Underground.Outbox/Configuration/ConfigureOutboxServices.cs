@@ -58,7 +58,8 @@ public static class SetupOutboxServices
         services.AddScoped<FetchPartitions<TEntity>>();
         services.AddScoped<FetchMessages<TEntity>>();
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
-        services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
+        // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
+        services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<Processor<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();

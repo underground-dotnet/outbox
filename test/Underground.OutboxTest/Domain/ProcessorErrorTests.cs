@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
+using System.Data;
+
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
@@ -281,7 +283,9 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+                .OnException<DataException>()
+                .Discard();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
