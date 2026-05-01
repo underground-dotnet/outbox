@@ -43,6 +43,7 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
                     {
                         throw new MessageHandlerException(
                             handler.GetType(),
+                            typeof(Sample.TestMessage),
                             $"Error processing message {message.Id} with handler {handler.GetType().Name}",
                             ex
                         );

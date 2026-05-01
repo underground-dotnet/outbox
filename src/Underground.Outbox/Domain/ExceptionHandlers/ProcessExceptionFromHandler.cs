@@ -15,7 +15,7 @@ internal class ProcessExceptionFromHandler<TEntity>(
     internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken = default)
     {
         var policies = config.Registrations
-            .Where(r => r.HandlerType == ex.HandlerType)
+            .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
             .SelectMany(r => r.ExceptionPolicies)
             .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
             .ToList();

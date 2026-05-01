@@ -306,4 +306,41 @@ public class ProcessorErrorTests : DatabaseTest
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
+
+    [Fact]
+    public async Task ExceptionPolicyOnlyAppliesToConfiguredMessageTypeForMultiMessageHandler()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.AddHandler<FailedMultipleMessagesHandler, FailedMultiMessageA>()
+                .OnException<InvalidOperationException>()
+                .Discard();
+            cfg.AddHandler<FailedMultipleMessagesHandler, FailedMultiMessageB>();
+        });
+
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMultiMessageB(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessMessagesAsync("default", 5, serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
+
+        // Assert
+        var failedMessage = await context.OutboxMessages
+            .AsNoTracking()
+            .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal(msg.Id, failedMessage.Id);
+        Assert.Equal(1, failedMessage.RetryCount);
+    }
 }

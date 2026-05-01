@@ -13,7 +13,11 @@ public class InboxServiceConfiguration : ServiceConfiguration<InboxMessage>
     {
         Console.WriteLine($"Added handler for {typeof(IInboxMessageHandler<TM>)} with {typeof(TH)} ");
 
-        var registration = new HandlerRegistration<InboxMessage>(typeof(TH), new ServiceDescriptor(typeof(IInboxMessageHandler<TM>), typeof(TH), serviceLifetime));
+        var registration = new HandlerRegistration<InboxMessage>(
+            typeof(TH),
+            typeof(TM),
+            new ServiceDescriptor(typeof(IInboxMessageHandler<TM>), typeof(TH), serviceLifetime)
+        );
         Registrations.Add(registration);
         return new HandlerRegistrationBuilder<InboxMessage>(registration);
     }

@@ -34,6 +34,7 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
                     {
                         throw new MessageHandlerException(
                             handler.GetType(),
+                            typeof(Sample.InboxMessageType),
                             $"Error processing message {message.Id} with handler {handler.GetType().Name}",
                             ex
                         );
@@ -61,6 +62,7 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
                     {
                         throw new MessageHandlerException(
                             handler.GetType(),
+                            typeof(Sample.OutboxMessageType),
                             $"Error processing message {message.Id} with handler {handler.GetType().Name}",
                             ex
                         );

@@ -13,7 +13,11 @@ public class OutboxServiceConfiguration : ServiceConfiguration<OutboxMessage>
     {
         Console.WriteLine($"Added handler for {typeof(IOutboxMessageHandler<TM>)} with {typeof(TH)} ");
 
-        var registration = new HandlerRegistration<OutboxMessage>(typeof(TH), new ServiceDescriptor(typeof(IOutboxMessageHandler<TM>), typeof(TH), serviceLifetime));
+        var registration = new HandlerRegistration<OutboxMessage>(
+            typeof(TH),
+            typeof(TM),
+            new ServiceDescriptor(typeof(IOutboxMessageHandler<TM>), typeof(TH), serviceLifetime)
+        );
         Registrations.Add(registration);
         return new HandlerRegistrationBuilder<OutboxMessage>(registration);
     }

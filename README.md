@@ -27,7 +27,7 @@ For this library the single transaction approach was chosen. Messages in a batch
 - **Transactional**: Message batches are processed within one transaction.
 - **Distributed Lock**: When multiple instances of the application are running then a distributed lock ensures that the outbox is only processed by a single conusmer.
 - **Error Handling**: Built-in exception handling for common scenarios.
-- **Source Generation**: Uses C# source generators to eliminate reflection overhead and improve performance. (Right now reflection is only used in the DiscardOn Exception Handler, which can be changed in the future.)
+- **Source Generation**: Uses C# source generators to eliminate reflection overhead and improve performance.
 
 ## Getting Started
 
