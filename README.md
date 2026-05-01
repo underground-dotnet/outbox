@@ -81,22 +81,22 @@ The handlers receive a `MessageMetadata` parameter containing:
 | `PartitionKey` | `string` | Partition key used for message routing |
 | `RetryCount` | `int` | Number of times this message has been retried (0 initially) |
 
-    ```csharp
-    using Underground.Outbox;
+```csharp
+using Underground.Outbox;
 
-    public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
+public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
+{
+    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
-        {
-            var eventId = metadata.EventId;
-            var partitionKey = metadata.PartitionKey;
-            var retryCount = metadata.RetryCount;
+        var eventId = metadata.EventId;
+        var partitionKey = metadata.PartitionKey;
+        var retryCount = metadata.RetryCount;
 
-            // Process the message
-            return Task.CompletedTask;
-        }
+        // Process the message
+        return Task.CompletedTask;
     }
-    ```
+}
+```
 
 ### Usage
 
