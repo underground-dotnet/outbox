@@ -5,7 +5,7 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class SecondMessageHandler : IOutboxMessageHandler<SecondMessage>
 {
-    public static List<SecondMessage> CalledWith { get; set; } = [];
+    public static IList<SecondMessage> CalledWith { get; set; } = [];
 
     public Task HandleAsync(SecondMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {

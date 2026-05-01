@@ -5,8 +5,8 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class MultipleMessagesHandler : IOutboxMessageHandler<MultiMessageA>, IOutboxMessageHandler<MultiMessageB>
 {
-    public static List<MultiMessageA> CalledWithA { get; set; } = [];
-    public static List<MultiMessageB> CalledWithB { get; set; } = [];
+    public static IList<MultiMessageA> CalledWithA { get; set; } = [];
+    public static IList<MultiMessageB> CalledWithB { get; set; } = [];
 
     public Task HandleAsync(MultiMessageA message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
@@ -21,5 +21,7 @@ public class MultipleMessagesHandler : IOutboxMessageHandler<MultiMessageA>, IOu
     }
 }
 
+#pragma warning disable MA0048 // File name must match type name
 public record MultiMessageA(int Id);
 public record MultiMessageB(int Id);
+#pragma warning restore MA0048 // File name must match type name

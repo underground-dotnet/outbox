@@ -38,12 +38,12 @@ internal class ConcurrentProcessor<TEntity>(
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
         // TODO: monitor workers?
-        _ = await CreateWorkers(cancellationToken);
+        _ = await CreateWorkers(cancellationToken).ConfigureAwait(false);
 
         while (!cancellationToken.IsCancellationRequested)
         {
             ScheduleProcessingRun();
-            await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken);
+            await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -65,16 +65,16 @@ internal class ConcurrentProcessor<TEntity>(
 
     private async Task CreateTriggerWorker(CancellationToken cancellationToken)
     {
-        await foreach (var _ in _triggerChannel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var _ in _triggerChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken);
+                var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken).ConfigureAwait(false);
 
                 foreach (var partition in partitions)
                 {
-                    await _partitionsChannel.Writer.WriteAsync(partition, cancellationToken);
+                    await _partitionsChannel.Writer.WriteAsync(partition, cancellationToken).ConfigureAwait(false);
                 }
 
                 if (!partitions.Any())
@@ -92,11 +92,11 @@ internal class ConcurrentProcessor<TEntity>(
 
     private async Task CreatePartitionWorker(CancellationToken cancellationToken)
     {
-        await foreach (var partitionKey in _partitionsChannel.Reader.ReadAllAsync(cancellationToken))
+        await foreach (var partitionKey in _partitionsChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             try
             {
-                var messagesProcessed = await AcquireLockAndProcess(partitionKey, cancellationToken);
+                var messagesProcessed = await AcquireLockAndProcess(partitionKey, cancellationToken).ConfigureAwait(false);
 
                 if (messagesProcessed)
                 {
@@ -116,7 +116,7 @@ internal class ConcurrentProcessor<TEntity>(
         // use separate scope & context for each partition
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        return await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken);
+        return await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken).ConfigureAwait(false);
     }
 
     protected virtual void NoMessagesForProcessingFound()

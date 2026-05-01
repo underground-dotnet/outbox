@@ -3,16 +3,16 @@ using Underground.Outbox.Domain;
 
 namespace Underground.Outbox;
 
-internal sealed class Inbox(AddMessagesToInbox addMessage, ConcurrentProcessor<InboxMessage> processor) : IInbox
+internal sealed class InboxImpl(AddMessagesToInbox addMessage, ConcurrentProcessor<InboxMessage> processor) : IInbox
 {
     public async Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken)
     {
-        await addMessage.ExecuteAsync(context, [message], cancellationToken);
+        await addMessage.ExecuteAsync(context, [message], cancellationToken).ConfigureAwait(false);
     }
 
     public async Task AddMessagesAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken)
     {
-        await addMessage.ExecuteAsync(context, messages, cancellationToken);
+        await addMessage.ExecuteAsync(context, messages, cancellationToken).ConfigureAwait(false);
     }
 
     public void ProcessMessages()

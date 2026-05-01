@@ -1,8 +1,8 @@
 namespace Underground.Outbox.Exceptions;
 
-public class NoDbContextAssignedException : InvalidOperationException
+internal class NoDbContextAssignedException : InvalidOperationException
 {
-    public NoDbContextAssignedException() : base("DbContextType is not set. Use UseDbContext<TDbContext>() to set it.")
+    internal NoDbContextAssignedException() : base("DbContextType is not set. Use UseDbContext<TDbContext>() to set it.")
     {
     }
 }

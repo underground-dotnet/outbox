@@ -27,7 +27,7 @@ internal sealed class FetchMessages<TEntity>(IDbContext dbContext) where TEntity
                     new NpgsqlParameter("partition", partition),
                     new NpgsqlParameter("batchSize", batchSize)
                 )
-                .ToListAsync(cancellationToken: cancellationToken);
+                .ToListAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex) when (ex.InnerException is PostgresException { SqlState: "55P03" }) // lock_not_available
         {

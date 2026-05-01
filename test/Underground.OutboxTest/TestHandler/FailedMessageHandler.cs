@@ -7,7 +7,7 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class FailedMessageHandler : IOutboxMessageHandler<FailedMessage>
 {
-    public static List<FailedMessage> CalledWith { get; set; } = [];
+    public static IList<FailedMessage> CalledWith { get; set; } = [];
 
     public Task HandleAsync(FailedMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {

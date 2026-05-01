@@ -13,6 +13,6 @@ internal sealed class FetchPartitions<TEntity>(IDbContext dbContext) where TEnti
                     .Select(message => message.PartitionKey)
                     .Distinct()
                     .AsNoTracking()
-                    .ToListAsync(cancellationToken: cancellationToken);
+                    .ToListAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 }

@@ -391,6 +391,8 @@ dotnet_diagnostic.IDE0008.severity = none # Use explicit type instead of var
 dotnet_diagnostic.CA1805.severity = none # Do not initialize unnecessarily
 dotnet_diagnostic.S3267.severity = None # Loops should be simplified using the "Where" LINQ method
 dotnet_diagnostic.CA1848.severity = None # Use the LoggerMessage delegates
+dotnet_diagnostic.RCS1194.severity = None # Implement exception constructors
+dotnet_diagnostic.MA0026.severity = None # TODO
 
 # Enable IDE1006 as error (required for code naming conventions)
 dotnet_diagnostic.IDE1006.severity = error
@@ -403,6 +405,11 @@ csharp_space_around_binary_operators = before_and_after
 
 [test/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none # Identifiers should not contain underscores
+dotnet_diagnostic.MA0004.severity = none # Use Task.ConfigureAwait(false) if the current SynchronizationContext is not needed
+
+[example/**/*.cs]
+dotnet_diagnostic.MA0004.severity = none # Use Task.ConfigureAwait(false) if the current SynchronizationContext is not needed
+dotnet_diagnostic.MA0011.severity = none # Use an overload of 'ToString' that has a 'System.IFormatProvider' parameter
 
 # Verify settings
 [*.{received,verified}.{json,txt,xml}]
