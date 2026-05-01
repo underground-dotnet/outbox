@@ -16,5 +16,7 @@ public class FailedMultipleMessagesHandler : IOutboxMessageHandler<FailedMultiMe
     }
 }
 
+#pragma warning disable MA0048 // File name must match type name
 public record FailedMultiMessageA(int Id);
 public record FailedMultiMessageB(int Id);
+#pragma warning restore MA0048 // File name must match type name

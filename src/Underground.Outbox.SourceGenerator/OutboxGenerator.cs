@@ -127,8 +127,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             return [];
 
         // Only scan assemblies marked with [ContainsOutboxHandlers]
+#pragma warning disable MA0006 // Use string.Equals instead of Equals operator
         bool hasMarker = assembly.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == MarkerAttributeFullName);
+#pragma warning restore MA0006 // Implement the functionality instead of throwing NotImplementedException
 
         if (!hasMarker)
             return [];
@@ -198,7 +200,9 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         }
     }
 
+#pragma warning disable MA0051 // Method is too long
     private static void Execute(EquatableList<HandlerClassInfo> handlers, SourceProductionContext context)
+#pragma warning restore MA0051 // Method is too long
     {
         var kindInbox = handlers.Where(h => h.Kind == HandlerKind.Inbox).ToList();
         var kindOutbox = handlers.Where(h => h.Kind == HandlerKind.Outbox).ToList();

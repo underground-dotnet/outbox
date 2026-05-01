@@ -14,8 +14,8 @@ internal sealed class AddMessagesToOutbox
             throw new NoActiveTransactionException();
         }
 
-        await context.OutboxMessages.AddRangeAsync(messages, cancellationToken);
-        await context.SaveChangesAsync(cancellationToken);
+        await context.OutboxMessages.AddRangeAsync(messages, cancellationToken).ConfigureAwait(false);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static bool HasActiveTransaction(IDbContext context)

@@ -7,9 +7,9 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
-    public static List<ExampleMessage> CalledWith { get; set; } = [];
+    public static IList<ExampleMessage> CalledWith { get; set; } = [];
     // monitors different ids of the handler instances
-    public static ISet<string> ObjectIds { get; set; } = new HashSet<string>();
+    public static ISet<string> ObjectIds { get; set; } = new HashSet<string>(StringComparer.Ordinal);
 
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {

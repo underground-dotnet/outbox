@@ -33,7 +33,7 @@ internal class ProcessExceptionFromHandler<TEntity>(
 #pragma warning restore CA1873 // Avoid potentially expensive logging
 
             var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
-            await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken);
+            await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
         }
     }
 }

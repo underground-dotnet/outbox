@@ -11,6 +11,7 @@ internal class DiscardMessageOnExceptionHandler<TEntity>() : IMessageExceptionHa
     {
         await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)
-            .ExecuteDeleteAsync(cancellationToken);
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 }

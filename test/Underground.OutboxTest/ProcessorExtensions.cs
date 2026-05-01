@@ -5,7 +5,7 @@ using Underground.Outbox.Domain;
 
 namespace Underground.OutboxTest;
 
-public static class Processor
+public static class ProcessorExtensions
 {
     extension<TEntity>(Processor<TEntity>) where TEntity : class, IMessage
     {
