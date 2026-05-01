@@ -109,6 +109,25 @@ The handlers receive a `MessageMetadata` parameter containing:
     ```
 2. **The background processor will call the handlers during the next run.**
 
+### Error Handling
+
+Messages are processed inside the processor transaction, with a savepoint created for each message. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented, and processing of the current batch stops. Messages that were handled successfully earlier in the same batch remain processed.
+
+You can configure exception policies per handler registration. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `AddHandler`:
+
+```csharp
+builder.Services.AddOutboxServices<AppDbContext>(cfg =>
+{
+    cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+
+    cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
+        .OnException<InvalidOperationException>()
+        .Discard();
+});
+```
+
+`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies are scoped to the specific handler and message type registration they are added to, so a handler that processes multiple message types can use different policies for each message type.
+
 ## Example
 
 Run example:
