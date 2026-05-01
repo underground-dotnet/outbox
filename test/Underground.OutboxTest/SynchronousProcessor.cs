@@ -10,7 +10,7 @@ namespace Underground.OutboxTest;
 internal sealed class SynchronousProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
-    ServiceConfiguration config
+    ServiceConfiguration<TEntity> config
 ) : ConcurrentProcessor<TEntity>(logger, scopeFactory, config) where TEntity : class, IMessage
 {
     private TaskCompletionSource<bool>? _processingTCS = null;

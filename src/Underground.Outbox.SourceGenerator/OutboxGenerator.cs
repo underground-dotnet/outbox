@@ -241,6 +241,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");
+            sb.AppendLine($"                            typeof({classInfo.MessageTypeFullName}),");
             sb.AppendLine("                            $\"Error processing message {message.Id} with handler {handler.GetType().Name}\",");
             sb.AppendLine("                            ex");
             sb.AppendLine("                        );");
@@ -271,6 +272,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             sb.AppendLine("                    {");
             sb.AppendLine("                        throw new MessageHandlerException(");
             sb.AppendLine("                            handler.GetType(),");
+            sb.AppendLine($"                            typeof({classInfo.MessageTypeFullName}),");
             sb.AppendLine("                            $\"Error processing message {message.Id} with handler {handler.GetType().Name}\",");
             sb.AppendLine("                            ex");
             sb.AppendLine("                        );");

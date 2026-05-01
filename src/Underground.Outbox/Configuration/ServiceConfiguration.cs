@@ -1,8 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 
+using Underground.Outbox.Configuration.HandlerRegistrations;
+using Underground.Outbox.Data;
+
 namespace Underground.Outbox.Configuration;
 
-public abstract class ServiceConfiguration
+public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
     /// Number of messages to process in a single batch.
@@ -17,7 +20,7 @@ public abstract class ServiceConfiguration
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
-    internal List<ServiceDescriptor> HandlersWithLifetime = [];
+    internal List<HandlerRegistration<TEntity>> Registrations = [];
 
     internal void Validate()
     {

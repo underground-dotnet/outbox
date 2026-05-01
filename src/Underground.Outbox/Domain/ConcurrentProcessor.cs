@@ -11,12 +11,12 @@ namespace Underground.Outbox.Domain;
 internal class ConcurrentProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
-    ServiceConfiguration config
+    ServiceConfiguration<TEntity> config
 ) where TEntity : class, IMessage
 {
     private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly ServiceConfiguration _config = config;
+    private readonly ServiceConfiguration<TEntity> _config = config;
 
     // used to trigger processing runs, making sure only a limited number of runs can be queued
     private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(2)
