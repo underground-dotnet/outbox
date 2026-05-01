@@ -8,7 +8,7 @@
     <PackageTags>dotnet;outbox</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
     <PackageReadmeFile>package.readme.md</PackageReadmeFile>
-    <IsAotCompatible>true</IsAotCompatible>
+    <!-- <IsAotCompatible>true</IsAotCompatible> -->
   </PropertyGroup>
 
   <ItemGroup>
