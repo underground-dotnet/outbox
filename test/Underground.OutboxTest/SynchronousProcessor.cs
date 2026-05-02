@@ -34,7 +34,7 @@ internal sealed class SynchronousProcessor<TEntity>(
                 _processingTCS = new TaskCompletionSource<bool>();
                 _ = StartAsync(cancellationToken);
             }
-            else if (_processingTCS is not null && !_processingTCS.Task.IsCompleted)
+            else if (_processingTCS?.Task.IsCompleted == false)
             {
                 // still running
                 return _processingTCS.Task;

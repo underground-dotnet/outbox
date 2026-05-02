@@ -20,7 +20,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
-    internal List<HandlerRegistration<TEntity>> Registrations = [];
+    internal readonly List<HandlerRegistration<TEntity>> Registrations = [];
 
     internal void Validate()
     {
