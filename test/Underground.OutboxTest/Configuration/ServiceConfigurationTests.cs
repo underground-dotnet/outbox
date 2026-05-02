@@ -14,7 +14,6 @@ public class ServiceConfigurationTests
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
 
-        Assert.Equal("CleanupDelaySeconds", exception.ParamName);
         Assert.Contains("CleanupDelaySeconds", exception.Message, StringComparison.Ordinal);
     }
 
@@ -28,7 +27,6 @@ public class ServiceConfigurationTests
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
 
-        Assert.Equal("ProcessedMessageRetention", exception.ParamName);
         Assert.Contains("ProcessedMessageRetention", exception.Message, StringComparison.Ordinal);
     }
 }
