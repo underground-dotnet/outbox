@@ -62,7 +62,9 @@ public static class SetupOutboxServices
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<Processor<TEntity>>();
+        services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
+        services.AddHostedService<CleanupBackgroundService<TEntity>>();
 
         // services.AddSingleton<IDistributedLockProvider>(sp =>
         // {

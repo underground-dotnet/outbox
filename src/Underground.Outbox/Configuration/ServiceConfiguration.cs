@@ -20,6 +20,16 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
+    /// <summary>
+    /// Retention period for processed messages before they are eligible for cleanup.
+    /// </summary>
+    public TimeSpan ProcessedMessageRetention { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>
+    ///  Delay in seconds between cleanup cycles for processed messages.
+    /// </summary>
+    public int CleanupDelaySeconds { get; set; } = 3600;
+
     internal readonly List<HandlerRegistration<TEntity>> Registrations = [];
 
     internal void Validate()
@@ -37,6 +47,16 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
         if (ProcessingDelayMilliseconds < 0)
         {
             throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+        }
+
+        if (ProcessedMessageRetention < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException($"ProcessedMessageRetention ({ProcessedMessageRetention}) cannot be negative.");
+        }
+
+        if (CleanupDelaySeconds <= 0)
+        {
+            throw new ArgumentOutOfRangeException($"CleanupDelaySeconds ({CleanupDelaySeconds}) must be greater than 0.");
         }
     }
 }
