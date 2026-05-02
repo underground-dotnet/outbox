@@ -38,14 +38,20 @@ public class ConcurrentProcessorTests : DatabaseTest
 
     private async Task RunBackgroundServiceAsync()
     {
-        var service = _serviceProvider.GetRequiredService<IHostedService>();
-        await service.StartAsync(CancellationToken.None);
+        var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
+        foreach (var service in services)
+        {
+            await service.StartAsync(CancellationToken.None);
+        }
     }
 
     private async Task StopBackgroundServiceAsync()
     {
-        var service = _serviceProvider.GetRequiredService<IHostedService>();
-        await service.StopAsync(CancellationToken.None);
+        var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
+        foreach (var service in services)
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
     }
 
     [Fact]
