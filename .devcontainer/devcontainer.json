@@ -9,7 +9,6 @@
   "features": {
     //  "ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {}
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "version": "29.4.2",
       "dockerDashComposeVersion": "none",
       "installDockerBuildx": false,
       "installDockerComposeSwitch": false
@@ -18,7 +17,8 @@
   "containerEnv": {
     // handles some issues with Testcontainers networking in devcontainers (Docker-in-Docker)
     "TESTCONTAINERS_RYUK_DISABLED": "true",
-    "TESTCONTAINERS_HOST_OVERRIDE": "localhost"
+    "TESTCONTAINERS_HOST_OVERRIDE": "localhost",
+    "DOCKER_API_VERSION": "1.43"
   },
   // Configure tool-specific properties.
   "customizations": {
