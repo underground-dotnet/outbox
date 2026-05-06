@@ -36,21 +36,21 @@ public class ConcurrentProcessorTests : DatabaseTest
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
-    private async Task RunBackgroundServiceAsync()
+    private async Task RunBackgroundServiceAsync(CancellationToken cancellationToken)
     {
         var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
-            await service.StartAsync(CancellationToken.None);
+            await service.StartAsync(cancellationToken);
         }
     }
 
-    private async Task StopBackgroundServiceAsync()
+    private async Task StopBackgroundServiceAsync(CancellationToken cancellationToken)
     {
         var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
-            await service.StopAsync(CancellationToken.None);
+            await service.StopAsync(cancellationToken);
         }
     }
 
@@ -75,11 +75,11 @@ public class ConcurrentProcessorTests : DatabaseTest
         }
 
         // Act
-        await RunBackgroundServiceAsync();
+        await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         SpinWait.SpinUntil(() => PartitionedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
-        await StopBackgroundServiceAsync();
+        await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
         Assert.Equal(200, PartitionedMessageHandler.TotalCount);
 
         var partitionA = Enumerable.Range(0, 200)
