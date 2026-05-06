@@ -1,18 +1,22 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/dotnet-postgres
 {
-  "name": "C# (.NET) and PostgreSQL",
+  "name": "C# (.NET)",
   "dockerComposeFile": "docker-compose.yml",
   "service": "app",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   // Features to add to the dev container. More info: https://containers.dev/features.
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2.16.1": {}
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "dockerDashComposeVersion": "none",
+      "installDockerBuildx": false,
+      "installDockerComposeSwitch": false
+    }
   },
   "containerEnv": {
     // handles some issues with Testcontainers networking in devcontainers (Docker-in-Docker)
     "TESTCONTAINERS_RYUK_DISABLED": "true",
-    "TESTCONTAINERS_HOST_OVERRIDE": "localhost"
+    "DOCKER_API_VERSION": "1.43"
   },
   // Configure tool-specific properties.
   "customizations": {
@@ -20,7 +24,6 @@
       "extensions": [
         "ms-dotnettools.csdevkit",
         "ms-ossdata.vscode-pgsql",
-        // "Codeium.codeium"
         "GitHub.copilot"
       ],
       "settings": {
