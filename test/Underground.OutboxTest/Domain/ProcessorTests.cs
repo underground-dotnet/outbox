@@ -37,21 +37,21 @@ public class ProcessorTests : DatabaseTest
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
-    private async Task RunBackgroundServiceAsync()
+    private async Task RunBackgroundServiceAsync(CancellationToken cancellationToken)
     {
         var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
-            await service.StartAsync(CancellationToken.None);
+            await service.StartAsync(cancellationToken);
         }
     }
 
-    private async Task StopBackgroundServiceAsync()
+    private async Task StopBackgroundServiceAsync(CancellationToken cancellationToken)
     {
         var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
-            await service.StopAsync(CancellationToken.None);
+            await service.StopAsync(cancellationToken);
         }
     }
 
@@ -67,13 +67,13 @@ public class ProcessorTests : DatabaseTest
         await using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
         await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
         await transaction.CommitAsync(TestContext.Current.CancellationToken);
-        await RunBackgroundServiceAsync();
+        await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
 
         // Assert
         // due to a race condition with starting the BackgroundService, we need to wait for the handler to be called
         SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(3));
         Assert.Single(ExampleMessageHandler.CalledWith);
-        await StopBackgroundServiceAsync();
+        await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
