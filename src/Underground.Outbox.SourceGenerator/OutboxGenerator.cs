@@ -130,7 +130,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 #pragma warning disable MA0006 // Use string.Equals instead of Equals operator
         bool hasMarker = assembly.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == MarkerAttributeFullName);
-#pragma warning restore MA0006 // Implement the functionality instead of throwing NotImplementedException
+#pragma warning restore MA0006 // Use string.Equals instead of Equals operator
 
         if (!hasMarker)
             return [];
