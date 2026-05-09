@@ -34,19 +34,14 @@ internal sealed class SynchronousProcessor<TEntity>(
                 _processingTCS = new TaskCompletionSource<bool>();
                 _ = StartAsync(cancellationToken);
             }
-            else if (!_processingTCS.Task.IsCompleted)
-            {
-                // still running
-                return _processingTCS.Task;
-            }
-            else
+            else if (_processingTCS.Task.IsCompleted)
             {
                 // completed, start new run
                 _processingTCS = new TaskCompletionSource<bool>();
                 ScheduleProcessingRun();
             }
-        }
 
-        return _processingTCS.Task;
+            return _processingTCS.Task;
+        }
     }
 }
