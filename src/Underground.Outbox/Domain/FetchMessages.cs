@@ -8,6 +8,7 @@ using Npgsql;
 using Underground.Outbox.Data;
 using System.Data.Common;
 using Microsoft.Extensions.Logging;
+using System.Data;
 
 namespace Underground.Outbox.Domain;
 
@@ -22,7 +23,9 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         var sql = SqlByModel.GetValue(dbContext.Model, static model => BuildSql(model));
 
         var connection = dbContext.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open)
+        var needsOpen = connection.State != ConnectionState.Open;
+
+        if (needsOpen)
         {
             await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -56,6 +59,13 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             // another processor is already handling messages for this partition
             LogCouldNotAcquireLock(typeof(TEntity).Name, partition, ex);
             return [];
+        }
+        finally
+        {
+            if (needsOpen)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
         }
     }
 
