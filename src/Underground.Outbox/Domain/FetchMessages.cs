@@ -54,7 +54,7 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         catch (PostgresException ex) when (string.Equals(ex.SqlState, "55P03", StringComparison.Ordinal)) // lock_not_available
         {
             // another processor is already handling messages for this partition
-            LogCouldNotAcquireLock(partition, ex);
+            LogCouldNotAcquireLock(typeof(TEntity).Name, partition, ex);
             return [];
         }
     }
@@ -68,15 +68,25 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         var fullTableName = string.IsNullOrEmpty(schema) ? $"\"{tableName}\"" : $"\"{schema}\".\"{tableName}\"";
         var tableIdentifier = StoreObjectIdentifier.Table(tableName, schema);
 
-        var processedAtColumn = entityType.FindProperty(nameof(IMessage.ProcessedAt))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.ProcessedAt)} not found in entity type {typeof(TEntity)}.");
-        var partitionKeyColumn = entityType.FindProperty(nameof(IMessage.PartitionKey))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.PartitionKey)} not found in entity type {typeof(TEntity)}.");
         var idColumn = entityType.FindProperty(nameof(IMessage.Id))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.Id)} not found in entity type {typeof(TEntity)}.");
+        var eventIdColumn = entityType.FindProperty(nameof(IMessage.EventId))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.EventId)} not found in entity type {typeof(TEntity)}.");
+        var createdAtColumn = entityType.FindProperty(nameof(IMessage.CreatedAt))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.CreatedAt)} not found in entity type {typeof(TEntity)}.");
+        var typeColumn = entityType.FindProperty(nameof(IMessage.Type))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.Type)} not found in entity type {typeof(TEntity)}.");
+        var partitionKeyColumn = entityType.FindProperty(nameof(IMessage.PartitionKey))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.PartitionKey)} not found in entity type {typeof(TEntity)}.");
+        var dataColumn = entityType.FindProperty(nameof(IMessage.Data))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.Data)} not found in entity type {typeof(TEntity)}.");
+        var retryCountColumn = entityType.FindProperty(nameof(IMessage.RetryCount))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.RetryCount)} not found in entity type {typeof(TEntity)}.");
+        var processedAtColumn = entityType.FindProperty(nameof(IMessage.ProcessedAt))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.ProcessedAt)} not found in entity type {typeof(TEntity)}.");
 
         return $"""
-            SELECT "{idColumn}", event_id, created_at, type, "{partitionKeyColumn}", data, retry_count, "{processedAtColumn}"
+            SELECT "{idColumn}", "{eventIdColumn}", "{createdAtColumn}", "{typeColumn}", "{partitionKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
             FROM {fullTableName}
             WHERE "{processedAtColumn}" IS NULL
             AND "{partitionKeyColumn}" = @partition
@@ -90,13 +100,13 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
 
     [LoggerMessage(
             EventId = 1,
-            Level = LogLevel.Debug,
+            Level = LogLevel.Information,
             Message = "Executing SQL to fetch messages for partition {Partition}: {Sql}")]
     private partial void LogFetchSql(string Partition, string Sql);
 
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Debug,
-        Message = "Could not acquire lock for partition {Partition}, skipping processing")]
-    private partial void LogCouldNotAcquireLock(string Partition, Exception exception);
+        Message = "Could not acquire lock for {Type} partition {Partition}, skipping processing")]
+    private partial void LogCouldNotAcquireLock(string Type, string Partition, Exception exception);
 }
