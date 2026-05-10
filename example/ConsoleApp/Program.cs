@@ -17,9 +17,11 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 var postgreSqlContainer = new PostgreSqlBuilder("postgres:18.1").Build();
 await postgreSqlContainer.StartAsync();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
-    options.UseNpgsql(postgreSqlContainer.GetConnectionString());
+    options
+        .UseNpgsql(postgreSqlContainer.GetConnectionString())
+        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
 });
 
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>
@@ -27,33 +29,35 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
     cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
         .OnException<InvalidOperationException>().Discard();
+
+    cfg.ProcessingDelayMilliseconds = 50000;
 });
-builder.Services.AddInboxServices<AppDbContext>(cfg =>
-{
-    cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
-});
+// builder.Services.AddInboxServices<AppDbContext>(cfg =>
+// {
+//     cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
+// });
 
 IHost host = builder.Build();
 
 var outbox = host.Services.GetRequiredService<IOutbox>();
-var inbox = host.Services.GetRequiredService<IInbox>();
+// var inbox = host.Services.GetRequiredService<IInbox>();
 var dbContext = host.Services.GetRequiredService<AppDbContext>();
 await dbContext.Database.EnsureCreatedAsync();
 
 await using (var transaction = await dbContext.Database.BeginTransactionAsync())
 {
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < 1; i++)
     {
         var partition = (i % 3).ToString();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"partition {partition}: {i}"), partition);
         await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
 
-        var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
-        await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
+        // var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
+        // await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
     }
 
-    var secondMessage = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage("Test Message"));
-    await outbox.AddMessageAsync(dbContext, secondMessage, CancellationToken.None);
+    // var secondMessage = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage("Test Message"));
+    // await outbox.AddMessageAsync(dbContext, secondMessage, CancellationToken.None);
 
     await transaction.CommitAsync();
 }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 
 using Testcontainers.PostgreSql;
 
+using Underground.Outbox;
 using Underground.Outbox.Data;
 using Underground.OutboxTest.TestHandler;
 
@@ -17,8 +18,8 @@ public class TestDbContext : DbContext, IOutboxDbContext
     {
     }
 
-    public TestDbContext(PostgreSqlContainer container, ILoggerFactory loggerFactory) : base(
-        ConfigureDbContext(new DbContextOptionsBuilder<TestDbContext>(), container, loggerFactory).Options
+    public TestDbContext(PostgreSqlContainer container, ILoggerFactory loggerFactory, ProcessMessagesOnSaveChangesInterceptor? interceptor) : base(
+        ConfigureDbContext(new DbContextOptionsBuilder<TestDbContext>(), container, loggerFactory, interceptor).Options
     )
     {
     }
@@ -26,12 +27,19 @@ public class TestDbContext : DbContext, IOutboxDbContext
     public static DbContextOptionsBuilder ConfigureDbContext(
         DbContextOptionsBuilder options,
         PostgreSqlContainer container,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        ProcessMessagesOnSaveChangesInterceptor? interceptor
+    )
     {
         var builder = options
             .UseNpgsql(container.GetConnectionString())
             .UseLoggerFactory(loggerFactory)
             .EnableSensitiveDataLogging();
+
+        if (interceptor != null)
+        {
+            builder.AddInterceptors(interceptor);
+        }
 
         return builder;
     }

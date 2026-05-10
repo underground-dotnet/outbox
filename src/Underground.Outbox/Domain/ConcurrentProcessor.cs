@@ -19,7 +19,7 @@ internal partial class ConcurrentProcessor<TEntity>(
     private readonly ServiceConfiguration<TEntity> _config = config;
 
     // used to trigger processing runs, making sure only a limited number of runs can be queued
-    private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(2)
+    private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
         SingleReader = true,
@@ -35,12 +35,13 @@ internal partial class ConcurrentProcessor<TEntity>(
     });
 
     // called only on startup in the BackgroundWorker
-    internal async Task StartAsync(CancellationToken cancellationToken)
+    internal virtual async Task StartAsync(CancellationToken cancellationToken)
     {
         CreateWorkers(cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested)
         {
+            _logger.LogInformation("!!!!Scheduling processing run from while loop");
             ScheduleProcessingRun();
             await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken).ConfigureAwait(false);
         }
@@ -48,10 +49,12 @@ internal partial class ConcurrentProcessor<TEntity>(
 
     internal void ScheduleProcessingRun()
     {
-        _triggerChannel.Writer.TryWrite(1);
+        _logger.LogInformation("!!!Scheduling processing run");
+        var success = _triggerChannel.Writer.TryWrite(1);
+        _logger.LogInformation($"!!!Scheduling success {success}");
     }
 
-    private void CreateWorkers(CancellationToken cancellationToken)
+    protected void CreateWorkers(CancellationToken cancellationToken)
     {
         var triggerWorker = CreateTriggerWorker(cancellationToken);
 
@@ -111,6 +114,7 @@ internal partial class ConcurrentProcessor<TEntity>(
 
                 if (messagesProcessed)
                 {
+                    _logger.LogInformation("!!!!Maybe still messages left");
                     // re-enqueue the partition for further processing, because there might be more messages
                     _partitionsChannel.Writer.TryWrite(partitionKey);
                 }
