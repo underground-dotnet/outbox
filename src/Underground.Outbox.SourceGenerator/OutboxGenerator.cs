@@ -11,7 +11,7 @@ namespace Underground.Outbox.SourceGenerator;
 [Generator]
 public sealed class OutboxGenerator : IIncrementalGenerator
 {
-    // when using CSharpCompilation vs CompilationProvider we loose some information from the type. Therefore we need to use < instead of <T>.
+    // when using CSharpCompilation vs CompilationProvider we lose some information from the type. Therefore we need to use < instead of <T>.
     private const string OutboxHandlerInterface = "Underground.Outbox.IOutboxMessageHandler<";
     private const string InboxHandlerInterface = "Underground.Outbox.IInboxMessageHandler<";
     private const string MarkerAttributeFullName = "Underground.Outbox.Attributes.ContainsOutboxHandlersAttribute";
@@ -127,10 +127,8 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             return [];
 
         // Only scan assemblies marked with [ContainsOutboxHandlers]
-#pragma warning disable MA0006 // Use string.Equals instead of Equals operator
         bool hasMarker = assembly.GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == MarkerAttributeFullName);
-#pragma warning restore MA0006 // Use string.Equals instead of Equals operator
+            .Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), MarkerAttributeFullName, StringComparison.Ordinal));
 
         if (!hasMarker)
             return [];

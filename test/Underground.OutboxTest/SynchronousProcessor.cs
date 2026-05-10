@@ -13,7 +13,7 @@ internal sealed class SynchronousProcessor<TEntity>(
     ServiceConfiguration<TEntity> config
 ) : ConcurrentProcessor<TEntity>(logger, scopeFactory, config) where TEntity : class, IMessage
 {
-    private TaskCompletionSource<bool>? _processingTCS = null;
+    private TaskCompletionSource<bool>? _processingTCS;
     private readonly Lock _lock = new();
 
     protected override void NoMessagesForProcessingFound()
@@ -32,7 +32,18 @@ internal sealed class SynchronousProcessor<TEntity>(
             {
                 // only executed on first call
                 _processingTCS = new TaskCompletionSource<bool>();
-                _ = StartAsync(cancellationToken);
+                _ = StartAsync(cancellationToken).ContinueWith(t =>
+                    {
+                        if (t.IsFaulted)
+                        {
+                            lock (_lock)
+                            {
+                                _processingTCS?.SetException(t.Exception!);
+                            }
+                        }
+                    },
+                    TaskContinuationOptions.OnlyOnFaulted
+                );
             }
             else if (_processingTCS.Task.IsCompleted)
             {
