@@ -28,8 +28,7 @@ public class OutboxMessage : IMessage
     [Column("partition_key")]
     public string PartitionKey { get; init; }
 
-    // TODO: better to use jsonb here?
-    [Column("data")]
+    [Column("data", TypeName = "jsonb")]
     public string Data { get; init; }
 
     [Column("retry_count")]

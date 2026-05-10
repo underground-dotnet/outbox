@@ -122,6 +122,7 @@ internal partial class ConcurrentProcessor<TEntity>(
         }
     }
 
+    // locking right not is performed through the `FOR UPDATE NOWAIT` clause in `FetchMessages`
     private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
     {
         // use separate scope & context for each partition

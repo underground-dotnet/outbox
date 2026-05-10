@@ -1,10 +1,12 @@
 # Outbox Library
 
-The Outbox Library is a .NET Core library designed to simplify the implementation of the outbox pattern in your applications. The outbox pattern ensures reliable message delivery by storing messages in a database and processing them asynchronously, making it ideal for distributed systems and event-driven architectures.
+`Underground.Outbox` is a .NET library for the transactional outbox and inbox patterns on top of EF Core and PostgreSQL.
 
-## Transactional outbox
+It stores messages in the same database transaction as your business changes, then processes them in the background. The library is partition-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox.ProcessMessages()`.
 
-There are usually two different types of implementations when it comes to the outbox pattern:
+## How it works
+
+There are usually two common transactional outbox approaches:
 
 ### Using multiple transactions
 
@@ -22,18 +24,26 @@ For this library the single transaction approach was chosen. Messages in a batch
 
 ## Features
 
-- **EF Core**: This library is fully built on top of EF Core.
-- **Inbox and Outbox Support**: Provides interfaces and implementations for managing inbox and outbox messages.
-- **Transactional**: Message batches are processed within one transaction.
-- **Distributed Lock**: When multiple instances of the application are running then a distributed lock ensures that the outbox is only processed by a single conusmer.
-- **Error Handling**: Built-in exception handling for common scenarios.
-- **Source Generation**: Uses C# source generators to eliminate reflection overhead and improve performance.
+- **EF Core based**: built on top of EF Core abstractions and DbContexts.
+- **Outbox and inbox support**: both sides use the same processing model.
+- **Push-triggered processing**: you can call `IOutbox.ProcessMessages()` to schedule a run immediately after commit. You can use a dbcontext interceptor to automate this.
+- **Background processing**: hosted services also schedule processing runs on a configurable delay.
+- **Partition-aware parallelism**: different partitions can be processed concurrently.
+- **Multi-instance safe**: multiple servers can process the same outbox table without duplicating work.
+- **Savepoint-based error handling**: failed messages are rolled back without undoing previously successful messages in the same batch.
+- **Retention cleanup**: processed messages are deleted automatically after a configurable retention period.
+- **Source generation**: avoids runtime reflection for handler dispatch and DI wiring.
 
-## Getting Started
+## Requirements
+
+- .NET / EF Core application
+- PostgreSQL via `Npgsql`
+
+The current implementation relies on PostgreSQL row locking with `FOR UPDATE NOWAIT` when fetching messages.
+
+## Getting started
 
 ### Installation
-
-To use the Underground Outbox Library in your project, add the NuGet packages:
 
 ```bash
 dotnet add package Underground.Outbox
@@ -71,22 +81,47 @@ dotnet add package Underground.Outbox.SourceGenerator
 
 3. **Handle Messages**: Create message handlers by implementing `IInboxMessageHandler` and `IOutboxMessageHandler`.
 
-### Message Metadata
+### Add messages
 
-The handlers receive a `MessageMetadata` parameter containing:
+Adding to the outbox requires an active database transaction. That is intentional: the outbox write must commit together with your business data.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `EventId` | `Guid` | Unique identifier for the message |
-| `PartitionKey` | `string` | Partition key used for message routing |
-| `RetryCount` | `int` | Number of times this message has been retried (0 initially) |
+```csharp
+await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
+await outbox.AddMessageAsync(
+    dbContext,
+    new OutboxMessage(
+        Guid.NewGuid(),
+        DateTime.UtcNow,
+        new ExampleMessage("Hello, World!"),
+        partitionKey: "customer-123")
+);
+
+await transaction.CommitAsync();
+```
+
+## Message model
+
+Both `OutboxMessage` and `InboxMessage` contain:
+
+| Property | Description |
+|----------|-------------|
+| `EventId` | Unique event identifier. A unique index prevents duplicates for the same event id. |
+| `CreatedAt` | When the message was written. |
+| `Type` | CLR type name of the serialized payload. |
+| `PartitionKey` | Logical partition used for concurrency and ordering. Defaults to `"default"`. |
+| `Data` | Serialized message payload. |
+| `RetryCount` | Number of failed processing attempts. |
+| `ProcessedAt` | Null until the message is completed successfully. |
+
+Handlers also receive `MessageMetadata` with `EventId`, `PartitionKey`, and `RetryCount`.
 
 ```csharp
 using Underground.Outbox;
 
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
-    public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+    public Task HandleAsync( ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
         var eventId = metadata.EventId;
         var partitionKey = metadata.PartitionKey;
@@ -98,18 +133,39 @@ public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 }
 ```
 
-### Usage
+## Push-based processing
 
-1. **Add Messages to the Outbox**:
+This library supports push-based processing through `IOutbox.ProcessMessages()`.
 
-    ```csharp
-    using var transaction = await dbContext.Database.BeginTransactionAsync();
-    await outbox.AddMessageAsync(dbContext, new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage { Content = "Hello, World!" }));
-    await transaction.CommitAsync();
-    ```
-2. **The background processor will call the handlers during the next run.**
+That means the producer side can add messages, commit the transaction, and then trigger processing right away instead of waiting for the next scheduled cycle.
 
-### Error Handling
+## Partitions
+
+Partitions are central to how concurrency works.
+
+- Each message has a `PartitionKey`.
+- The processor first queries the distinct partitions that still have unprocessed messages.
+- Different partitions can be handled in parallel up to `ParallelProcessingOfPartitions`.
+- Within one partition, messages are fetched ordered by `id` and processed in batches.
+
+Use the partition key to group messages that must stay ordered relative to each other, for example per aggregate, account, or customer.
+
+If you do not care about partition-local ordering, the default partition key is `"default"`, but that means all messages compete in the same partition and you lose most of the parallelism.
+
+## Multiple servers and duplicate prevention
+
+The outbox can run on multiple servers against the same database.
+
+It does not use a single global distributed lock. Instead, when a worker fetches messages for a partition it uses PostgreSQL `FOR UPDATE NOWAIT` row locking:
+
+- one worker locks the next batch of rows for that partition
+- another worker or server trying to fetch the same partition gets a lock failure
+- that lock failure is treated as "someone else is already processing this partition"
+- the second worker skips that partition and moves on
+
+This is the main duplicate-prevention mechanism. Combined with marking successful messages via `ProcessedAt`, it prevents concurrent processors from handling the same rows twice.
+
+## Error handling
 
 Messages are processed inside the processor transaction, with a savepoint created for each message. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented, and processing of the current batch stops. Messages that were handled successfully earlier in the same batch remain processed.
 
@@ -128,9 +184,30 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 
 `Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies are scoped to the specific handler and message type registration they are added to, so a handler that processes multiple message types can use different policies for each message type.
 
-## Example
+If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount`.
 
-Run example:
+## Cleanup and retention
+
+Processed inbox and outbox messages are not kept forever.
+
+- `ProcessedMessageRetention` controls how long successfully processed messages are retained.
+- `CleanupDelaySeconds` controls how often the cleanup hosted service runs.
+
+Cleanup deletes rows where `ProcessedAt` is older than the configured retention cutoff.
+
+## Configuration reference
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `BatchSize` | `5` | Number of messages processed in one transaction per partition batch. |
+| `ParallelProcessingOfPartitions` | `4` | Number of partitions that can be processed concurrently. |
+| `ProcessingDelayMilliseconds` | `4000` | Delay between scheduled processing cycles. |
+| `ProcessedMessageRetention` | `7 days` | How long processed rows are kept before cleanup. |
+| `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
+
+If you want one transaction per message, set `BatchSize = 1`.
+
+## Example
 
 ```bash
 dotnet run --project example/ConsoleApp/
