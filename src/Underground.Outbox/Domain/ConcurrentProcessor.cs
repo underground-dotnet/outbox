@@ -41,7 +41,6 @@ internal partial class ConcurrentProcessor<TEntity>(
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            _logger.LogInformation("!!!!Scheduling processing run from while loop");
             ScheduleProcessingRun();
             await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken).ConfigureAwait(false);
         }
@@ -49,9 +48,7 @@ internal partial class ConcurrentProcessor<TEntity>(
 
     internal void ScheduleProcessingRun()
     {
-        _logger.LogInformation("!!!Scheduling processing run");
-        var success = _triggerChannel.Writer.TryWrite(1);
-        _logger.LogInformation($"!!!Scheduling success {success}");
+        _triggerChannel.Writer.TryWrite(1);
     }
 
     protected void CreateWorkers(CancellationToken cancellationToken)
@@ -114,7 +111,6 @@ internal partial class ConcurrentProcessor<TEntity>(
 
                 if (messagesProcessed)
                 {
-                    _logger.LogInformation("!!!!Maybe still messages left");
                     // re-enqueue the partition for further processing, because there might be more messages
                     _partitionsChannel.Writer.TryWrite(partitionKey);
                 }
