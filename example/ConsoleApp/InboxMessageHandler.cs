@@ -1,14 +1,18 @@
 
+using Microsoft.Extensions.Logging;
+
 using Underground.Outbox;
 using Underground.Outbox.Data;
 
 namespace ConsoleApp;
 
-public class InboxMessageHandler : IInboxMessageHandler<ExampleMessage>
+#pragma warning disable CA1848 // Use the LoggerMessage delegates
+public class InboxMessageHandler(ILogger<InboxMessageHandler> logger) : IInboxMessageHandler<ExampleMessage>
 {
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"received inbox: messageId: {metadata.EventId}, partition: {metadata.PartitionKey}");
+        logger.LogInformation("received inbox: messageId: {EventId}, partition: {PartitionKey}", metadata.EventId, metadata.PartitionKey);
         return Task.CompletedTask;
     }
 }
+#pragma warning restore CA1848 // Use the LoggerMessage delegates

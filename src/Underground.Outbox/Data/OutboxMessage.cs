@@ -37,6 +37,18 @@ public class OutboxMessage : IMessage
     [Column("processed_at")]
     public DateTime? ProcessedAt { get; set; }
 
+    internal OutboxMessage(long id, Guid eventId, DateTime createdAt, string type, string partitionKey, string data, int retryCount, DateTime? processedAt)
+    {
+        Id = id;
+        EventId = eventId;
+        CreatedAt = createdAt;
+        Type = type;
+        PartitionKey = partitionKey;
+        Data = data;
+        RetryCount = retryCount;
+        ProcessedAt = processedAt;
+    }
+
     public OutboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
     {
         EventId = eventId;

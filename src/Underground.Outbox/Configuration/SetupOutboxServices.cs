@@ -23,6 +23,7 @@ public static class SetupOutboxServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToOutbox>();
         services.AddScoped<IOutbox, OutboxImpl>();
+        services.AddScoped<FetchMessages<OutboxMessage>, FetchOutboxMessages>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
     }
@@ -40,6 +41,7 @@ public static class SetupOutboxServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, InboxImpl>();
+        services.AddScoped<FetchMessages<InboxMessage>, FetchInboxMessages>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
     }
@@ -56,7 +58,6 @@ public static class SetupOutboxServices
         services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
 
         services.AddScoped<FetchPartitions<TEntity>>();
-        services.AddScoped<FetchMessages<TEntity>>();
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
@@ -65,6 +66,7 @@ public static class SetupOutboxServices
         services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
         services.AddHostedService<CleanupBackgroundService<TEntity>>();
+        services.TryAddScoped<ProcessMessagesOnSaveChangesInterceptor>();
 
         // services.AddSingleton<IDistributedLockProvider>(sp =>
         // {

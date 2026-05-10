@@ -17,9 +17,11 @@ HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 var postgreSqlContainer = new PostgreSqlBuilder("postgres:18.1").Build();
 await postgreSqlContainer.StartAsync();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
-    options.UseNpgsql(postgreSqlContainer.GetConnectionString());
+    options
+        .UseNpgsql(postgreSqlContainer.GetConnectionString())
+        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
 });
 
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>

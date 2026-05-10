@@ -4,6 +4,7 @@ public interface IMessage
 {
     public long Id { get; }
     public Guid EventId { get; init; }
+    public DateTime CreatedAt { get; }
     public string Type { get; }
     public string PartitionKey { get; }
     public string Data { get; }

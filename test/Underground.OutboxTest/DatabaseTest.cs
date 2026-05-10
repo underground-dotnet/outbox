@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Testcontainers.PostgreSql;
 using Testcontainers.Xunit;
 
+using Underground.Outbox;
+
 [assembly: CaptureConsole]
 
 namespace Underground.OutboxTest;
@@ -17,9 +19,9 @@ public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : Containe
     }
 
     // used only through direct access in the tests. We could also just get it from the service provider.
-    public TestDbContext CreateDbContext()
+    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor? interceptor = null)
     {
-        var dbContext = new TestDbContext(Container, _loggerFactory);
+        var dbContext = new TestDbContext(Container, _loggerFactory, interceptor);
         dbContext.Database.EnsureCreated();
         return dbContext;
     }
