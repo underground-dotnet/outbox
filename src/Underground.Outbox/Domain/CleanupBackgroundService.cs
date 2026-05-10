@@ -7,7 +7,7 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class CleanupBackgroundService<TEntity>(
+internal sealed partial class CleanupBackgroundService<TEntity>(
     IServiceScopeFactory scopeFactory,
     ServiceConfiguration<TEntity> config,
     ILogger<CleanupBackgroundService<TEntity>> logger
@@ -34,20 +34,24 @@ internal sealed class CleanupBackgroundService<TEntity>(
                 var cleanup = scope.ServiceProvider.GetRequiredService<DeleteProcessedMessages<TEntity>>();
                 var deletedCount = await cleanup.ExecuteAsync(stoppingToken).ConfigureAwait(false);
 
-                logger.LogInformation(
-                    "Deleted {DeletedCount} processed {MessageType} messages.",
-                    deletedCount,
-                    typeof(TEntity).Name
-                );
+                LogDeletedMessages(deletedCount, typeof(TEntity).Name);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(
-                ex,
-                "Cleanup failed for processed {MessageType} messages.",
-                typeof(TEntity).Name
-            );
+            LogCleanupFailed(typeof(TEntity).Name, ex);
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Deleted {DeletedCount} processed {MessageType} messages.")]
+    private partial void LogDeletedMessages(int deletedCount, string messageType);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Cleanup failed for processed {MessageType} messages.")]
+    private partial void LogCleanupFailed(string messageType, Exception exception);
 }

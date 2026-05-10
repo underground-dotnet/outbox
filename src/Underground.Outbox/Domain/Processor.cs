@@ -9,7 +9,7 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class Processor<TEntity>(
+internal sealed partial class Processor<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
     IDbContext dbContext,
     ILogger<Processor<TEntity>> logger,
@@ -40,7 +40,7 @@ internal sealed class Processor<TEntity>(
                 return false;
 
             }
-            _logger.LogInformation("Processing {Count} messages in {Type} for partition '{Partition}'", numberOfMessages, typeof(TEntity), partition);
+            LogProcessingMessages(numberOfMessages, typeof(TEntity).ToString(), partition);
 
             var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken).ConfigureAwait(false);
 
@@ -80,12 +80,12 @@ internal sealed class Processor<TEntity>(
             }
             catch (MessageHandlerException ex)
             {
-                _logger.LogError(ex, "Error processing message {MessageId} in handler", message.Id);
+                LogMessageHandlerError(message.Id, ex);
                 exception = ex;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Error processing message {MessageId}.", message.Id);
+                LogMessageProcessingError(message.Id, ex);
                 exception = ex;
             }
 
@@ -102,7 +102,7 @@ internal sealed class Processor<TEntity>(
 
                 // TODO: decide if max retry count is reached or if a retry makes sense
                 // TODO: remove or move to processHandlerException
-                await IncrementRetryCountAsync(dbContext, message).ConfigureAwait(false);
+                await IncrementRetryCountAsync(dbContext, message, cancellationToken).ConfigureAwait(false);
 
                 // Break out of the foreach loop (stop processing on first failure)
                 break;
@@ -112,10 +112,32 @@ internal sealed class Processor<TEntity>(
         return successfulIds;
     }
 
-    private static async Task IncrementRetryCountAsync(IDbContext dbContext, IMessage message)
+    private static async Task IncrementRetryCountAsync(IDbContext dbContext, IMessage message, CancellationToken cancellationToken)
     {
         await dbContext.Set<TEntity>()
             .Where(m => m.Id == message.Id)
-            .ExecuteUpdateAsync(update => update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1)).ConfigureAwait(false);
+            .ExecuteUpdateAsync(update =>
+                update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1),
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Processing {Count} messages in {Type} for partition '{Partition}'")]
+    private partial void LogProcessingMessages(int count, string type, string partition);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Error processing message {MessageId} in handler")]
+    private partial void LogMessageHandlerError(long messageId, Exception exception);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Error,
+        Message = "Error processing message {MessageId}.")]
+    private partial void LogMessageProcessingError(long messageId, Exception exception);
 }
