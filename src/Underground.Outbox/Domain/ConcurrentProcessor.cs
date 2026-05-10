@@ -37,8 +37,7 @@ internal class ConcurrentProcessor<TEntity>(
     // called only on startup in the BackgroundWorker
     internal async Task StartAsync(CancellationToken cancellationToken)
     {
-        // TODO: monitor workers?
-        _ = await CreateWorkers(cancellationToken).ConfigureAwait(false);
+        CreateWorkers(cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -52,7 +51,7 @@ internal class ConcurrentProcessor<TEntity>(
         _triggerChannel.Writer.TryWrite(1);
     }
 
-    private async Task<IEnumerable<Task>> CreateWorkers(CancellationToken cancellationToken)
+    private void CreateWorkers(CancellationToken cancellationToken)
     {
         var triggerWorker = CreateTriggerWorker(cancellationToken);
 
@@ -60,7 +59,19 @@ internal class ConcurrentProcessor<TEntity>(
                     .Select(_ => CreatePartitionWorker(cancellationToken))
                     .ToArray();
 
-        return [.. partitionsWorkers, triggerWorker];
+        List<Task> tasks = [.. partitionsWorkers, triggerWorker];
+        tasks.ForEach(t =>
+            // since we are not awaiting the tasks here, we need to log exceptions manually to avoid unobserved task exceptions
+            _ = t.ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        _logger.LogError(t.Exception, "Worker failed with an exception");
+                    }
+                },
+                TaskContinuationOptions.OnlyOnFaulted
+            )
+        );
     }
 
     private async Task CreateTriggerWorker(CancellationToken cancellationToken)
