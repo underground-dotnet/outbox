@@ -8,7 +8,7 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal class ConcurrentProcessor<TEntity>(
+internal partial class ConcurrentProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
     ServiceConfiguration<TEntity> config
@@ -66,7 +66,7 @@ internal class ConcurrentProcessor<TEntity>(
                 {
                     if (t.IsFaulted)
                     {
-                        _logger.LogError(t.Exception, "Worker failed with an exception");
+                        LogWorkerFailed(t.Exception);
                     }
                 },
                 TaskContinuationOptions.OnlyOnFaulted
@@ -95,7 +95,7 @@ internal class ConcurrentProcessor<TEntity>(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Error fetching partitions for processing");
+                LogFetchPartitionsError(ex);
                 NoMessagesForProcessingFound();
             }
         }
@@ -117,7 +117,7 @@ internal class ConcurrentProcessor<TEntity>(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Error processing partition {PartitionKey}", partitionKey);
+                LogPartitionProcessingError(partitionKey, ex);
             }
         }
     }
@@ -134,4 +134,22 @@ internal class ConcurrentProcessor<TEntity>(
     {
         // only used to improve test setup with async processes
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Error,
+        Message = "Worker failed with an exception")]
+    private partial void LogWorkerFailed(Exception exception);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Error,
+        Message = "Error fetching partitions for processing")]
+    private partial void LogFetchPartitionsError(Exception exception);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Error,
+        Message = "Error processing partition {PartitionKey}")]
+    private partial void LogPartitionProcessingError(string partitionKey, Exception exception);
 }

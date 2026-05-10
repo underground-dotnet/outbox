@@ -6,7 +6,7 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.ExceptionHandlers;
 
-internal class ProcessExceptionFromHandler<TEntity>(
+internal partial class ProcessExceptionFromHandler<TEntity>(
     ServiceConfiguration<TEntity> config,
     IServiceProvider serviceProvider,
     ILogger<ProcessExceptionFromHandler<TEntity>> logger
@@ -22,16 +22,20 @@ internal class ProcessExceptionFromHandler<TEntity>(
 
         foreach (var policy in policies)
         {
-            logger.LogInformation(
-                "Executing exception policy {PolicyType} for handler {HandlerType} and exception {ExceptionType} on message {MessageId}",
+            LogExecutingExceptionPolicy(
                 policy.GetType().Name,
                 ex.HandlerType.Name,
                 ex.InnerException?.GetType().Name,
-                message.Id
-            );
+                message.Id);
 
             var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
             await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    [LoggerMessage(
+        EventId = 1,
+        Level = LogLevel.Information,
+        Message = "Executing exception policy {PolicyType} for handler {HandlerType} and exception {ExceptionType} on message {MessageId}")]
+    private partial void LogExecutingExceptionPolicy(string policyType, string handlerType, string? exceptionType, long messageId);
 }

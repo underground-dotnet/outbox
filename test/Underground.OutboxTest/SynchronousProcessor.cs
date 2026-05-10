@@ -31,14 +31,15 @@ internal sealed class SynchronousProcessor<TEntity>(
             if (_processingTCS is null)
             {
                 // only executed on first call
-                _processingTCS = new TaskCompletionSource<bool>();
+                var currentTCS = new TaskCompletionSource<bool>();
+                _processingTCS = currentTCS;
                 _ = StartAsync(cancellationToken).ContinueWith(t =>
                     {
                         if (t.IsFaulted)
                         {
                             lock (_lock)
                             {
-                                _processingTCS?.SetException(t.Exception!);
+                                currentTCS.SetException(t.Exception!);
                             }
                         }
                     },
