@@ -139,7 +139,7 @@ This library supports push-based processing through `IOutbox.ProcessMessages()`.
 
 That means the producer side can add messages, commit the transaction, and then trigger processing right away instead of waiting for the next scheduled cycle.
 
-If you want this to happen automatically after `SaveChanges`, register the built-in EF Core interceptor:
+If you want this to happen automatically after `transaction.CommitAsync()`, register the built-in EF Core interceptor:
 
 ```csharp
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
@@ -150,7 +150,7 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 });
 ```
 
-With that registration in place, a successful `SaveChanges` call will trigger `IOutbox.ProcessMessages()` and/or `IInbox.ProcessMessages()` when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work.
+With that registration in place, a successful `transaction.CommitAsync()` call will trigger `IOutbox.ProcessMessages()` and/or `IInbox.ProcessMessages()` when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work.
 
 ## Partitions
 

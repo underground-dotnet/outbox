@@ -24,9 +24,6 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            // set a long processing delay to ensure that processing is triggered by the interceptor, not by the background service
-            cfg.ProcessingDelayMilliseconds = 60 * 1000;
-
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
         });
 
