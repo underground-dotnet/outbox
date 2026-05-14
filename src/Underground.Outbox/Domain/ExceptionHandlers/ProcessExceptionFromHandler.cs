@@ -15,45 +15,7 @@ internal partial class ProcessExceptionFromHandler<TEntity>(
 {
     internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken = default)
     {
-        // var policies = new List<ExceptionPolicy<TEntity>>();
-        // var seenPolicies = new HashSet<(Type PolicyType, Type ExceptionType)>();
-
-        // void AddPolicies(IEnumerable<ExceptionPolicy<TEntity>> candidatePolicies)
-        // {
-        //     foreach (var policy in candidatePolicies.Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException)))
-        //     {
-        //         var key = (policy.GetType(), policy.ExceptionType);
-        //         if (seenPolicies.Add(key))
-        //         {
-        //             policies.Add(policy);
-        //         }
-        //     }
-        // }
-
-        // AddPolicies(config.Registrations
-        //     .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
-        //     .SelectMany(r => r.ExceptionPolicies));
-        // AddPolicies(config.Policies.ExceptionPolicies);
-
-        // parentEx und childEx, sollen beide greifen?
-        var dict = new Dictionary<Type, ExceptionPolicy<TEntity>>();
-
-        var policies = config.Registrations
-            .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
-            .SelectMany(r => r.ExceptionPolicies)
-            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
-            .ToList();
-
-        config.GlobalPolicies.ExceptionPolicies
-            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
-            .ToList()
-            .ForEach(p =>
-            {
-                if (!policies.Any(existingPolicy => existingPolicy.GetType() == p.GetType() && existingPolicy.ExceptionType == p.ExceptionType))
-                {
-                    policies.Add(p);
-                }
-            });
+        var policies = GetPoliciesForException(ex);
 
         foreach (var policy in policies)
         {
@@ -66,6 +28,36 @@ internal partial class ProcessExceptionFromHandler<TEntity>(
             var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
             await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private List<ExceptionPolicy<TEntity>> GetPoliciesForException(MessageHandlerException ex)
+    {
+        // make sure every policy is executed only once, even if it matches both handler-specific and global policies
+        var dict = new Dictionary<Type, ExceptionPolicy<TEntity>>();
+
+        var policies = config.Registrations
+            // Filter filter policies for the handler and message type of the exception
+            .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
+            .SelectMany(r => r.ExceptionPolicies)
+            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
+            .ToList();
+
+        policies.AddRange(config.GlobalPolicies.ExceptionPolicies
+            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException)));
+
+        foreach (var policy in policies)
+        {
+            // Get the generic base type which ignores the specific exception type, so that we can avoid adding the same policy twice.
+            var baseType = policy.GetType().BaseType?.GetGenericTypeDefinition();
+            if (baseType is null)
+            {
+                continue;
+            }
+
+            dict.TryAdd(baseType, policy);
+        }
+
+        return dict.Values.ToList();
     }
 
     [LoggerMessage(

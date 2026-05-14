@@ -19,6 +19,9 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
 
         _testOutputHelper = testOutputHelper;
+        ExampleMessageHandler.CalledWith.Clear();
+        ExampleMessageHandler.ObjectIds.Clear();
+
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
