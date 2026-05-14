@@ -8,6 +8,7 @@ using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
+using Underground.OutboxTest.TestPolicies;
 
 namespace Underground.OutboxTest.Domain;
 
@@ -305,6 +306,108 @@ public class ProcessorErrorTests : DatabaseTest
 
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DiscardMessagesOnGlobalExceptionPolicy()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.Policies.OnException<DataException>().Discard();
+
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
+        });
+
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task MessageHandlerPolicyOverwritesGlobalExceptionPolicy()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            // global policy will delete it
+            cfg.Policies.OnException<DataException>().Discard();
+
+            // message handler policy should prevent deletion
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+                .OnException<DataException>().MarkAsProcessed();
+        });
+
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddSingleton<MarkAsProcessedExceptionHandler<OutboxMessage>>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Single(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DuplicateExceptionPoliciesAreOnlyExecutedOnce()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.Policies.OnException<DataException>().MarkAsProcessed();
+
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+                .OnException<DataException>().MarkAsProcessed();
+        });
+
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddSingleton<MarkAsProcessedExceptionHandler<OutboxMessage>>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsProcessedExceptionHandler<OutboxMessage>>().CallCount);
     }
 
     [Fact]

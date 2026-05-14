@@ -2,13 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
+using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
 
-public static class SetupOutboxServices
+public static class SetupServices
 {
     public static void SetupInternalOutboxServices<TContext>(
         IServiceCollection services,
