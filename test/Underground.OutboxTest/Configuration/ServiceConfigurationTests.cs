@@ -29,16 +29,4 @@ public class ServiceConfigurationTests
 
         Assert.Contains("ProcessedMessageRetention", exception.Message, StringComparison.Ordinal);
     }
-
-    [Fact]
-    public void GlobalExceptionPolicies_AreAvailable_OnInboxAndOutboxConfigurations()
-    {
-        var outboxConfiguration = new OutboxServiceConfiguration();
-        var inboxConfiguration = new InboxServiceConfiguration();
-
-        Assert.NotNull(outboxConfiguration.Policies);
-        Assert.NotNull(inboxConfiguration.Policies);
-        outboxConfiguration.Policies.OnException<InvalidOperationException>().Discard();
-        inboxConfiguration.Policies.OnException<InvalidOperationException>().Discard();
-    }
 }

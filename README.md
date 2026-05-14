@@ -198,7 +198,7 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 });
 ```
 
-`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be scoped to a specific handler and message type registration, or configured globally through `cfg.Policies`. If both global and registration-specific policies match, the registration-specific policies run first.
+`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be scoped to a specific handler and message type registration, or configured globally through `cfg.Policies`. If both global and registration-specific policies match, the registration-specific policies win.
 
 If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount`.
 
