@@ -308,6 +308,37 @@ public class ProcessorErrorTests : DatabaseTest
     }
 
     [Fact]
+    public async Task DiscardMessagesOnGlobalExceptionPolicy()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            cfg.Policies.OnException<DataException>().Discard();
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
+        });
+
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task ExceptionPolicyOnlyAppliesToConfiguredMessageTypeForMultiMessageHandler()
     {
         // Arrange

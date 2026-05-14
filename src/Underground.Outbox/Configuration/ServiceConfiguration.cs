@@ -1,6 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
-
+using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Configuration.HandlerRegistrations;
+using Underground.Outbox.Configuration.Policies;
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Configuration;
@@ -31,6 +31,14 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public int CleanupDelaySeconds { get; set; } = 3600;
 
     internal readonly List<HandlerRegistration<TEntity>> Registrations = [];
+
+    internal readonly GlobalPolicyStore<TEntity> GlobalPolicies = new();
+    public PolicyBuilder<TEntity> Policies { get; }
+
+    protected ServiceConfiguration()
+    {
+        Policies = new PolicyBuilder<TEntity>(GlobalPolicies);
+    }
 
     internal void Validate()
     {

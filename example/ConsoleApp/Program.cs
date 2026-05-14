@@ -28,10 +28,13 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
     cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
-        .OnException<InvalidOperationException>().Discard();
+        .OnException<InvalidOperationException>().Discard()
+        .OnException<TimeoutException>().Discard();
 });
 builder.Services.AddInboxServices<AppDbContext>(cfg =>
 {
+    cfg.Policies.OnException<FileNotFoundException>().Discard();
+
     cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
 });
 

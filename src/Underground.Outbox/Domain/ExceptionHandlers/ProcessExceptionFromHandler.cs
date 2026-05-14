@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Configuration;
+using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
@@ -14,11 +15,45 @@ internal partial class ProcessExceptionFromHandler<TEntity>(
 {
     internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken = default)
     {
+        // var policies = new List<ExceptionPolicy<TEntity>>();
+        // var seenPolicies = new HashSet<(Type PolicyType, Type ExceptionType)>();
+
+        // void AddPolicies(IEnumerable<ExceptionPolicy<TEntity>> candidatePolicies)
+        // {
+        //     foreach (var policy in candidatePolicies.Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException)))
+        //     {
+        //         var key = (policy.GetType(), policy.ExceptionType);
+        //         if (seenPolicies.Add(key))
+        //         {
+        //             policies.Add(policy);
+        //         }
+        //     }
+        // }
+
+        // AddPolicies(config.Registrations
+        //     .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
+        //     .SelectMany(r => r.ExceptionPolicies));
+        // AddPolicies(config.Policies.ExceptionPolicies);
+
+        // parentEx und childEx, sollen beide greifen?
+        var dict = new Dictionary<Type, ExceptionPolicy<TEntity>>();
+
         var policies = config.Registrations
             .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
             .SelectMany(r => r.ExceptionPolicies)
             .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
             .ToList();
+
+        config.GlobalPolicies.ExceptionPolicies
+            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
+            .ToList()
+            .ForEach(p =>
+            {
+                if (!policies.Any(existingPolicy => existingPolicy.GetType() == p.GetType() && existingPolicy.ExceptionType == p.ExceptionType))
+                {
+                    policies.Add(p);
+                }
+            });
 
         foreach (var policy in policies)
         {

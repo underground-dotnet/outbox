@@ -326,7 +326,7 @@ public static class ConfigureOutboxServices
     ) where TContext : DbContext, IOutboxDbContext
     {
         services.AddScoped<IMessageDispatcher<OutboxMessage>, GeneratedDispatcher<OutboxMessage>>();
-        SetupOutboxServices.SetupInternalOutboxServices<TContext>(services, configuration);
+        SetupServices.SetupInternalOutboxServices<TContext>(services, configuration);
 
         return services;
     }
@@ -343,7 +343,7 @@ public static class ConfigureOutboxServices
     ) where TContext : DbContext, IInboxDbContext
     {
         services.AddScoped<IMessageDispatcher<InboxMessage>, GeneratedDispatcher<InboxMessage>>();
-        SetupOutboxServices.SetupInternalInboxServices<TContext>(services, configuration);
+        SetupServices.SetupInternalInboxServices<TContext>(services, configuration);
 
         return services;
     }
