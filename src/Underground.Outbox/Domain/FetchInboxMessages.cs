@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class FetchInboxMessages(IDbContext dbContext, ILogger<FetchMessages<InboxMessage>> logger) : FetchMessages<InboxMessage>(dbContext, logger)
+internal sealed class FetchInboxMessages(IDbContext dbContext, ILogger<FetchInboxMessages> logger) : FetchMessages<InboxMessage>(dbContext, logger)
 {
     protected override InboxMessage BuildEntityFromReader(DbDataReader reader) => new(
         id: reader.GetInt64(0),
