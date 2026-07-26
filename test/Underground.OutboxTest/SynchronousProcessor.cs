@@ -39,7 +39,7 @@ internal sealed class SynchronousProcessor<TEntity>(
                         {
                             lock (_lock)
                             {
-                                currentTCS.SetException(t.Exception!);
+                                currentTCS.SetException(t.Exception);
                             }
                         }
                     },
