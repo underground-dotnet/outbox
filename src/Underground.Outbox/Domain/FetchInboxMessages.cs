@@ -11,11 +11,12 @@ internal sealed class FetchInboxMessages(IDbContext dbContext, ILogger<FetchInbo
     protected override InboxMessage BuildEntityFromReader(DbDataReader reader) => new(
         id: reader.GetInt64(0),
         eventId: reader.GetGuid(1),
-        createdAt: reader.GetDateTime(2),
-        type: reader.GetString(3),
-        groupKey: reader.GetString(4),
-        data: reader.GetString(5),
-        retryCount: reader.GetInt32(6),
-        processedAt: reader.IsDBNull(7) ? null : reader.GetDateTime(7)
+        transactionId: reader.GetFieldValue<ulong>(2),
+        createdAt: reader.GetDateTime(3),
+        type: reader.GetString(4),
+        groupKey: reader.GetString(5),
+        data: reader.GetString(6),
+        retryCount: reader.GetInt32(7),
+        processedAt: reader.IsDBNull(8) ? null : reader.GetDateTime(8)
     );
 }

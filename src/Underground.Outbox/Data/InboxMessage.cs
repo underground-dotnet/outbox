@@ -8,7 +8,7 @@ namespace Underground.Outbox.Data;
 
 [Table("inbox")]
 [Index(nameof(EventId), IsUnique = true)]
-[Index(nameof(ProcessedAt), nameof(GroupKey))]
+[EntityTypeConfiguration(typeof(InboxMessageConfiguration))]
 public class InboxMessage : IMessage
 {
     [Column("id")]
@@ -18,6 +18,9 @@ public class InboxMessage : IMessage
     [Column("event_id")]
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid EventId { get; init; }
+
+    [Column("transaction_id")]
+    public ulong TransactionId { get; init; }
 
     [Column("created_at")]
     public DateTime CreatedAt { get; init; }
@@ -34,13 +37,14 @@ public class InboxMessage : IMessage
     [Column("retry_count")]
     public int RetryCount { get; set; } = 0;
 
-    [Column("processed_at")]
+    [Column(MessageColumns.ProcessedAt)]
     public DateTime? ProcessedAt { get; set; }
 
-    internal InboxMessage(long id, Guid eventId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime? processedAt)
+    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime? processedAt)
     {
         Id = id;
         EventId = eventId;
+        TransactionId = transactionId;
         CreatedAt = createdAt;
         Type = type;
         GroupKey = groupKey;

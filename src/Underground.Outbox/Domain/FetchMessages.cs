@@ -82,6 +82,8 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.Id)} not found in entity type {typeof(TEntity)}.");
         var eventIdColumn = entityType.FindProperty(nameof(IMessage.EventId))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.EventId)} not found in entity type {typeof(TEntity)}.");
+        var transactionIdColumn = entityType.FindProperty(nameof(IMessage.TransactionId))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.TransactionId)} not found in entity type {typeof(TEntity)}.");
         var createdAtColumn = entityType.FindProperty(nameof(IMessage.CreatedAt))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.CreatedAt)} not found in entity type {typeof(TEntity)}.");
         var typeColumn = entityType.FindProperty(nameof(IMessage.Type))?.GetColumnName(tableIdentifier)
@@ -95,12 +97,21 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         var processedAtColumn = entityType.FindProperty(nameof(IMessage.ProcessedAt))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.ProcessedAt)} not found in entity type {typeof(TEntity)}.");
 
+        // Ordering is by (transaction_id, id) rather than by id alone: identity values are handed out when a
+        // row is inserted, not when its transaction commits, so a transaction that starts later but commits
+        // first would otherwise have its message handled first.
+        //
+        // The settled filter withholds a message until no still-running transaction could yet insert an
+        // earlier one into its Group. It is safe to apply it here, before ordering, only because the sort key
+        // is (transaction_id, id): an unsettled row always sorts after every settled one, so excluding it can
+        // never promote a later message ahead of it. With id alone this would be a bug.
         return $"""
-            SELECT "{idColumn}", "{eventIdColumn}", "{createdAtColumn}", "{typeColumn}", "{groupKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
+            SELECT "{idColumn}", "{eventIdColumn}", "{transactionIdColumn}", "{createdAtColumn}", "{typeColumn}", "{groupKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
             FROM {fullTableName}
             WHERE "{processedAtColumn}" IS NULL
             AND "{groupKeyColumn}" = @groupKey
-            ORDER BY "{idColumn}"
+            AND "{transactionIdColumn}" < pg_snapshot_xmin(pg_current_snapshot())
+            ORDER BY "{transactionIdColumn}", "{idColumn}"
             LIMIT @batchSize
             FOR UPDATE NOWAIT
             """;

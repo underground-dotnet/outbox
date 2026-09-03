@@ -159,7 +159,8 @@ Groups are central to how concurrency works.
 - Each message has a `GroupKey`.
 - The processor first queries the distinct groups that still have unprocessed messages.
 - Different groups can be handled in parallel up to `MaxConcurrentGroups`.
-- Within one group, messages are fetched ordered by `id` and processed in batches.
+- Within one group, messages are fetched ordered by `(transaction_id, id)` and processed in batches.
+- A message becomes eligible only once no still-running transaction could still insert an earlier one into its group, so ordering reflects the order in which transactions started rather than the order in which messages were appended. See [ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md).
 
 Use the group key to group messages that must stay ordered relative to each other, for example per aggregate, account, or customer.
 
