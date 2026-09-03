@@ -9,7 +9,7 @@ poller, so it lands before any behaviour changes.
 **Blocked by:** 01 (adopt Group vocabulary). Sequencing rather than a functional dependency: both
 touch the same processor types.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The processor exposes a single-step operation that handles at most one unit of work and reports whether it did any.
 - [x] The background worker loop is expressed in terms of that operation.

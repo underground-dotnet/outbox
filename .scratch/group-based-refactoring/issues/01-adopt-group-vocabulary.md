@@ -7,7 +7,7 @@ differently; this exists so that every later ticket is written in the right voca
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The message interface, both message types, and the handler metadata record expose `GroupKey` in place of `PartitionKey`, and the storage column is renamed to match.
 - [x] The setting that caps how much work happens at once is named `MaxConcurrentGroups`.
