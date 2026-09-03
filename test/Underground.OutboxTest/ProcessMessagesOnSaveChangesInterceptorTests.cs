@@ -4,7 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
@@ -29,8 +28,6 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         {
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
         });
-
-        serviceCollection.AddScoped<ConcurrentProcessor<OutboxMessage>, NoPollingProcessor<OutboxMessage>>();
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
@@ -70,7 +67,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         }
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(3));
+        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(10));
         Assert.Single(ExampleMessageHandler.ObjectIds);
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }

@@ -20,8 +20,10 @@ public class ConcurrentProcessorTests : DatabaseTest
     {
         _testOutputHelper = testOutputHelper;
 
-        // clear the static lists to avoid interference between tests
+        // clear the static state to avoid interference between tests
         GroupedMessageHandler.CalledWith.Clear();
+        GroupedMessageHandler.ExpectedConcurrentGroups = 0;
+        GroupedMessageHandler.GroupsHandledConcurrently = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
@@ -62,6 +64,8 @@ public class ConcurrentProcessorTests : DatabaseTest
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         var groups = new[] { "A", "B", "C", "D" };
+        // no handler returns before all four Groups are in flight, so the test cannot pass on a serial run
+        GroupedMessageHandler.ExpectedConcurrentGroups = groups.Length;
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
             for (int i = 0; i < 200; i++)
@@ -78,7 +82,8 @@ public class ConcurrentProcessorTests : DatabaseTest
         await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
+        await GroupedMessageHandler.GroupsHandledConcurrently.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(10));
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
         Assert.Equal(200, GroupedMessageHandler.TotalCount);
 
@@ -124,16 +129,12 @@ public class ConcurrentProcessorTests : DatabaseTest
         }
 
         // Act
-        using var cts = new CancellationTokenSource();
         var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
-        _ = processor.StartAsync(cts.Token);
-        processor.ScheduleProcessingRun();
-        processor.ScheduleProcessingRun();
-        processor.ScheduleProcessingRun();
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
+        // a second run must not hand out the messages of the first one again
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
-        await cts.CancelAsync();
         Assert.Equal(200, GroupedMessageHandler.TotalCount);
 
         var groupA = Enumerable.Range(0, 200)

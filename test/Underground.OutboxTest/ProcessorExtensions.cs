@@ -16,4 +16,23 @@ public static class ProcessorExtensions
             await processor.ProcessMessagesAsync(groupKey, 5, scope, cancellationToken);
         }
     }
+
+    extension<TEntity>(ConcurrentProcessor<TEntity> processor) where TEntity : class, IMessage
+    {
+        /// <summary>
+        /// Schedules a processing run and drives <see cref="ConcurrentProcessor{TEntity}.ProcessNextAsync"/>
+        /// on the calling thread until no Group is left to take. Replaces waiting on the background workers,
+        /// so that tests assert on a finished run instead of on a timeout. Note that a Group whose batch
+        /// failed is left behind for the next run, exactly as it is in production.
+        /// </summary>
+        internal async Task ProcessUntilIdleAsync(CancellationToken cancellationToken)
+        {
+            processor.ScheduleProcessingRun();
+
+            while (await processor.ProcessNextAsync(cancellationToken))
+            {
+                // keep going until no Group is left to process
+            }
+        }
+    }
 }

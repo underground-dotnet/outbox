@@ -21,6 +21,6 @@ internal sealed class BackgroundService<TEntity>(
         //     return false;
         // }
 
-        await _processor.StartAsync(stoppingToken).ConfigureAwait(false);
+        await _processor.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 }

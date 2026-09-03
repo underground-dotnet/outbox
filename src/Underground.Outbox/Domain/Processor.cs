@@ -26,7 +26,7 @@ internal sealed partial class Processor<TEntity>(
     /// <param name="batchSize"></param>
     /// <param name="scope"></param>
     /// <param name="cancellationToken"></param>
-    /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
+    /// <returns>A boolean indicating whether the whole batch was processed successfully, so that the group may hold more messages. It is false when no messages were found and when processing one of them failed.</returns>
     internal async Task<bool> ProcessMessagesAsync(string groupKey, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
@@ -53,11 +53,11 @@ internal sealed partial class Processor<TEntity>(
             // remove tracked entities to avoid memory leaks
             dbContext.ChangeTracker.Clear();
 
-            return messages.Count > 0 && messages.Count == successIds.Count();
+            return messages.Count == successIds.Count;
         }
     }
 
-    private async Task<IEnumerable<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, CancellationToken cancellationToken)
+    private async Task<List<long>> CallMessageHandlersAsync(IEnumerable<TEntity> messages, IServiceScope scope, CancellationToken cancellationToken)
     {
         var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
