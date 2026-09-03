@@ -17,6 +17,7 @@ internal sealed class FetchInboxMessages(IDbContext dbContext, ILogger<FetchInbo
         groupKey: reader.GetString(5),
         data: reader.GetString(6),
         retryCount: reader.GetInt32(7),
-        processedAt: reader.IsDBNull(8) ? null : reader.GetDateTime(8)
+        visibleAt: reader.GetDateTime(8),
+        processedAt: reader.IsDBNull(9) ? null : reader.GetDateTime(9)
     );
 }

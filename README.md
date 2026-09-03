@@ -112,6 +112,7 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `GroupKey` | Logical group used for concurrency and ordering. Defaults to `"default"`. |
 | `Data` | Serialized message payload. |
 | `RetryCount` | Number of failed processing attempts. |
+| `VisibleAt` | The instant from which the message may be handled. Defaulted by the database to the present, and pushed into the future by the retry backoff. |
 | `ProcessedAt` | Null until the message is completed successfully. |
 
 Handlers also receive `MessageMetadata` with `EventId`, `GroupKey`, and `RetryCount`.
@@ -181,7 +182,9 @@ This is the main duplicate-prevention mechanism. Combined with marking successfu
 
 ## Error handling
 
-Messages are processed inside the processor transaction, with a savepoint created for each message. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented, and processing of the current batch stops. Messages that were handled successfully earlier in the same batch remain processed.
+Messages are processed inside the processor transaction, with a savepoint created for each message. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented, `VisibleAt` is pushed into the future by the retry backoff, and processing of the current batch stops. Messages that were handled successfully earlier in the same batch remain processed.
+
+The backoff doubles with every failed attempt — `BackoffBase`, then twice that, and so on — up to `MaxBackoff`, and each delay is varied by `BackoffJitter` either way so that groups which all failed against one shared dependency do not retry in lockstep. The new `VisibleAt` is computed by PostgreSQL from `clock_timestamp()`; the application only ever supplies the interval, so an instance with a skewed clock cannot retry early or late.
 
 You can configure exception policies per handler registration, or globally for all inbox and outbox handlers. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `AddHandler`:
 
@@ -201,7 +204,7 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 
 `Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be scoped to a specific handler and message type registration, or configured globally through `cfg.Policies`. If both global and registration-specific policies match, the registration-specific policies win.
 
-If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount`.
+If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount` and is retried once its backoff has elapsed.
 
 ## Cleanup and retention
 
@@ -218,6 +221,9 @@ Cleanup deletes rows where `ProcessedAt` is older than the configured retention 
 |---------|---------|-------------|
 | `BatchSize` | `5` | Number of messages processed in one transaction per group batch. |
 | `MaxConcurrentGroups` | `4` | Number of groups that can be processed concurrently. |
+| `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
+| `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. |
+| `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |
 | `ProcessingDelayMilliseconds` | `4000` | Delay between scheduled processing cycles. |
 | `ProcessedMessageRetention` | `7 days` | How long processed rows are kept before cleanup. |
 | `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |

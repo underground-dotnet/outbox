@@ -18,5 +18,13 @@ public interface IMessage
     public string GroupKey { get; }
     public string Data { get; }
     public int RetryCount { get; set; }
+
+    /// <summary>
+    /// The instant from which this message may be handled. Defaulted by the database to the present,
+    /// so a message is deliverable as soon as it is Settled; a failed attempt moves it into the future
+    /// by the retry backoff.
+    /// </summary>
+    public DateTime VisibleAt { get; }
+
     public DateTime? ProcessedAt { get; set; }
 }

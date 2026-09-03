@@ -71,31 +71,9 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
 
     private static string BuildSql(IModel model)
     {
-        // dynamically extract table and column names to build the SQL query, since those can be overriden via EF Core mappings
-        var entityType = model.FindEntityType(typeof(TEntity)) ?? throw new InvalidOperationException($"Entity type {typeof(TEntity)} not found in DbContext model.");
-        var tableName = entityType.GetTableName() ?? throw new InvalidOperationException($"Table name for entity type {typeof(TEntity)} is not configured.");
-        var schema = entityType.GetSchema();
-        var fullTableName = string.IsNullOrEmpty(schema) ? $"\"{tableName}\"" : $"\"{schema}\".\"{tableName}\"";
-        var tableIdentifier = StoreObjectIdentifier.Table(tableName, schema);
-
-        var idColumn = entityType.FindProperty(nameof(IMessage.Id))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.Id)} not found in entity type {typeof(TEntity)}.");
-        var eventIdColumn = entityType.FindProperty(nameof(IMessage.EventId))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.EventId)} not found in entity type {typeof(TEntity)}.");
-        var transactionIdColumn = entityType.FindProperty(nameof(IMessage.TransactionId))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.TransactionId)} not found in entity type {typeof(TEntity)}.");
-        var createdAtColumn = entityType.FindProperty(nameof(IMessage.CreatedAt))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.CreatedAt)} not found in entity type {typeof(TEntity)}.");
-        var typeColumn = entityType.FindProperty(nameof(IMessage.Type))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.Type)} not found in entity type {typeof(TEntity)}.");
-        var groupKeyColumn = entityType.FindProperty(nameof(IMessage.GroupKey))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.GroupKey)} not found in entity type {typeof(TEntity)}.");
-        var dataColumn = entityType.FindProperty(nameof(IMessage.Data))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.Data)} not found in entity type {typeof(TEntity)}.");
-        var retryCountColumn = entityType.FindProperty(nameof(IMessage.RetryCount))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.RetryCount)} not found in entity type {typeof(TEntity)}.");
-        var processedAtColumn = entityType.FindProperty(nameof(IMessage.ProcessedAt))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.ProcessedAt)} not found in entity type {typeof(TEntity)}.");
+        // table and column names are read off the model rather than written literally, since a consumer
+        // can remap any of them through EF Core mappings
+        var table = MessageTable.For<TEntity>(model);
 
         // Ordering is by (transaction_id, id) rather than by id alone: identity values are handed out when a
         // row is inserted, not when its transaction commits, so a transaction that starts later but commits
@@ -105,13 +83,17 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         // earlier one into its Group. It is safe to apply it here, before ordering, only because the sort key
         // is (transaction_id, id): an unsettled row always sorts after every settled one, so excluding it can
         // never promote a later message ahead of it. With id alone this would be a bug.
+        //
+        // Visibility is compared against clock_timestamp() rather than now(), which is frozen for the
+        // transaction that the inbox holds open across its handler.
         return $"""
-            SELECT "{idColumn}", "{eventIdColumn}", "{transactionIdColumn}", "{createdAtColumn}", "{typeColumn}", "{groupKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
-            FROM {fullTableName}
-            WHERE "{processedAtColumn}" IS NULL
-            AND "{groupKeyColumn}" = @groupKey
-            AND "{transactionIdColumn}" < pg_snapshot_xmin(pg_current_snapshot())
-            ORDER BY "{transactionIdColumn}", "{idColumn}"
+            SELECT {table.Id}, {table.EventId}, {table.TransactionId}, {table.CreatedAt}, {table.Type}, {table.GroupKey}, {table.Data}, {table.RetryCount}, {table.VisibleAt}, {table.ProcessedAt}
+            FROM {table.Name}
+            WHERE {table.ProcessedAt} IS NULL
+            AND {table.GroupKey} = @groupKey
+            AND {table.TransactionId} < pg_snapshot_xmin(pg_current_snapshot())
+            AND {table.VisibleAt} <= clock_timestamp()
+            ORDER BY {table.TransactionId}, {table.Id}
             LIMIT @batchSize
             FOR UPDATE NOWAIT
             """;

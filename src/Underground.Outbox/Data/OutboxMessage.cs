@@ -37,10 +37,13 @@ public class OutboxMessage : IMessage
     [Column("retry_count")]
     public int RetryCount { get; set; } = 0;
 
+    [Column("visible_at")]
+    public DateTime VisibleAt { get; init; }
+
     [Column(MessageColumns.ProcessedAt)]
     public DateTime? ProcessedAt { get; set; }
 
-    internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime? processedAt)
+    internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? processedAt)
     {
         Id = id;
         EventId = eventId;
@@ -50,6 +53,7 @@ public class OutboxMessage : IMessage
         GroupKey = groupKey;
         Data = data;
         RetryCount = retryCount;
+        VisibleAt = visibleAt;
         ProcessedAt = processedAt;
     }
 

@@ -63,6 +63,7 @@ public static class SetupServices
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
+        services.AddScoped<ScheduleRetry<TEntity>>();
         services.AddScoped<Processor<TEntity>>();
         services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();

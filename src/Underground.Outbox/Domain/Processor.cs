@@ -13,7 +13,8 @@ internal sealed partial class Processor<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
     IDbContext dbContext,
     ILogger<Processor<TEntity>> logger,
-    FetchMessages<TEntity> fetchMessages
+    FetchMessages<TEntity> fetchMessages,
+    ScheduleRetry<TEntity> scheduleRetry
 ) where TEntity : class, IMessage
 {
     private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
@@ -100,9 +101,9 @@ internal sealed partial class Processor<TEntity>(
                     await processHandlerException.ExecuteAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
                 }
 
-                // TODO: decide if max retry count is reached or if a retry makes sense
-                // TODO: remove or move to processHandlerException
-                await IncrementRetryCountAsync(dbContext, message, cancellationToken).ConfigureAwait(false);
+                // records the attempt and moves the message out of sight for the backoff delay, so the next
+                // run does not retry it immediately
+                await scheduleRetry.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
 
                 // Break out of the foreach loop (stop processing on first failure)
                 break;
@@ -110,17 +111,6 @@ internal sealed partial class Processor<TEntity>(
         }
 
         return successfulIds;
-    }
-
-    private static async Task IncrementRetryCountAsync(IDbContext dbContext, IMessage message, CancellationToken cancellationToken)
-    {
-        await dbContext.Set<TEntity>()
-            .Where(m => m.Id == message.Id)
-            .ExecuteUpdateAsync(update =>
-                update.SetProperty(m => m.RetryCount, m => m.RetryCount + 1),
-                cancellationToken: cancellationToken
-            )
-            .ConfigureAwait(false);
     }
 
     [LoggerMessage(

@@ -5,7 +5,8 @@ namespace Underground.Outbox.Data;
 
 /// <summary>
 /// Model configuration shared by both message tables: the database-assigned
-/// <see cref="IMessage.TransactionId"/> and the partial index that serves Head lookup.
+/// <see cref="IMessage.TransactionId"/> and <see cref="IMessage.VisibleAt"/>, and the partial index
+/// that serves Head lookup.
 /// It is applied automatically through <see cref="EntityTypeConfigurationAttribute"/> on the entity
 /// types, so a consumer's model carries it without a call they have to remember.
 /// </summary>
@@ -25,6 +26,13 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         builder.Property(nameof(IMessage.TransactionId))
             .HasColumnType("xid8")
             .HasDefaultValueSql("pg_current_xact_id()")
+            .ValueGeneratedOnAdd();
+
+        // All timing is decided by the database. An application-supplied instant would make delivery depend
+        // on each instance's clock, and clock_timestamp() rather than now() because now() is frozen for the
+        // transaction, which the inbox holds open across its handler.
+        builder.Property(nameof(IMessage.VisibleAt))
+            .HasDefaultValueSql("clock_timestamp()")
             .ValueGeneratedOnAdd();
 
         // Head lookup reads the lowest (TransactionId, Id) per GroupKey among unprocessed messages. The
