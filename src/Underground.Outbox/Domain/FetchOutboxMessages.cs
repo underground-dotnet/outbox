@@ -13,7 +13,7 @@ internal sealed class FetchOutboxMessages(IDbContext dbContext, ILogger<FetchOut
         eventId: reader.GetGuid(1),
         createdAt: reader.GetDateTime(2),
         type: reader.GetString(3),
-        partitionKey: reader.GetString(4),
+        groupKey: reader.GetString(4),
         data: reader.GetString(5),
         retryCount: reader.GetInt32(6),
         processedAt: reader.IsDBNull(7) ? null : reader.GetDateTime(7)

@@ -9,11 +9,11 @@ public static class ProcessorExtensions
 {
     extension<TEntity>(Processor<TEntity>) where TEntity : class, IMessage
     {
-        internal static async Task ProcessWithDefaultValues(IServiceProvider serviceProvider, CancellationToken cancellationToken, string partition = "default")
+        internal static async Task ProcessWithDefaultValues(IServiceProvider serviceProvider, CancellationToken cancellationToken, string groupKey = "default")
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<Processor<OutboxMessage>>();
-            await processor.ProcessMessagesAsync(partition, 5, scope, cancellationToken);
+            await processor.ProcessMessagesAsync(groupKey, 5, scope, cancellationToken);
         }
     }
 }

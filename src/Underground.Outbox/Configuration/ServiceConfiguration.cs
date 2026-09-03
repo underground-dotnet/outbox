@@ -13,7 +13,10 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// </summary>
     public int BatchSize { get; set; } = 5;
 
-    public int ParallelProcessingOfPartitions { get; set; } = 4;
+    /// <summary>
+    /// Maximum number of Groups that can be processed concurrently.
+    /// </summary>
+    public int MaxConcurrentGroups { get; set; } = 4;
 
     /// <summary>
     /// Delay in milliseconds between processing cycles when messages are successfully processed.
@@ -47,9 +50,9 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException($"BatchSize ({BatchSize}) must be greater than 0.");
         }
 
-        if (ParallelProcessingOfPartitions <= 0)
+        if (MaxConcurrentGroups <= 0)
         {
-            throw new ArgumentOutOfRangeException($"ParallelProcessingOfPartitions ({ParallelProcessingOfPartitions}) must be greater than 0.");
+            throw new ArgumentOutOfRangeException($"MaxConcurrentGroups ({MaxConcurrentGroups}) must be greater than 0.");
         }
 
         if (ProcessingDelayMilliseconds < 0)

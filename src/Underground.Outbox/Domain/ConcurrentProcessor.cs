@@ -26,8 +26,8 @@ internal partial class ConcurrentProcessor<TEntity>(
         SingleWriter = false
     });
 
-    // contains partitions to be processed
-    private readonly Channel<string> _partitionsChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(20)
+    // contains groups to be processed
+    private readonly Channel<string> _groupsChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(20)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
         SingleReader = false,
@@ -55,11 +55,11 @@ internal partial class ConcurrentProcessor<TEntity>(
     {
         var triggerWorker = CreateTriggerWorker(cancellationToken);
 
-        var partitionsWorkers = Enumerable.Range(0, _config.ParallelProcessingOfPartitions)
-                    .Select(_ => CreatePartitionWorker(cancellationToken))
+        var groupWorkers = Enumerable.Range(0, _config.MaxConcurrentGroups)
+                    .Select(_ => CreateGroupWorker(cancellationToken))
                     .ToArray();
 
-        List<Task> tasks = [.. partitionsWorkers, triggerWorker];
+        List<Task> tasks = [.. groupWorkers, triggerWorker];
         tasks.ForEach(t =>
             // since we are not awaiting the tasks here, we need to log exceptions manually to avoid unobserved task exceptions
             _ = t.ContinueWith(t =>
@@ -81,54 +81,54 @@ internal partial class ConcurrentProcessor<TEntity>(
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                var groups = await scope.ServiceProvider.GetRequiredService<FetchGroups<TEntity>>().ExecuteAsync(cancellationToken).ConfigureAwait(false);
 
-                foreach (var partition in partitions)
+                foreach (var groupKey in groups)
                 {
-                    await _partitionsChannel.Writer.WriteAsync(partition, cancellationToken).ConfigureAwait(false);
+                    await _groupsChannel.Writer.WriteAsync(groupKey, cancellationToken).ConfigureAwait(false);
                 }
 
-                if (!partitions.Any())
+                if (!groups.Any())
                 {
                     NoMessagesForProcessingFound();
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                LogFetchPartitionsError(ex);
+                LogFetchGroupsError(ex);
                 NoMessagesForProcessingFound();
             }
         }
     }
 
-    private async Task CreatePartitionWorker(CancellationToken cancellationToken)
+    private async Task CreateGroupWorker(CancellationToken cancellationToken)
     {
-        await foreach (var partitionKey in _partitionsChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        await foreach (var groupKey in _groupsChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
             try
             {
-                var messagesProcessed = await AcquireLockAndProcess(partitionKey, cancellationToken).ConfigureAwait(false);
+                var messagesProcessed = await AcquireLockAndProcess(groupKey, cancellationToken).ConfigureAwait(false);
 
                 if (messagesProcessed)
                 {
-                    // re-enqueue the partition for further processing, because there might be more messages
-                    _partitionsChannel.Writer.TryWrite(partitionKey);
+                    // re-enqueue the group for further processing, because there might be more messages
+                    _groupsChannel.Writer.TryWrite(groupKey);
                 }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                LogPartitionProcessingError(partitionKey, ex);
+                LogGroupProcessingError(groupKey, ex);
             }
         }
     }
 
     // locking right not is performed through the `FOR UPDATE NOWAIT` clause in `FetchMessages`
-    private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
+    private async Task<bool> AcquireLockAndProcess(string groupKey, CancellationToken cancellationToken)
     {
-        // use separate scope & context for each partition
+        // use separate scope & context for each group
         using var scope = _scopeFactory.CreateScope();
         var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        return await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken).ConfigureAwait(false);
+        return await processor.ProcessMessagesAsync(groupKey, _config.BatchSize, scope, cancellationToken).ConfigureAwait(false);
     }
 
     protected virtual void NoMessagesForProcessingFound()
@@ -145,12 +145,12 @@ internal partial class ConcurrentProcessor<TEntity>(
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Error,
-        Message = "Error fetching partitions for processing")]
-    private partial void LogFetchPartitionsError(Exception exception);
+        Message = "Error fetching groups for processing")]
+    private partial void LogFetchGroupsError(Exception exception);
 
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Error,
-        Message = "Error processing partition {PartitionKey}")]
-    private partial void LogPartitionProcessingError(string partitionKey, Exception exception);
+        Message = "Error processing group {GroupKey}")]
+    private partial void LogGroupProcessingError(string groupKey, Exception exception);
 }

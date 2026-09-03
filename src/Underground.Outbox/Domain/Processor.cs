@@ -20,27 +20,27 @@ internal sealed partial class Processor<TEntity>(
     private readonly ILogger<Processor<TEntity>> _logger = logger;
 
     /// <summary>
-    /// Processes a batch of messages for the given partition using a new scope and DbContext.
+    /// Processes a batch of messages for the given group using a new scope and DbContext.
     /// </summary>
-    /// <param name="partition"></param>
+    /// <param name="groupKey"></param>
     /// <param name="batchSize"></param>
     /// <param name="scope"></param>
     /// <param name="cancellationToken"></param>
     /// <returns>A boolean indicating if any messages were found or if the outbox is empty. It only returns true if all found messages were processed successfully.</returns>
-    internal async Task<bool> ProcessMessagesAsync(string partition, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
+    internal async Task<bool> ProcessMessagesAsync(string groupKey, int batchSize, IServiceScope scope, CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using (transaction.ConfigureAwait(false))
         {
 
-            var messages = await fetchMessages.ExecuteAsync(partition, batchSize, cancellationToken).ConfigureAwait(false);
+            var messages = await fetchMessages.ExecuteAsync(groupKey, batchSize, cancellationToken).ConfigureAwait(false);
             var numberOfMessages = messages.Count;
             if (numberOfMessages == 0)
             {
                 return false;
 
             }
-            LogProcessingMessages(numberOfMessages, typeof(TEntity).ToString(), partition);
+            LogProcessingMessages(numberOfMessages, typeof(TEntity).ToString(), groupKey);
 
             var successIds = await CallMessageHandlersAsync(messages, scope, cancellationToken).ConfigureAwait(false);
 
@@ -126,8 +126,8 @@ internal sealed partial class Processor<TEntity>(
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Information,
-        Message = "Processing {Count} messages in {Type} for partition '{Partition}'")]
-    private partial void LogProcessingMessages(int count, string type, string partition);
+        Message = "Processing {Count} messages in {Type} for group '{GroupKey}'")]
+    private partial void LogProcessingMessages(int count, string type, string groupKey);
 
     [LoggerMessage(
         EventId = 2,

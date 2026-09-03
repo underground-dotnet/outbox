@@ -6,7 +6,7 @@ public interface IMessage
     public Guid EventId { get; init; }
     public DateTime CreatedAt { get; }
     public string Type { get; }
-    public string PartitionKey { get; }
+    public string GroupKey { get; }
     public string Data { get; }
     public int RetryCount { get; set; }
     public DateTime? ProcessedAt { get; set; }

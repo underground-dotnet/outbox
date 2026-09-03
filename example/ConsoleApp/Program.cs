@@ -49,8 +49,8 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
 {
     for (int i = 0; i < 10; i++)
     {
-        var partition = (i % 3).ToString();
-        var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"partition {partition}: {i}"), partition);
+        var groupKey = (i % 3).ToString();
+        var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"group {groupKey}: {i}"), groupKey);
         await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
 
         var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));

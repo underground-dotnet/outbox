@@ -18,7 +18,7 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
     private static readonly ConditionalWeakTable<IModel, string> SqlByModel = [];
 #pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
 
-    internal async Task<List<TEntity>> ExecuteAsync(string partition, int batchSize, CancellationToken cancellationToken)
+    internal async Task<List<TEntity>> ExecuteAsync(string groupKey, int batchSize, CancellationToken cancellationToken)
     {
         var sql = SqlByModel.GetValue(dbContext.Model, static model => BuildSql(model));
 
@@ -36,12 +36,12 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             await using (cmd.ConfigureAwait(false))
             {
                 cmd.CommandText = sql;
-                cmd.Parameters.Add(new NpgsqlParameter("partition", partition));
+                cmd.Parameters.Add(new NpgsqlParameter("groupKey", groupKey));
                 cmd.Parameters.Add(new NpgsqlParameter("batchSize", batchSize));
 
                 var result = new List<TEntity>();
 
-                LogFetchSql(partition, sql);
+                LogFetchSql(groupKey, sql);
                 var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
                 await using (reader.ConfigureAwait(false))
                 {
@@ -56,8 +56,8 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         }
         catch (PostgresException ex) when (string.Equals(ex.SqlState, "55P03", StringComparison.Ordinal)) // lock_not_available
         {
-            // another processor is already handling messages for this partition
-            LogCouldNotAcquireLock(typeof(TEntity).Name, partition, ex);
+            // another processor is already handling messages for this group
+            LogCouldNotAcquireLock(typeof(TEntity).Name, groupKey, ex);
             return [];
         }
         finally
@@ -86,8 +86,8 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.CreatedAt)} not found in entity type {typeof(TEntity)}.");
         var typeColumn = entityType.FindProperty(nameof(IMessage.Type))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.Type)} not found in entity type {typeof(TEntity)}.");
-        var partitionKeyColumn = entityType.FindProperty(nameof(IMessage.PartitionKey))?.GetColumnName(tableIdentifier)
-            ?? throw new InvalidOperationException($"Property {nameof(IMessage.PartitionKey)} not found in entity type {typeof(TEntity)}.");
+        var groupKeyColumn = entityType.FindProperty(nameof(IMessage.GroupKey))?.GetColumnName(tableIdentifier)
+            ?? throw new InvalidOperationException($"Property {nameof(IMessage.GroupKey)} not found in entity type {typeof(TEntity)}.");
         var dataColumn = entityType.FindProperty(nameof(IMessage.Data))?.GetColumnName(tableIdentifier)
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.Data)} not found in entity type {typeof(TEntity)}.");
         var retryCountColumn = entityType.FindProperty(nameof(IMessage.RetryCount))?.GetColumnName(tableIdentifier)
@@ -96,10 +96,10 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             ?? throw new InvalidOperationException($"Property {nameof(IMessage.ProcessedAt)} not found in entity type {typeof(TEntity)}.");
 
         return $"""
-            SELECT "{idColumn}", "{eventIdColumn}", "{createdAtColumn}", "{typeColumn}", "{partitionKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
+            SELECT "{idColumn}", "{eventIdColumn}", "{createdAtColumn}", "{typeColumn}", "{groupKeyColumn}", "{dataColumn}", "{retryCountColumn}", "{processedAtColumn}"
             FROM {fullTableName}
             WHERE "{processedAtColumn}" IS NULL
-            AND "{partitionKeyColumn}" = @partition
+            AND "{groupKeyColumn}" = @groupKey
             ORDER BY "{idColumn}"
             LIMIT @batchSize
             FOR UPDATE NOWAIT
@@ -111,12 +111,12 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
     [LoggerMessage(
             EventId = 1,
             Level = LogLevel.Information,
-            Message = "Executing SQL to fetch messages for partition {Partition}: {Sql}")]
-    private partial void LogFetchSql(string Partition, string Sql);
+            Message = "Executing SQL to fetch messages for group {GroupKey}: {Sql}")]
+    private partial void LogFetchSql(string GroupKey, string Sql);
 
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Debug,
-        Message = "Could not acquire lock for {Type} partition {Partition}, skipping processing")]
-    private partial void LogCouldNotAcquireLock(string Type, string Partition, Exception exception);
+        Message = "Could not acquire lock for {Type} group {GroupKey}, skipping processing")]
+    private partial void LogCouldNotAcquireLock(string Type, string GroupKey, Exception exception);
 }

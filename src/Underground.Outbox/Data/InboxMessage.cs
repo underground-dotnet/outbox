@@ -8,7 +8,7 @@ namespace Underground.Outbox.Data;
 
 [Table("inbox")]
 [Index(nameof(EventId), IsUnique = true)]
-[Index(nameof(ProcessedAt), nameof(PartitionKey))]
+[Index(nameof(ProcessedAt), nameof(GroupKey))]
 public class InboxMessage : IMessage
 {
     [Column("id")]
@@ -25,8 +25,8 @@ public class InboxMessage : IMessage
     [Column("type")]
     public string Type { get; init; }
 
-    [Column("partition_key")]
-    public string PartitionKey { get; init; }
+    [Column("group_key")]
+    public string GroupKey { get; init; }
 
     [Column("data")]
     public string Data { get; init; }
@@ -37,33 +37,33 @@ public class InboxMessage : IMessage
     [Column("processed_at")]
     public DateTime? ProcessedAt { get; set; }
 
-    internal InboxMessage(long id, Guid eventId, DateTime createdAt, string type, string partitionKey, string data, int retryCount, DateTime? processedAt)
+    internal InboxMessage(long id, Guid eventId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime? processedAt)
     {
         Id = id;
         EventId = eventId;
         CreatedAt = createdAt;
         Type = type;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         Data = data;
         RetryCount = retryCount;
         ProcessedAt = processedAt;
     }
 
-    public InboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
+    public InboxMessage(Guid eventId, DateTime createdAt, string type, string data, string groupKey = "default")
     {
         EventId = eventId;
         CreatedAt = createdAt;
         Type = type;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         Data = data;
     }
 
-    public InboxMessage(Guid eventId, DateTime createdAt, object data, string partitionKey = "default")
+    public InboxMessage(Guid eventId, DateTime createdAt, object data, string groupKey = "default")
     {
         EventId = eventId;
         CreatedAt = createdAt;
         Type = data.GetType().FullName!;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         // TODO: move to AOT safe approach:
         // https://the-runtime.dev/articles/json-source-generator-system-text-json/
         // https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/source-generation

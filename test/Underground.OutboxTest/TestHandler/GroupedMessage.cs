@@ -1,3 +1,3 @@
 namespace Underground.OutboxTest.TestHandler;
 
-public record PartitionedMessage(int Id);
+public record GroupedMessage(int Id);

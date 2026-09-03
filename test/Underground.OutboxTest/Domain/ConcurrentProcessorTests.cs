@@ -21,15 +21,15 @@ public class ConcurrentProcessorTests : DatabaseTest
         _testOutputHelper = testOutputHelper;
 
         // clear the static lists to avoid interference between tests
-        PartitionedMessageHandler.CalledWith.Clear();
+        GroupedMessageHandler.CalledWith.Clear();
 
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.ParallelProcessingOfPartitions = 4;
-            cfg.AddHandler<PartitionedMessageHandler, PartitionedMessage>();
+            cfg.MaxConcurrentGroups = 4;
+            cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
@@ -55,19 +55,19 @@ public class ConcurrentProcessorTests : DatabaseTest
     }
 
     [Fact]
-    public async Task DistributePartitionsAcrossWorkersEqually()
+    public async Task DistributeGroupsAcrossWorkersEqually()
     {
         // Arrange
         var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
-        var partitions = new[] { "A", "B", "C", "D" };
+        var groups = new[] { "A", "B", "C", "D" };
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
             for (int i = 0; i < 200; i++)
             {
-                var partition = partitions[i % partitions.Length];
-                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new PartitionedMessage(i)) { PartitionKey = partition };
+                var groupKey = groups[i % groups.Length];
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new GroupedMessage(i)) { GroupKey = groupKey };
                 await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             }
 
@@ -78,29 +78,29 @@ public class ConcurrentProcessorTests : DatabaseTest
         await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        SpinWait.SpinUntil(() => PartitionedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
+        SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
-        Assert.Equal(200, PartitionedMessageHandler.TotalCount);
+        Assert.Equal(200, GroupedMessageHandler.TotalCount);
 
-        var partitionA = Enumerable.Range(0, 200)
+        var groupA = Enumerable.Range(0, 200)
                      .Where(n => n % 4 == 0)
                      .ToList();
-        Assert.Equal(partitionA, PartitionedMessageHandler.CalledWith["A"]);
+        Assert.Equal(groupA, GroupedMessageHandler.CalledWith["A"]);
 
-        var partitionB = Enumerable.Range(0, 200)
+        var groupB = Enumerable.Range(0, 200)
                      .Where(n => n % 4 == 1)
                      .ToList();
-        Assert.Equal(partitionB, PartitionedMessageHandler.CalledWith["B"]);
+        Assert.Equal(groupB, GroupedMessageHandler.CalledWith["B"]);
 
-        var partitionC = Enumerable.Range(0, 200)
+        var groupC = Enumerable.Range(0, 200)
                              .Where(n => n % 4 == 2)
                              .ToList();
-        Assert.Equal(partitionC, PartitionedMessageHandler.CalledWith["C"]);
+        Assert.Equal(groupC, GroupedMessageHandler.CalledWith["C"]);
 
-        var partitionD = Enumerable.Range(0, 200)
+        var groupD = Enumerable.Range(0, 200)
                      .Where(n => n % 4 == 3)
                      .ToList();
-        Assert.Equal(partitionD, PartitionedMessageHandler.CalledWith["D"]);
+        Assert.Equal(groupD, GroupedMessageHandler.CalledWith["D"]);
     }
 
     [Fact]
@@ -110,13 +110,13 @@ public class ConcurrentProcessorTests : DatabaseTest
         var context = CreateDbContext();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
-        var partitions = new[] { "A", "B" };
+        var groups = new[] { "A", "B" };
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
             for (int i = 0; i < 200; i++)
             {
-                var partition = partitions[i % partitions.Length];
-                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new PartitionedMessage(i)) { PartitionKey = partition };
+                var groupKey = groups[i % groups.Length];
+                var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new GroupedMessage(i)) { GroupKey = groupKey };
                 await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             }
 
@@ -132,18 +132,18 @@ public class ConcurrentProcessorTests : DatabaseTest
         processor.ScheduleProcessingRun();
 
         // Assert
-        SpinWait.SpinUntil(() => PartitionedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
+        SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(5));
         await cts.CancelAsync();
-        Assert.Equal(200, PartitionedMessageHandler.TotalCount);
+        Assert.Equal(200, GroupedMessageHandler.TotalCount);
 
-        var partitionA = Enumerable.Range(0, 200)
+        var groupA = Enumerable.Range(0, 200)
                      .Where(n => n % 4 == 0)
                      .ToList();
-        Assert.Equal(partitionA, PartitionedMessageHandler.CalledWith["A"]);
+        Assert.Equal(groupA, GroupedMessageHandler.CalledWith["A"]);
 
-        var partitionB = Enumerable.Range(0, 200)
+        var groupB = Enumerable.Range(0, 200)
                      .Where(n => n % 4 == 1)
                      .ToList();
-        Assert.Equal(partitionB, PartitionedMessageHandler.CalledWith["B"]);
+        Assert.Equal(groupB, GroupedMessageHandler.CalledWith["B"]);
     }
 }
