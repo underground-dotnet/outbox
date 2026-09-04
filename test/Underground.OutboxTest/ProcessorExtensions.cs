@@ -9,11 +9,15 @@ public static class ProcessorExtensions
 {
     extension<TEntity>(Processor<TEntity>) where TEntity : class, IMessage
     {
+        /// <summary>
+        /// Claims and handles the Group's Head once. A Group offers only one message per claim, so a test
+        /// that lines up two messages in one Group calls this twice.
+        /// </summary>
         internal static async Task ProcessWithDefaultValues(IServiceProvider serviceProvider, CancellationToken cancellationToken, string groupKey = "default")
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<Processor<OutboxMessage>>();
-            await processor.ProcessMessagesAsync(groupKey, 5, scope, cancellationToken);
+            await processor.ProcessHeadAsync(groupKey, scope, cancellationToken);
         }
     }
 
@@ -22,7 +26,7 @@ public static class ProcessorExtensions
         /// <summary>
         /// Schedules a processing run and drives <see cref="ConcurrentProcessor{TEntity}.ProcessNextAsync"/>
         /// on the calling thread until no Group is left to take. Replaces waiting on the background workers,
-        /// so that tests assert on a finished run instead of on a timeout. Note that a Group whose batch
+        /// so that tests assert on a finished run instead of on a timeout. Note that a Group whose Head
         /// failed is left behind for the next run, exactly as it is in production.
         /// </summary>
         internal async Task ProcessUntilIdleAsync(CancellationToken cancellationToken)

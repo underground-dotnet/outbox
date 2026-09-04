@@ -39,7 +39,7 @@ For this library the single transaction approach was chosen. Messages in a batch
 - .NET / EF Core application
 - PostgreSQL via `Npgsql`
 
-The current implementation relies on PostgreSQL row locking with `FOR UPDATE NOWAIT` when fetching messages.
+The current implementation relies on PostgreSQL row locking with `FOR UPDATE ... SKIP LOCKED` when claiming messages.
 
 ## Getting started
 
@@ -171,12 +171,12 @@ If you do not care about group-local ordering, the default group key is `"defaul
 
 The outbox can run on multiple servers against the same database.
 
-It does not use a single global distributed lock. Instead, when a worker fetches messages for a group it uses PostgreSQL `FOR UPDATE NOWAIT` row locking:
+It does not use a single global distributed lock. Instead, when a worker claims a group's next message it uses PostgreSQL `FOR UPDATE ... SKIP LOCKED` row locking:
 
-- one worker locks the next batch of rows for that group
-- another worker or server trying to fetch the same group gets a lock failure
-- that lock failure is treated as "someone else is already processing this group"
-- the second worker skips that group and moves on
+- one worker locks that group's oldest unhandled message
+- another worker or server claiming from the same group finds that row locked
+- a locked row is skipped rather than waited for, and the group offers nothing
+- the second worker moves on to another group
 
 This is the main duplicate-prevention mechanism. Combined with marking successful messages via `ProcessedAt`, it prevents concurrent processors from handling the same rows twice.
 
@@ -219,7 +219,6 @@ Cleanup deletes rows where `ProcessedAt` is older than the configured retention 
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `BatchSize` | `5` | Number of messages processed in one transaction per group batch. |
 | `MaxConcurrentGroups` | `4` | Number of groups that can be processed concurrently. |
 | `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
 | `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. |
@@ -228,7 +227,7 @@ Cleanup deletes rows where `ProcessedAt` is older than the configured retention 
 | `ProcessedMessageRetention` | `7 days` | How long processed rows are kept before cleanup. |
 | `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
 
-If you want one transaction per message, set `BatchSize = 1`.
+One message is handled per claim, each in its own transaction.
 
 ## Example
 

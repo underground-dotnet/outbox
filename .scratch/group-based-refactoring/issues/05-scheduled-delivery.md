@@ -12,7 +12,7 @@ parallel with 06 onwards; it does not entirely - see the Comments.
 - [x] Omitting it means "as soon as possible"; existing callers are unaffected.
 - [x] The parameter's documentation states that scheduling a message also delays every later message in its Group, because a Group offers only its Head.
 - [x] A test proves a scheduled message is not handled before its instant and is handled after it.
-- [ ] A test proves a scheduled message holds back later messages in the same Group while leaving other Groups unaffected. **Deferred to 06** - see Comments.
+- [x] A test proves a scheduled message holds back later messages in the same Group while leaving other Groups unaffected. **Delivered by 06** as `MessagesBehindAScheduledHeadAreNotHandledUntilThatHeadHasBeen` - see Comments.
 
 ## Comments
 

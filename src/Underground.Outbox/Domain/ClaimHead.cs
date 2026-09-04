@@ -12,13 +12,18 @@ using System.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILogger<FetchMessages<TEntity>> logger) where TEntity : class, IMessage
+internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger<ClaimHead<TEntity>> logger) where TEntity : class, IMessage
 {
 #pragma warning disable S2743 // A static field in a generic type is not shared among instances of different close constructed types.
     private static readonly ConditionalWeakTable<IModel, string> SqlByModel = [];
 #pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
 
-    internal async Task<List<TEntity>> ExecuteAsync(string groupKey, int batchSize, CancellationToken cancellationToken)
+    /// <summary>
+    /// Claims the Group's Head - its oldest settled unhandled message - and locks it for the calling
+    /// transaction. Returns <c>null</c> when the Group has no Head, when its Head is not yet visible, and
+    /// when another worker already holds it.
+    /// </summary>
+    internal async Task<TEntity?> ExecuteAsync(string groupKey, CancellationToken cancellationToken)
     {
         var sql = SqlByModel.GetValue(dbContext.Model, static model => BuildSql(model));
 
@@ -37,28 +42,16 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
             {
                 cmd.CommandText = sql;
                 cmd.Parameters.Add(new NpgsqlParameter("groupKey", groupKey));
-                cmd.Parameters.Add(new NpgsqlParameter("batchSize", batchSize));
 
-                var result = new List<TEntity>();
-
-                LogFetchSql(groupKey, sql);
+                LogClaimSql(groupKey, sql);
                 var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
                 await using (reader.ConfigureAwait(false))
                 {
-                    while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        result.Add(BuildEntityFromReader(reader));
-                    }
+                    return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+                        ? BuildEntityFromReader(reader)
+                        : null;
                 }
-
-                return result;
             }
-        }
-        catch (PostgresException ex) when (string.Equals(ex.SqlState, "55P03", StringComparison.Ordinal)) // lock_not_available
-        {
-            // another processor is already handling messages for this group
-            LogCouldNotAcquireLock(typeof(TEntity).Name, groupKey, ex);
-            return [];
         }
         finally
         {
@@ -75,27 +68,43 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
         // can remap any of them through EF Core mappings
         var table = MessageTable.For<TEntity>(model);
 
+        // Head discovery is deliberately in two stages. The Head is the lowest (transaction_id, id) among
+        // the Group's settled unhandled rows *regardless of visibility*, and only then is visibility tested
+        // against that one row. Filtering by visible_at first would hand out the message behind a Head that
+        // is in backoff or scheduled for later, which is exactly the reordering this design exists to
+        // prevent. A Group whose Head is invisible therefore offers nothing at all.
+        //
         // Ordering is by (transaction_id, id) rather than by id alone: identity values are handed out when a
         // row is inserted, not when its transaction commits, so a transaction that starts later but commits
         // first would otherwise have its message handled first.
         //
         // The settled filter withholds a message until no still-running transaction could yet insert an
-        // earlier one into its Group. It is safe to apply it here, before ordering, only because the sort key
+        // earlier one into its Group. It is safe to apply it during Head discovery only because the sort key
         // is (transaction_id, id): an unsettled row always sorts after every settled one, so excluding it can
         // never promote a later message ahead of it. With id alone this would be a bug.
         //
-        // Visibility is compared against clock_timestamp() rather than now(), which is frozen for the
+        // FOR UPDATE cannot be applied to a WITH query, so the locking clause names the outer join back to
+        // the table. It is SKIP LOCKED rather than NOWAIT: a Head another worker already holds is simply not
+        // offered, instead of aborting the statement.
+        //
+        // Both instants are compared against clock_timestamp() rather than now(), which is frozen for the
         // transaction that the inbox holds open across its handler.
         return $"""
-            SELECT {table.Id}, {table.EventId}, {table.TransactionId}, {table.CreatedAt}, {table.Type}, {table.GroupKey}, {table.Data}, {table.RetryCount}, {table.VisibleAt}, {table.ProcessedAt}
-            FROM {table.Name}
-            WHERE {table.ProcessedAt} IS NULL
-            AND {table.GroupKey} = @groupKey
-            AND {table.TransactionId} < pg_snapshot_xmin(pg_current_snapshot())
-            AND {table.VisibleAt} <= clock_timestamp()
-            ORDER BY {table.TransactionId}, {table.Id}
-            LIMIT @batchSize
-            FOR UPDATE NOWAIT
+            WITH head AS (
+                SELECT {table.Id}
+                FROM {table.Name}
+                WHERE {table.ProcessedAt} IS NULL
+                AND {table.GroupKey} = @groupKey
+                AND {table.TransactionId} < pg_snapshot_xmin(pg_current_snapshot())
+                ORDER BY {table.TransactionId}, {table.Id}
+                LIMIT 1
+            )
+            SELECT m.{table.Id}, m.{table.EventId}, m.{table.TransactionId}, m.{table.CreatedAt}, m.{table.Type}, m.{table.GroupKey}, m.{table.Data}, m.{table.RetryCount}, m.{table.VisibleAt}, m.{table.ProcessedAt}
+            FROM head h
+            JOIN {table.Name} m ON m.{table.Id} = h.{table.Id}
+            WHERE m.{table.ProcessedAt} IS NULL
+            AND m.{table.VisibleAt} <= clock_timestamp()
+            FOR UPDATE OF m SKIP LOCKED
             """;
     }
 
@@ -104,12 +113,6 @@ internal abstract partial class FetchMessages<TEntity>(IDbContext dbContext, ILo
     [LoggerMessage(
             EventId = 1,
             Level = LogLevel.Information,
-            Message = "Executing SQL to fetch messages for group {GroupKey}: {Sql}")]
-    private partial void LogFetchSql(string GroupKey, string Sql);
-
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Debug,
-        Message = "Could not acquire lock for {Type} group {GroupKey}, skipping processing")]
-    private partial void LogCouldNotAcquireLock(string Type, string GroupKey, Exception exception);
+            Message = "Executing SQL to claim the Head of group {GroupKey}: {Sql}")]
+    private partial void LogClaimSql(string GroupKey, string Sql);
 }

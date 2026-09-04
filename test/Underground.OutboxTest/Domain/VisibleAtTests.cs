@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
@@ -38,7 +36,7 @@ public class VisibleAtTests : DatabaseTest
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
 
         // Act
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         // Assert: the database defaulted the instant to its own present, rather than leaving it unset
         var secondsUntilVisible = await context.SecondsUntilVisibleAsync(message.Id, cancellationToken);
@@ -59,7 +57,7 @@ public class VisibleAtTests : DatabaseTest
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         // Act
         await processor.ProcessUntilIdleAsync(cancellationToken);
@@ -94,7 +92,7 @@ public class VisibleAtTests : DatabaseTest
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         double[] expectedDelays = [10, 20, 40, 40];
         var actualDelays = new List<double>();
@@ -135,7 +133,7 @@ public class VisibleAtTests : DatabaseTest
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         // Act
         await processor.ProcessUntilIdleAsync(cancellationToken);
@@ -157,17 +155,5 @@ public class VisibleAtTests : DatabaseTest
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();
-    }
-
-    private static async Task AddMessageAsync(IServiceProvider serviceProvider, TestDbContext context, OutboxMessage message, CancellationToken cancellationToken)
-    {
-        var outbox = serviceProvider.GetRequiredService<IOutbox>();
-
-        var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        await using (transaction.ConfigureAwait(false))
-        {
-            await outbox.AddMessageAsync(context, message, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
     }
 }

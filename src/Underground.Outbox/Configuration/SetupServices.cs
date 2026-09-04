@@ -24,7 +24,7 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToOutbox>();
         services.AddScoped<IOutbox, OutboxImpl>();
-        services.AddScoped<FetchMessages<OutboxMessage>, FetchOutboxMessages>();
+        services.AddScoped<ClaimHead<OutboxMessage>, ClaimOutboxHead>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
     }
@@ -42,7 +42,7 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, InboxImpl>();
-        services.AddScoped<FetchMessages<InboxMessage>, FetchInboxMessages>();
+        services.AddScoped<ClaimHead<InboxMessage>, ClaimInboxHead>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
     }

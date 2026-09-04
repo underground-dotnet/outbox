@@ -1,7 +1,5 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
@@ -39,7 +37,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10), visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
 
         // Act
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         // Assert: measured against the database's own clock, so a mistranslated instant would show up here
         var secondsUntilVisible = await context.SecondsUntilVisibleAsync(message.Id, cancellationToken);
@@ -55,7 +53,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10), visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
-        await AddMessageAsync(serviceProvider, context, message, cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
 
         // Act
         await processor.ProcessUntilIdleAsync(cancellationToken);
@@ -80,7 +78,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         var context = CreateDbContext();
         var scheduled = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1), groupKey: "scheduled", visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
         var immediate = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2), groupKey: "immediate");
-        await AddMessagesAsync(serviceProvider, context, [scheduled, immediate], cancellationToken);
+        await context.AddMessagesAsync(serviceProvider, [scheduled, immediate], cancellationToken);
 
         // Act
         await processor.ProcessUntilIdleAsync(cancellationToken);
@@ -98,20 +96,4 @@ public class ScheduledDeliveryTests : DatabaseTest
         return serviceCollection.BuildServiceProvider();
     }
 
-    private static async Task AddMessageAsync(IServiceProvider serviceProvider, TestDbContext context, OutboxMessage message, CancellationToken cancellationToken)
-    {
-        await AddMessagesAsync(serviceProvider, context, [message], cancellationToken);
-    }
-
-    private static async Task AddMessagesAsync(IServiceProvider serviceProvider, TestDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
-    {
-        var outbox = serviceProvider.GetRequiredService<IOutbox>();
-
-        var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        await using (transaction.ConfigureAwait(false))
-        {
-            await outbox.AddMessagesAsync(context, messages, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-    }
 }

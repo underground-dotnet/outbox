@@ -58,17 +58,15 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Handles at most one unit of work: one batch of messages of the next waiting Group. When no Group
-    /// is waiting, the Groups holding unprocessed messages are discovered first, but only if a run was
-    /// scheduled through <see cref="ScheduleProcessingRun"/>. A Group whose messages keep failing is
-    /// therefore retried once per run rather than continuously, which is what stands in for a retry
-    /// backoff until there is one.
+    /// Handles at most one unit of work: the Head of the next waiting Group. When no Group is waiting,
+    /// the Groups holding unprocessed messages are discovered first, but only if a run was scheduled
+    /// through <see cref="ScheduleProcessingRun"/>.
     /// </summary>
     /// <returns>
     /// A boolean indicating whether a Group was taken, and with it whether it is worth calling again right away.
     /// It is <c>false</c> only when no Group was waiting and none could be discovered. A Group that turns out to
-    /// hold no messages - because another worker holds it, or because it was emptied by the previous batch -
-    /// still counts as taken.
+    /// offer nothing - because another worker holds its Head, because that Head is not yet visible, or because
+    /// it was emptied by the previous claim - still counts as taken.
     /// </returns>
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken)
     {
@@ -81,14 +79,14 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
 
         try
         {
-            // locking right now is performed through the `FOR UPDATE NOWAIT` clause in `FetchMessages`,
-            // so a Group another worker is holding simply yields no messages.
+            // locking is performed through the `FOR UPDATE ... SKIP LOCKED` clause in `ClaimHead`, so a
+            // Group whose Head another worker is holding simply offers nothing.
             // use separate scope & context for each group
             using var scope = _scopeFactory.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-            var batchCompleted = await processor.ProcessMessagesAsync(groupKey, _config.BatchSize, scope, cancellationToken).ConfigureAwait(false);
+            var messageHandled = await processor.ProcessHeadAsync(groupKey, scope, cancellationToken).ConfigureAwait(false);
 
-            if (batchCompleted)
+            if (messageHandled)
             {
                 // re-enqueue the group for further processing, because there might be more messages
                 _groupsChannel.Writer.TryWrite(groupKey);

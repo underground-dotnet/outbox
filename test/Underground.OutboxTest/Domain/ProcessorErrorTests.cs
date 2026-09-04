@@ -124,6 +124,8 @@ public class ProcessorErrorTests : DatabaseTest
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
         await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        // a Group offers one message per claim, so the failing message behind the first one needs a second
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
@@ -232,6 +234,8 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
+        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        // a Group offers one message per claim, so the failing message behind the first one needs a second
         await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
@@ -437,7 +441,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessMessagesAsync("default", 5, serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
+        await processor.ProcessHeadAsync("default", serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
 
         // Assert
         var failedMessage = await context.OutboxMessages

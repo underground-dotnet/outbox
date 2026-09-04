@@ -8,12 +8,6 @@ namespace Underground.Outbox.Configuration;
 public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
-    /// Number of messages to process in a single batch.
-    /// The whole batch is processed within a single transaction. If you want to have a transaction per message, set this to 1.
-    /// </summary>
-    public int BatchSize { get; set; } = 5;
-
-    /// <summary>
     /// Maximum number of Groups that can be processed concurrently.
     /// </summary>
     public int MaxConcurrentGroups { get; set; } = 4;
@@ -66,11 +60,6 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
 
     internal void Validate()
     {
-        if (BatchSize <= 0)
-        {
-            throw new ArgumentOutOfRangeException($"BatchSize ({BatchSize}) must be greater than 0.");
-        }
-
         if (MaxConcurrentGroups <= 0)
         {
             throw new ArgumentOutOfRangeException($"MaxConcurrentGroups ({MaxConcurrentGroups}) must be greater than 0.");

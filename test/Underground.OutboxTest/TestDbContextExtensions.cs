@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+using Underground.Outbox;
+using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest;
 
@@ -20,6 +24,22 @@ public static class TestDbContextExtensions
             return await context.Database
                 .SqlQuery<double>($"""SELECT extract(epoch FROM (visible_at - clock_timestamp()))::double precision AS "Value" FROM public.outbox WHERE id = {messageId}""")
                 .SingleAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// Writes messages through <see cref="IOutbox"/> inside a caller transaction, which is the only
+        /// way the library accepts them. Shared because every test that arranges rows needs exactly this.
+        /// </summary>
+        internal async Task AddMessagesAsync(IServiceProvider serviceProvider, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
+        {
+            var outbox = serviceProvider.GetRequiredService<IOutbox>();
+
+            var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            await using (transaction.ConfigureAwait(false))
+            {
+                await outbox.AddMessagesAsync(context, messages, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
         }
 
         /// <summary>

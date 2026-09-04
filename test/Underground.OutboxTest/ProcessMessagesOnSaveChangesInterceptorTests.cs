@@ -8,6 +8,9 @@ using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
 
+// this class drives a hosted service against the same static collections on ExampleMessageHandler that
+// the Domain tests assert on, so it has to run in the collection that serializes them
+[Collection("ExampleMessageHandler Collection")]
 public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;

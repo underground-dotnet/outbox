@@ -12,7 +12,7 @@ many messages fit into one fetch.
 
 - [ ] Each worker independently claims one Head, handles it, and repeats until a claim returns nothing, then waits for a trigger or the poll delay.
 - [ ] The separate work-discovery stage and the channel that fed Group names to workers are removed.
-- [ ] Batch size is removed from configuration. One message is handled per claim, on both sides.
+- [x] Batch size is removed from configuration. One message is handled per claim, on both sides. **Done in 06**: skip-locked semantics over a multi-row result are unsound, so batching could not survive that ticket - see its Comments.
 - [ ] The number of workers is governed by the concurrent-Groups setting, and it is documented that a value of one means strictly serial handling across all Groups.
 - [ ] The push trigger continues to wake workers immediately after a commit.
 - [ ] The savepoint is retained on the inbox, isolating a failed handler's writes from the attempt bookkeeping so that both still commit together.
