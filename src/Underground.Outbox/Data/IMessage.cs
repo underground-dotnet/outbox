@@ -22,7 +22,8 @@ public interface IMessage
     /// <summary>
     /// The instant from which this message may be handled. Defaulted by the database to the present,
     /// so a message is deliverable as soon as it is Settled; a failed attempt moves it into the future
-    /// by the retry backoff.
+    /// by the retry backoff, and a caller may set it at creation to schedule the message for a future
+    /// instant.
     /// </summary>
     public DateTime VisibleAt { get; }
 

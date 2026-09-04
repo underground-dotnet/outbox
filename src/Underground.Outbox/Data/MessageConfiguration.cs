@@ -28,9 +28,11 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
             .HasDefaultValueSql("pg_current_xact_id()")
             .ValueGeneratedOnAdd();
 
-        // All timing is decided by the database. An application-supplied instant would make delivery depend
-        // on each instance's clock, and clock_timestamp() rather than now() because now() is frozen for the
-        // transaction, which the inbox holds open across its handler.
+        // The default is what makes an unscheduled message deliverable at once, and leaving the column to
+        // the database is what keeps that instant off the application's clock. clock_timestamp() rather
+        // than now(), because now() is frozen for the transaction the inbox holds open across its handler.
+        // A caller who schedules a message supplies the instant instead, and EF then includes the column
+        // in the insert rather than letting the default apply.
         builder.Property(nameof(IMessage.VisibleAt))
             .HasDefaultValueSql("clock_timestamp()")
             .ValueGeneratedOnAdd();

@@ -22,3 +22,4 @@ place in the whole feature for a defect to hide.
 - [ ] A test proves that while a Group's Head is in backoff, no later message in that Group is handled, however long it has waited.
 - [ ] A test proves other Groups continue to be handled while one Group's Head is unavailable.
 - [ ] A test proves that once the Head becomes visible again it is handled before anything behind it.
+- [ ] A test proves the same for a Head that is invisible because it was *scheduled* rather than because it failed. Carried over from 05, whose implementation landed without it: the behaviour is this ticket's to deliver.

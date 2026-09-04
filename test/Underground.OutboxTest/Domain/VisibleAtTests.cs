@@ -41,7 +41,7 @@ public class VisibleAtTests : DatabaseTest
         await AddMessageAsync(serviceProvider, context, message, cancellationToken);
 
         // Assert: the database defaulted the instant to its own present, rather than leaving it unset
-        var secondsUntilVisible = await SecondsUntilVisibleAsync(context, message.Id, cancellationToken);
+        var secondsUntilVisible = await context.SecondsUntilVisibleAsync(message.Id, cancellationToken);
         Assert.InRange(secondsUntilVisible, -60, 0);
     }
 
@@ -70,7 +70,7 @@ public class VisibleAtTests : DatabaseTest
         var whileInBackoff = FailedMessageHandler.CalledWith.Count;
 
         // simulate the backoff elapsing instead of waiting ten minutes for it
-        await ExpireBackoffAsync(context, cancellationToken);
+        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         // Assert
@@ -103,8 +103,8 @@ public class VisibleAtTests : DatabaseTest
         foreach (var _ in expectedDelays)
         {
             await processor.ProcessUntilIdleAsync(cancellationToken);
-            actualDelays.Add(await SecondsUntilVisibleAsync(context, message.Id, cancellationToken));
-            await ExpireBackoffAsync(context, cancellationToken);
+            actualDelays.Add(await context.SecondsUntilVisibleAsync(message.Id, cancellationToken));
+            await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
         }
 
         // Assert
@@ -169,27 +169,5 @@ public class VisibleAtTests : DatabaseTest
             await outbox.AddMessageAsync(context, message, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
-    }
-
-    /// <summary>
-    /// How long the message still has to wait, measured by the database's own clock. Negative means it
-    /// may be handled now.
-    /// </summary>
-    private static async Task<double> SecondsUntilVisibleAsync(TestDbContext context, long messageId, CancellationToken cancellationToken)
-    {
-        return await context.Database
-            .SqlQuery<double>($"""SELECT extract(epoch FROM (visible_at - clock_timestamp()))::double precision AS "Value" FROM public.outbox WHERE id = {messageId}""")
-            .SingleAsync(cancellationToken);
-    }
-
-    /// <summary>
-    /// Stands in for the backoff interval elapsing. All timing is decided by the database, so moving the
-    /// stored instant into the past is indistinguishable from having waited for it.
-    /// </summary>
-    private static async Task ExpireBackoffAsync(TestDbContext context, CancellationToken cancellationToken)
-    {
-        await context.Database.ExecuteSqlAsync(
-            $"UPDATE public.outbox SET visible_at = clock_timestamp() WHERE processed_at IS NULL",
-            cancellationToken);
     }
 }
