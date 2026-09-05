@@ -55,3 +55,15 @@ _Avoid_: Consumer, subscriber, listener
 **Partition**:
 Reserved for PostgreSQL declarative table partitioning only. Never used for the logical grouping
 that governs ordering and concurrency — that is a Group.
+
+**Stage**:
+One concern in the work done to a single message — logging it, recording a failed attempt, holding
+a savepoint — written as a wrapper around the rest of that work. Stages are ordered, and the order
+is a correctness property rather than a preference.
+_Avoid_: Middleware, filter, interceptor, decorator
+
+**Chain**:
+The ordered Stages both the inbox and the outbox run against one claimed Head, ending in the
+dispatch to its Handler. Everything a message goes through belongs to the Chain; the transaction
+boundary, the claim, and the write that records the outcome deliberately do not.
+_Avoid_: Pipeline, middleware stack

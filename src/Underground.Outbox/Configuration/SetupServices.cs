@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
+using Underground.Outbox.Domain.Chain;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
@@ -63,6 +64,15 @@ public static class SetupServices
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<ScheduleRetry<TEntity>>();
+
+        // the per-message chain, shared by the inbox and the outbox. Its stages are registered
+        // individually but only ever composed by the factory, which owns the order between them.
+        services.AddScoped<LogMessageStage<TEntity>>();
+        services.AddScoped<RecordFailureStage<TEntity>>();
+        services.AddScoped<SavepointStage<TEntity>>();
+        services.AddScoped<DispatchMessage<TEntity>>();
+        services.AddScoped(MessageChainFactory.Create<TEntity>);
+
         services.AddScoped<Processor<TEntity>>();
         services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();

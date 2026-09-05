@@ -1,31 +1,28 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
-using Underground.Outbox.Exceptions;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
-using Underground.Outbox.Domain.Dispatchers;
-using Underground.Outbox.Domain.ExceptionHandlers;
+using Underground.Outbox.Domain.Chain;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed partial class Processor<TEntity>(
-    IMessageDispatcher<TEntity> dispatcher,
+internal sealed class Processor<TEntity>(
     IDbContext dbContext,
-    ILogger<Processor<TEntity>> logger,
     ClaimHead<TEntity> claimHead,
-    ScheduleRetry<TEntity> scheduleRetry
+    MessageChain<TEntity> chain
 ) where TEntity : class, IMessage
 {
-    private readonly IMessageDispatcher<TEntity> _dispatcher = dispatcher;
-    private readonly ILogger<Processor<TEntity>> _logger = logger;
-
     /// <summary>
     /// Claims and handles one Head - the oldest settled unhandled message of whichever Group offers the
     /// oldest one - using the given scope and the DbContext of this instance. A Group offers only its Head,
     /// and it offers nothing at all while that Head is not yet visible, so a message in backoff or scheduled
     /// for later holds back everything behind it in the same Group without holding back any other Group.
     /// </summary>
+    /// <remarks>
+    /// This is the outer loop: the transaction boundary, the claim and the write that records the outcome.
+    /// Everything done to the message in between is <see cref="MessageChain{TEntity}"/>, which the inbox and
+    /// the outbox share.
+    /// </remarks>
     /// <returns>
     /// Whether a message was claimed, and with it whether it is worth calling again right away. A message
     /// that was claimed and then failed still counts as claimed; it is <c>false</c> only when no Group
@@ -43,9 +40,8 @@ internal sealed partial class Processor<TEntity>(
             }
 
             var messageId = message.Id;
-            LogProcessingMessage(messageId, typeof(TEntity).ToString(), message.GroupKey);
 
-            var handled = await CallMessageHandlerAsync(message, scope, cancellationToken).ConfigureAwait(false);
+            var handled = await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
 
             if (handled)
             {
@@ -64,74 +60,4 @@ internal sealed partial class Processor<TEntity>(
             return true;
         }
     }
-
-    private async Task<bool> CallMessageHandlerAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
-    {
-        var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
-
-        var transaction = dbContext.Database.CurrentTransaction!;
-
-        // the savepoint isolates a failed handler's writes from the attempt bookkeeping that follows, so
-        // that the retry count and the new visibility instant still commit together with the rollback
-        var savepointName = $"processing_message_{message.Id}";
-        await transaction.CreateSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
-
-        // only an exception the handler itself raised has a policy to consult; anything else falls
-        // straight through to the retry
-        MessageHandlerException? handlerException = null;
-
-        try
-        {
-            await _dispatcher.ExecuteAsync(scope, message, cancellationToken).ConfigureAwait(false);
-            // persist all changes from the handler. (in case the handler forgot to call SaveChanges)
-            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.ReleaseSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
-
-            return true;
-        }
-        catch (MessageHandlerException ex)
-        {
-            LogMessageHandlerError(message.Id, ex);
-            handlerException = ex;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogMessageProcessingError(message.Id, ex);
-        }
-
-        // the try block returns on success, so reaching here means the message failed
-
-        // clear all tracked entities, because processing failed. The ErrorHandler can then use the clean context to perform db operations.
-        dbContext.ChangeTracker.Clear();
-        await transaction.RollbackToSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
-
-        if (handlerException is not null)
-        {
-            await processHandlerException.ExecuteAsync(handlerException, message, dbContext, cancellationToken).ConfigureAwait(false);
-        }
-
-        // records the attempt and moves the message out of sight for the backoff delay, so the next
-        // run does not retry it immediately
-        await scheduleRetry.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
-
-        return false;
-    }
-
-    [LoggerMessage(
-        EventId = 1,
-        Level = LogLevel.Information,
-        Message = "Processing message {MessageId} in {Type} for group '{GroupKey}'")]
-    private partial void LogProcessingMessage(long messageId, string type, string groupKey);
-
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Error,
-        Message = "Error processing message {MessageId} in handler")]
-    private partial void LogMessageHandlerError(long messageId, Exception exception);
-
-    [LoggerMessage(
-        EventId = 3,
-        Level = LogLevel.Error,
-        Message = "Error processing message {MessageId}.")]
-    private partial void LogMessageProcessingError(long messageId, Exception exception);
 }
