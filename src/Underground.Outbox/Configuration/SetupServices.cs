@@ -70,6 +70,7 @@ public static class SetupServices
         services.AddScoped<LogMessageStage<TEntity>>();
         services.AddScoped<RecordFailureStage<TEntity>>();
         services.AddScoped<SavepointStage<TEntity>>();
+        services.AddScoped<TimeoutStage<TEntity>>();
         services.AddScoped<DispatchMessage<TEntity>>();
         services.AddScoped(MessageChainFactory.Create<TEntity>);
 

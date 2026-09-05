@@ -21,6 +21,15 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
     /// <summary>
+    /// The time a Handler is given to complete. When it elapses, the cancellation token the Handler was
+    /// passed is cancelled and the message is recorded as a failed attempt, so a hung external call costs
+    /// its own Group a backoff rather than occupying a worker - and, on the inbox, rather than holding a
+    /// transaction open behind it. There is no way to switch it off: an unbounded Handler is what this
+    /// exists to prevent.
+    /// </summary>
+    public TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromSeconds(45);
+
+    /// <summary>
     /// Delay before a message that failed for the first time is offered again. Every further failure
     /// doubles it, up to <see cref="MaxBackoff"/>.
     /// </summary>
@@ -71,6 +80,11 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
         if (ProcessingDelayMilliseconds < 0)
         {
             throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+        }
+
+        if (HandlerTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException($"HandlerTimeout ({HandlerTimeout}) must be greater than zero.");
         }
 
         if (BackoffBase <= TimeSpan.Zero)

@@ -18,6 +18,19 @@ public class ServiceConfigurationTests
     }
 
     [Fact]
+    public void Validate_ThrowsArgumentOutOfRangeException_WhenHandlerTimeoutIsZero()
+    {
+        var configuration = new OutboxServiceConfiguration
+        {
+            HandlerTimeout = TimeSpan.Zero
+        };
+
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
+
+        Assert.Contains("HandlerTimeout", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenBackoffBaseIsZero()
     {
         var configuration = new OutboxServiceConfiguration

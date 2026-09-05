@@ -23,10 +23,15 @@ internal static class MessageChainFactory
                 // rollback that discards the failed Handler's writes
                 services.GetRequiredService<RecordFailureStage<TEntity>>(),
 
-                // innermost, next to the dispatch whose writes it isolates. Absent from a side that holds
-                // no transaction across the dispatch and so has nothing to roll back to; today both sides
+                // around the dispatch whose writes it isolates. Absent from a side that holds no
+                // transaction across the dispatch and so has nothing to roll back to; today both sides
                 // hold one, so both sides get it.
                 services.GetRequiredService<SavepointStage<TEntity>>(),
+
+                // innermost, so that the Handler and the save that follows it are the only things running
+                // on the narrowed token - the rollback and the attempt bookkeeping a timeout leads to are
+                // outside it, and so still have a live token to run on
+                services.GetRequiredService<TimeoutStage<TEntity>>(),
             ],
             services.GetRequiredService<DispatchMessage<TEntity>>());
 }

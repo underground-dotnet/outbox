@@ -58,8 +58,8 @@ that governs ordering and concurrency — that is a Group.
 
 **Stage**:
 One concern in the work done to a single message — logging it, recording a failed attempt, holding
-a savepoint — written as a wrapper around the rest of that work. Stages are ordered, and the order
-is a correctness property rather than a preference.
+a savepoint, bounding how long its Handler may run — written as a wrapper around the rest of that
+work. Stages are ordered, and the order is a correctness property rather than a preference.
 _Avoid_: Middleware, filter, interceptor, decorator
 
 **Chain**:
