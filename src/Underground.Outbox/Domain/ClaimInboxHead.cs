@@ -12,10 +12,10 @@ internal sealed class ClaimInboxHead(IDbContext dbContext) : ClaimHead<InboxMess
     // the lock the CTE took is held until the transaction ends, so the outer statement only has to read
     // the row back out
     private static readonly string ClaimSql = $"""
-        {LockedHeadCte("inbox")}
+        {LockedHeadCte()}
         SELECT m.*
         FROM claimed c
-        JOIN inbox m ON m.id = c.id
+        JOIN {InboxMessage.TableName} m ON m.id = c.id
         """;
 
     protected override string Sql => ClaimSql;

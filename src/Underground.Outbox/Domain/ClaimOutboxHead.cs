@@ -20,8 +20,8 @@ internal sealed class ClaimOutboxHead(
 ) : ClaimHead<OutboxMessage>(dbContext)
 {
     private static readonly string ClaimSql = $"""
-        {LockedHeadCte("outbox")}
-        UPDATE outbox m
+        {LockedHeadCte()}
+        UPDATE {OutboxMessage.TableName} m
         SET visible_at = clock_timestamp() + @lease
         FROM claimed c
         WHERE m.id = c.id

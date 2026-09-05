@@ -63,12 +63,12 @@ internal abstract class ClaimHead<TEntity>(IDbContext dbContext) where TEntity :
     /// yields at most one id, already locked for the calling transaction; a caller appends the statement
     /// that acts on it.
     /// </summary>
-    /// <param name="table">
-    /// The message table, named literally: the names are fixed, and unqualified so that the schema is the
-    /// deployment's to choose through <c>search_path</c>. See
+    /// <remarks>
+    /// The table is named from <see cref="IMessage.TableName"/> rather than spelled out again here, and
+    /// unqualified so that the schema is the deployment's to choose through <c>search_path</c>. See
     /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
-    /// </param>
-    protected static string LockedHeadCte(string table)
+    /// </remarks>
+    protected static string LockedHeadCte()
     {
         // Head discovery is deliberately in two stages. A Group's Head is the lowest (transaction_id, id)
         // among its settled unhandled rows *regardless of visibility*, and only then is visibility tested
@@ -103,7 +103,7 @@ internal abstract class ClaimHead<TEntity>(IDbContext dbContext) where TEntity :
         return $"""
             WITH heads AS (
                 SELECT DISTINCT ON (group_key) id
-                FROM {table}
+                FROM {TEntity.TableName}
                 WHERE processed_at IS NULL
                 AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
                 ORDER BY group_key, transaction_id, id
@@ -111,7 +111,7 @@ internal abstract class ClaimHead<TEntity>(IDbContext dbContext) where TEntity :
             claimed AS (
                 SELECT m.id
                 FROM heads h
-                JOIN {table} m ON m.id = h.id
+                JOIN {TEntity.TableName} m ON m.id = h.id
                 WHERE m.processed_at IS NULL
                 AND m.visible_at <= clock_timestamp()
                 ORDER BY m.transaction_id, m.id

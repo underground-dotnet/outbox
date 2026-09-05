@@ -29,8 +29,13 @@ the deployment's to choose, and `search_path` is how it says so.
 
 ## Consequences
 
-Statements are `const string`. Both per-model caches, both `S2743` suppressions and the identifier
-resolver are gone, and `IDbContext.Model` went with them — it existed only to serve them.
+Statements are literals. Only the guard shared by every write is a `const string`; the rest name their
+table through `IMessage.TableName`, which is a `static abstract` property and so cannot appear in a
+constant. A claim statement is composed once into a `static readonly` field on the class that owns it;
+the two writes shared by both message types interpolate theirs per call, which is one string
+concatenation against a database round trip and not worth a static field on a generic type — that is
+what needed an `S2743` suppression before. Both per-model caches, both `S2743` suppressions and the
+identifier resolver are gone, and `IDbContext.Model` went with them — it existed only to serve them.
 
 A consumer who calls `ToTable` or `HasColumnName` on either entity gets no compile error and no
 startup error. Their first claim fails against a table or column that is not there. This is
@@ -43,9 +48,23 @@ the default schema and the default `search_path` finds them — but an applicati
 
 The mapping annotations and the SQL literals are two places that must agree, with nothing but the
 integration suite holding them together: a renamed column shows up as `42703 column … does not
-exist` there, not in the fast test loop. `MessageColumns`, which shared the one name that used to
-be written twice, is gone, since fixing every name makes the drift it prevented a matter of editing
-one literal and not the other.
+exist` there, not in the fast test loop. That exposure is column names only — a table name is written
+in the `[Table]` attribute and in `TableName` beside it, and every statement interpolates the latter
+rather than spelling the table out a third time. `MessageColumns`, which shared the one name that used
+to be written twice, is gone, since fixing every column name makes the drift it prevented a matter of
+editing one literal and not the other.
+
+A claim no longer reads its row column by column out of a `DbDataReader` on a hand-built `DbCommand`.
+It runs through EF's `FromSqlRaw`, which materialises the entity from the result set by column name, so
+the projection cannot drift from the entity the way a hand-written one could. This rode along with the
+renaming rather than following from it, but it removes the second place a column name was spelled out
+in C#, and the claim statements now have to return every mapped column. `AsNoTracking` on that call is
+load-bearing: a tracked claim would let an application's `SaveChanges` inside a handler write the
+message behind a `GuardedWrite`'s guard.
+
+`ClaimHead` lost its `ILogger` and the debug log that recorded the statement it was about to run. The
+statement is now a fixed literal per class rather than something assembled from a model, so logging it
+told an operator nothing that reading the source does not.
 
 `IMessage` gained a `static abstract string TableName`, so a generic write can name its table
 without reflection or a lookup. It is public surface, and an external implementation of `IMessage`
