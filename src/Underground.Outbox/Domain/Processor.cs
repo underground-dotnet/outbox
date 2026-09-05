@@ -21,28 +21,29 @@ internal sealed partial class Processor<TEntity>(
     private readonly ILogger<Processor<TEntity>> _logger = logger;
 
     /// <summary>
-    /// Handles the Group's Head - its oldest settled unhandled message - using the given scope and the
-    /// DbContext of this instance. A Group offers only its Head, and it offers nothing at all while that
-    /// Head is not yet visible, so a message in backoff or scheduled for later holds back everything
-    /// behind it in the same Group.
+    /// Claims and handles one Head - the oldest settled unhandled message of whichever Group offers the
+    /// oldest one - using the given scope and the DbContext of this instance. A Group offers only its Head,
+    /// and it offers nothing at all while that Head is not yet visible, so a message in backoff or scheduled
+    /// for later holds back everything behind it in the same Group without holding back any other Group.
     /// </summary>
     /// <returns>
-    /// Whether a message was handled successfully, and with it whether the Group may hold a further one.
-    /// It is <c>false</c> when the Group offered nothing and when the message it offered failed.
+    /// Whether a message was claimed, and with it whether it is worth calling again right away. A message
+    /// that was claimed and then failed still counts as claimed; it is <c>false</c> only when no Group
+    /// offered anything.
     /// </returns>
-    internal async Task<bool> ProcessHeadAsync(string groupKey, IServiceScope scope, CancellationToken cancellationToken)
+    internal async Task<bool> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using (transaction.ConfigureAwait(false))
         {
-            var message = await claimHead.ExecuteAsync(groupKey, cancellationToken).ConfigureAwait(false);
+            var message = await claimHead.ExecuteAsync(cancellationToken).ConfigureAwait(false);
             if (message is null)
             {
                 return false;
             }
 
             var messageId = message.Id;
-            LogProcessingMessage(messageId, typeof(TEntity).ToString(), groupKey);
+            LogProcessingMessage(messageId, typeof(TEntity).ToString(), message.GroupKey);
 
             var handled = await CallMessageHandlerAsync(message, scope, cancellationToken).ConfigureAwait(false);
 
@@ -58,7 +59,9 @@ internal sealed partial class Processor<TEntity>(
             // remove tracked entities to avoid memory leaks
             dbContext.ChangeTracker.Clear();
 
-            return handled;
+            // a failed message has been pushed out of sight by the backoff, so reporting the claim rather
+            // than the outcome cannot spin: the next claim looks past it, at some other Group's Head
+            return true;
         }
     }
 

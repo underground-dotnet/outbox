@@ -441,7 +441,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessHeadAsync("default", serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
+        await processor.ProcessHeadAsync(serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
 
         // Assert
         var failedMessage = await context.OutboxMessages

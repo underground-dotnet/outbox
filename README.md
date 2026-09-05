@@ -158,9 +158,9 @@ With that registration in place, a successful `transaction.CommitAsync()` call w
 Groups are central to how concurrency works.
 
 - Each message has a `GroupKey`.
-- The processor first queries the distinct groups that still have unprocessed messages.
-- Different groups can be handled in parallel up to `MaxConcurrentGroups`.
-- Within one group, messages are fetched ordered by `(transaction_id, id)` and processed in batches.
+- A group offers only its head — its oldest unhandled message, ordered by `(transaction_id, id)`. It offers nothing at all while that head is waiting for a retry backoff or a scheduled instant, so a delayed message holds back its own group and no other.
+- Each worker claims one head, handles it, and claims again. Nothing hands groups out to workers; the database distributes them.
+- Different groups are therefore handled in parallel, up to `MaxConcurrentGroups` — which is the number of workers, so `1` means strictly serial handling across all groups rather than one message per group.
 - A message becomes eligible only once no still-running transaction could still insert an earlier one into its group, so ordering reflects the order in which transactions started rather than the order in which messages were appended. See [ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md).
 
 Use the group key to group messages that must stay ordered relative to each other, for example per aggregate, account, or customer.
@@ -171,18 +171,18 @@ If you do not care about group-local ordering, the default group key is `"defaul
 
 The outbox can run on multiple servers against the same database.
 
-It does not use a single global distributed lock. Instead, when a worker claims a group's next message it uses PostgreSQL `FOR UPDATE ... SKIP LOCKED` row locking:
+It does not use a single global distributed lock. Instead, one query considers every group's head at once and takes the oldest of them with PostgreSQL `FOR UPDATE ... SKIP LOCKED` row locking:
 
-- one worker locks that group's oldest unhandled message
-- another worker or server claiming from the same group finds that row locked
-- a locked row is skipped rather than waited for, and the group offers nothing
-- the second worker moves on to another group
+- one worker locks the head it claims
+- another worker or server running the same query finds that row locked
+- a locked row is skipped rather than waited for, so the claim falls through to the next group's head
+- the second worker therefore ends up on a different group, with no coordination between the two
 
 This is the main duplicate-prevention mechanism. Combined with marking successful messages via `ProcessedAt`, it prevents concurrent processors from handling the same rows twice.
 
 ## Error handling
 
-Messages are processed inside the processor transaction, with a savepoint created for each message. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented, `VisibleAt` is pushed into the future by the retry backoff, and processing of the current batch stops. Messages that were handled successfully earlier in the same batch remain processed.
+Each message is handled inside its own transaction, with a savepoint created around the handler. When a handler fails, changes made while handling that message are rolled back to the savepoint, the message `RetryCount` is incremented and `VisibleAt` is pushed into the future by the retry backoff — and because the savepoint isolates only the handler's writes, that bookkeeping still commits. The failed message is now out of sight, so its group offers nothing until the backoff elapses while every other group carries on.
 
 The backoff doubles with every failed attempt — `BackoffBase`, then twice that, and so on — up to `MaxBackoff`, and each delay is varied by `BackoffJitter` either way so that groups which all failed against one shared dependency do not retry in lockstep. The new `VisibleAt` is computed by PostgreSQL from `clock_timestamp()`; the application only ever supplies the interval, so an instance with a skewed clock cannot retry early or late.
 
@@ -219,7 +219,7 @@ Cleanup deletes rows where `ProcessedAt` is older than the configured retention 
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MaxConcurrentGroups` | `4` | Number of groups that can be processed concurrently. |
+| `MaxConcurrentGroups` | `4` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
 | `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
 | `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. |
 | `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |

@@ -37,9 +37,12 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
             .HasDefaultValueSql("clock_timestamp()")
             .ValueGeneratedOnAdd();
 
-        // Head lookup reads the lowest (TransactionId, Id) per GroupKey among unprocessed messages. The
-        // filter is what keeps that an index-ordered lookup over the Groups still holding work, rather
-        // than a scan whose cost grows with the processed messages kept for the retention period.
+        // Head lookup reads the lowest (TransactionId, Id) per GroupKey among unprocessed messages, which
+        // this index supplies already ordered, so no sort is needed to pick the Heads out. Its cost is
+        // proportional to the unprocessed rows rather than to the processed ones kept for the retention
+        // period, which is what the filter buys and which is the whole reason the index is partial.
+        // PostgreSQL has no loose index scan, so the DISTINCT ON still walks every unprocessed entry
+        // rather than skipping from one GroupKey to the next.
         // A consumer that remaps the ProcessedAt column in its own configuration has to replace this index.
         builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
             .HasFilter($"\"{MessageColumns.ProcessedAt}\" IS NULL");

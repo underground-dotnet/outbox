@@ -8,7 +8,10 @@ namespace Underground.Outbox.Configuration;
 public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
-    /// Maximum number of Groups that can be processed concurrently.
+    /// Maximum number of Groups that can be handled concurrently. It is the number of workers that run:
+    /// each one claims a Head for itself and the database keeps two of them off the same Group, so this
+    /// caps how many Groups are ever in flight at once. A value of one means strictly serial handling
+    /// across all Groups - one message anywhere in the system at a time - not one message per Group.
     /// </summary>
     public int MaxConcurrentGroups { get; set; } = 4;
 

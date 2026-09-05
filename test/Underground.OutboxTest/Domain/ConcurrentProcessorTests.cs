@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -9,6 +10,11 @@ using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 
+/// <summary>
+/// Workers serve themselves: each one claims a Head, handles it, and claims again, and nothing hands
+/// Groups out to them. These tests are about that topology - that distinct Groups really do end up on
+/// different workers, and that one Group holding a worker leaves the others alone.
+/// </summary>
 [Collection("ExampleMessageHandler Collection")]
 public class ConcurrentProcessorTests : DatabaseTest
 {
@@ -24,36 +30,61 @@ public class ConcurrentProcessorTests : DatabaseTest
         GroupedMessageHandler.CalledWith.Clear();
         GroupedMessageHandler.ExpectedConcurrentGroups = 0;
         GroupedMessageHandler.GroupsHandledConcurrently = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        BlockingMessageHandler.Reset();
 
-        // setup dependency injection
-        var serviceCollection = new ServiceCollection();
-
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        _serviceProvider = BuildServiceProvider(cfg =>
         {
             cfg.MaxConcurrentGroups = 4;
             cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
         });
-
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
-        _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
-    private async Task RunBackgroundServiceAsync(CancellationToken cancellationToken)
+    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration> configure)
     {
-        var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
+        var serviceCollection = new ServiceCollection();
+        serviceCollection.AddOutboxServices<TestDbContext>(configure);
+        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+
+        return serviceCollection.BuildServiceProvider();
+    }
+
+    private static async Task RunBackgroundServiceAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
+    {
+        var services = serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
             await service.StartAsync(cancellationToken);
         }
     }
 
-    private async Task StopBackgroundServiceAsync(CancellationToken cancellationToken)
+    private static async Task StopBackgroundServiceAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
-        var services = _serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
+        var services = serviceProvider.GetRequiredService<IEnumerable<IHostedService>>();
         foreach (var service in services)
         {
             await service.StopAsync(cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Polls a condition the background workers bring about, rather than sleeping for a fixed duration.
+    /// Returns whether it came about before the timeout, so a test asserts on that instead of hanging.
+    /// </summary>
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        while (!condition())
+        {
+            if (timeout.IsCancellationRequested)
+            {
+                return false;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken);
+        }
+
+        return true;
     }
 
     [Fact]
@@ -79,12 +110,12 @@ public class ConcurrentProcessorTests : DatabaseTest
         }
 
         // Act
-        await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
+        await RunBackgroundServiceAsync(_serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         await GroupedMessageHandler.GroupsHandledConcurrently.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         SpinWait.SpinUntil(() => GroupedMessageHandler.TotalCount == 200, TimeSpan.FromSeconds(10));
-        await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
+        await StopBackgroundServiceAsync(_serviceProvider, TestContext.Current.CancellationToken);
         Assert.Equal(200, GroupedMessageHandler.TotalCount);
 
         var groupA = Enumerable.Range(0, 200)
@@ -147,4 +178,56 @@ public class ConcurrentProcessorTests : DatabaseTest
                      .ToList();
         Assert.Equal(groupB, GroupedMessageHandler.CalledWith["B"]);
     }
+
+    /// <summary>
+    /// Two workers, one of them held inside a handler for as long as the test likes. The other has to get
+    /// through the whole of the second Group unaided, which it can only do by serving itself: there is no
+    /// worker left to be handed anything by.
+    /// </summary>
+    [Fact]
+    public async Task SlowHandlerInOneGroupDoesNotDelayAnotherGroup()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var serviceProvider = BuildServiceProvider(cfg =>
+        {
+            // exactly one worker is left over once the slow Group has taken one
+            cfg.MaxConcurrentGroups = 2;
+            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
+        });
+        var context = CreateDbContext();
+
+        const int slow = 1;
+        int[] fast = [2, 3, 4];
+        BlockingMessageHandler.BlockingIds.Add(slow);
+        await context.AddMessagesAsync(
+            serviceProvider,
+            [
+                MessageFor(slow, "slow"),
+                .. fast.Select(id => MessageFor(id, "fast")),
+            ],
+            cancellationToken);
+
+        // Act
+        await RunBackgroundServiceAsync(serviceProvider, cancellationToken);
+        await BlockingMessageHandler.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+        var fastGroupFinished = await WaitUntilAsync(
+            () => fast.All(BlockingMessageHandler.CalledWith.Contains),
+            cancellationToken);
+
+        // Assert: the whole of the fast Group was handled while the slow Group was still inside its handler
+        var slowMessageStillUnhandled = await context.OutboxMessages
+            .AsNoTracking()
+            .AnyAsync(m => m.GroupKey == "slow" && m.ProcessedAt == null, cancellationToken);
+
+        BlockingMessageHandler.Release.TrySetResult();
+        await StopBackgroundServiceAsync(serviceProvider, cancellationToken);
+
+        Assert.True(fastGroupFinished, "the fast Group was still waiting when the timeout elapsed");
+        Assert.True(slowMessageStillUnhandled, "the slow Group finished before the fast one, so nothing was proven");
+        Assert.Equal(fast, BlockingMessageHandler.CalledWith.Where(id => id != slow));
+    }
+
+    private static OutboxMessage MessageFor(int id, string groupKey) =>
+        new(Guid.NewGuid(), DateTime.UtcNow, new BlockingMessage(id), groupKey: groupKey);
 }

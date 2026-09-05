@@ -18,7 +18,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ServiceConfiguration<TEntity> _config = config;
 
-    // used to trigger processing runs, making sure only a limited number of runs can be queued
+    // used to wake idle workers, making sure only a limited number of runs can be queued
     private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
@@ -26,23 +26,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         SingleWriter = false
     });
 
-    // contains groups to be processed
-    private readonly Channel<string> _groupsChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(20)
-    {
-        FullMode = BoundedChannelFullMode.DropWrite,
-        SingleReader = false,
-        SingleWriter = false
-    });
-
     /// <summary>
-    /// Runs one worker per configured concurrent Group until the token is cancelled. Each worker repeats
-    /// <see cref="ProcessNextAsync"/> and waits for new work whenever there is none.
+    /// Runs one worker per configured concurrent Group until the token is cancelled. Each worker serves
+    /// itself: it repeats <see cref="ProcessNextAsync"/> for as long as that keeps finding work, and waits
+    /// for a trigger or the poll delay once it does not.
     /// </summary>
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
-        // handle whatever is already waiting in the database when the application starts
-        ScheduleProcessingRun();
-
         var workers = Enumerable.Range(0, _config.MaxConcurrentGroups)
             .Select(_ => RunWorkerAsync(cancellationToken));
 
@@ -58,80 +48,33 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Handles at most one unit of work: the Head of the next waiting Group. When no Group is waiting,
-    /// the Groups holding unprocessed messages are discovered first, but only if a run was scheduled
-    /// through <see cref="ScheduleProcessingRun"/>.
+    /// Handles at most one unit of work: the Head of whichever Group currently offers the oldest one.
+    /// Nothing hands Groups to a worker - it claims one for itself, and the skip-locked semantics of that
+    /// claim are what keep two workers off the same Group.
     /// </summary>
     /// <returns>
-    /// A boolean indicating whether a Group was taken, and with it whether it is worth calling again right away.
-    /// It is <c>false</c> only when no Group was waiting and none could be discovered. A Group that turns out to
-    /// offer nothing - because another worker holds its Head, because that Head is not yet visible, or because
-    /// it was emptied by the previous claim - still counts as taken.
+    /// A boolean indicating whether a message was claimed, and with it whether it is worth calling again
+    /// right away. It is <c>false</c> when no Group offered anything - because nothing is unhandled, because
+    /// every candidate Head is not yet visible, or because other workers hold the ones that are - and also
+    /// when the claim itself failed, which is logged rather than thrown so that a worker survives it.
     /// </returns>
     internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken)
     {
-        var groupKey = await TakeNextGroupAsync(cancellationToken).ConfigureAwait(false);
-
-        if (groupKey is null)
-        {
-            return false;
-        }
-
         try
         {
-            // locking is performed through the `FOR UPDATE ... SKIP LOCKED` clause in `ClaimHead`, so a
-            // Group whose Head another worker is holding simply offers nothing.
-            // use separate scope & context for each group
+            // use a separate scope & context for each claim
             using var scope = _scopeFactory.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-            var messageHandled = await processor.ProcessHeadAsync(groupKey, scope, cancellationToken).ConfigureAwait(false);
 
-            if (messageHandled)
-            {
-                // re-enqueue the group for further processing, because there might be more messages
-                _groupsChannel.Writer.TryWrite(groupKey);
-            }
+            return await processor.ProcessHeadAsync(scope, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogGroupProcessingError(groupKey, ex);
-        }
+            LogProcessingError(ex);
 
-        return true;
-    }
-
-    private async Task<string?> TakeNextGroupAsync(CancellationToken cancellationToken)
-    {
-        if (_groupsChannel.Reader.TryRead(out var groupKey))
-        {
-            return groupKey;
-        }
-
-        if (!_triggerChannel.Reader.TryRead(out _))
-        {
-            return null;
-        }
-
-        await DiscoverGroupsAsync(cancellationToken).ConfigureAwait(false);
-
-        return _groupsChannel.Reader.TryRead(out groupKey) ? groupKey : null;
-    }
-
-    private async Task DiscoverGroupsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var groups = await scope.ServiceProvider.GetRequiredService<FetchGroups<TEntity>>().ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-            foreach (var groupKey in groups)
-            {
-                _groupsChannel.Writer.TryWrite(groupKey);
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            LogFetchGroupsError(ex);
+            // treat a failed claim as no work rather than as a reason to try again immediately, so that a
+            // database that is refusing connections is not hammered in a tight loop
+            return false;
         }
     }
 
@@ -139,19 +82,9 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            bool groupTaken;
-
-            try
-            {
-                groupTaken = await ProcessNextAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogWorkerFailed(ex);
-                groupTaken = false;
-            }
-
-            if (!groupTaken)
+            // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker keeps
+            // serving itself across a failure rather than dying and leaving the pool one short
+            if (!await ProcessNextAsync(cancellationToken).ConfigureAwait(false))
             {
                 await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -161,60 +94,36 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Waits until another worker queues a Group or a run is scheduled, and gives up after the configured
-    /// processing delay so that work nothing pushed to us is still picked up.
+    /// Waits until a processing run is scheduled, and gives up after the configured processing delay so
+    /// that work nothing pushed to us is still picked up.
     /// </summary>
     private async Task WaitForWorkAsync(CancellationToken cancellationToken)
     {
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         wait.CancelAfter(_config.ProcessingDelayMilliseconds);
 
-        var groupQueued = _groupsChannel.Reader.WaitToReadAsync(wait.Token).AsTask();
-        var runScheduled = _triggerChannel.Reader.WaitToReadAsync(wait.Token).AsTask();
-
-        await Task.WhenAny(groupQueued, runScheduled).ConfigureAwait(false);
-
-        // release and observe the wait that lost the race, so that it is not left running unobserved
-        await wait.CancelAsync().ConfigureAwait(false);
-        await AwaitCancelledWaitAsync(groupQueued).ConfigureAwait(false);
-        await AwaitCancelledWaitAsync(runScheduled).ConfigureAwait(false);
-
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (groupQueued.IsCanceled && runScheduled.IsCanceled)
-        {
-            // the processing delay elapsed without anything waking us up, so poll for work
-            ScheduleProcessingRun();
-        }
-    }
-
-    private static async Task AwaitCancelledWaitAsync(Task wait)
-    {
         try
         {
-            await wait.ConfigureAwait(false);
+            // waiting to read releases every idle worker rather than only the one that ends up taking the
+            // token, so a single commit puts the whole pool back to work
+            await _triggerChannel.Reader.WaitToReadAsync(wait.Token).ConfigureAwait(false);
+
+            // take the token so that the next wait blocks again; whichever worker wins the race is
+            // immaterial, because they have all been released by this point
+            _triggerChannel.Reader.TryRead(out _);
         }
         catch (OperationCanceledException)
         {
-            // this wait lost the race and was cancelled on purpose
+            // either the processing delay elapsed, which is itself a reason to look for work, or the
+            // application is shutting down, which the check below reports
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Error,
-        Message = "Worker failed with an exception")]
-    private partial void LogWorkerFailed(Exception exception);
-
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Error,
-        Message = "Error fetching groups for processing")]
-    private partial void LogFetchGroupsError(Exception exception);
-
-    [LoggerMessage(
-        EventId = 3,
-        Level = LogLevel.Error,
-        Message = "Error processing group {GroupKey}")]
-    private partial void LogGroupProcessingError(string groupKey, Exception exception);
+        Message = "Error claiming or handling the next Head")]
+    private partial void LogProcessingError(Exception exception);
 }

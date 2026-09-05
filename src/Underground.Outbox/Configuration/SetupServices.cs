@@ -58,7 +58,6 @@ public static class SetupServices
         // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
 
-        services.AddScoped<FetchGroups<TEntity>>();
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
