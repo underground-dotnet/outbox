@@ -63,7 +63,6 @@ work. Stages are ordered, and the order is a correctness property rather than a 
 _Avoid_: Middleware, filter, interceptor, decorator
 
 **Chain**:
-The ordered Stages both the inbox and the outbox run against one claimed Head, ending in the
-dispatch to its Handler. Everything a message goes through belongs to the Chain; the transaction
-boundary, the claim, and the write that records the outcome deliberately do not.
+The ordered Stages both the inbox and the outbox run against one claimed Head. Everything done to a
+claimed message belongs to the Chain.
 _Avoid_: Pipeline, middleware stack

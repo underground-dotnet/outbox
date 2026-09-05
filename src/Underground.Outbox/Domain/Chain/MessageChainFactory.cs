@@ -13,25 +13,31 @@ namespace Underground.Outbox.Domain.Chain;
 /// <list type="bullet">
 /// <item><see cref="LogMessageStage{TEntity}"/> outermost, so that the message is announced whatever
 /// becomes of it.</item>
+/// <item><see cref="RecordSuccessStage{TEntity}"/> outside <see cref="RecordFailureStage{TEntity}"/>, so
+/// that it sees the <c>false</c> a recorded failure reports and stands aside. Inside it, a completion write
+/// that threw would be caught and turned into a retry - right for the inbox, which rolls back, and wrong
+/// for the outbox, whose effect already happened.</item>
 /// <item><see cref="RecordFailureStage{TEntity}"/> outside the savepoint, because the attempt
 /// bookkeeping it writes must survive the rollback that discards the failed Handler's writes.</item>
 /// <item><see cref="SavepointStage{TEntity}"/> around the dispatch whose writes it isolates - and
 /// absent from the outbox, which holds no transaction to roll back.</item>
 /// <item><see cref="TimeoutStage{TEntity}"/> innermost, so that the Handler and the save that follows
-/// it are the only things running on the narrowed token; the rollback and the attempt bookkeeping a
-/// timeout leads to are outside it, and so still have a live token to run on.</item>
+/// it are the only things running on the narrowed token; the rollback and the bookkeeping a timeout leads
+/// to are outside it, and so still have a live token to run on. Both outcome writes are outside it for the
+/// same reason - a Handler that spent its whole budget must still be able to record what happened.</item>
 /// </list>
 /// </remarks>
 internal static class MessageChainFactory
 {
     /// <summary>
-    /// The inbox chain. It runs inside the transaction that also records the outcome, so a failed
+    /// The inbox chain. It runs inside the transaction that the outcome is recorded in, so a failed
     /// Handler's writes have a savepoint to be rolled back to.
     /// </summary>
     internal static MessageChain<InboxMessage> CreateInbox(IServiceProvider services)
         => new(
             [
                 services.GetRequiredService<LogMessageStage<InboxMessage>>(),
+                services.GetRequiredService<RecordSuccessStage<InboxMessage>>(),
                 services.GetRequiredService<RecordFailureStage<InboxMessage>>(),
                 services.GetRequiredService<SavepointStage<InboxMessage>>(),
                 services.GetRequiredService<TimeoutStage<InboxMessage>>(),
@@ -48,6 +54,7 @@ internal static class MessageChainFactory
         => new(
             [
                 services.GetRequiredService<LogMessageStage<OutboxMessage>>(),
+                services.GetRequiredService<RecordSuccessStage<OutboxMessage>>(),
                 services.GetRequiredService<RecordFailureStage<OutboxMessage>>(),
                 services.GetRequiredService<TimeoutStage<OutboxMessage>>(),
             ],

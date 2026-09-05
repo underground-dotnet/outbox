@@ -22,7 +22,6 @@ namespace Underground.Outbox.Domain;
 internal sealed class OutboxProcessor(
     IDbContext dbContext,
     ClaimHead<OutboxMessage> claimHead,
-    MarkHandled<OutboxMessage> markHandled,
     MessageChain<OutboxMessage> chain
 ) : IProcessor<OutboxMessage>
 {
@@ -47,14 +46,7 @@ internal sealed class OutboxProcessor(
         // remove tracked entities to avoid memory leaks
         dbContext.ChangeTracker.Clear();
 
-        var handled = await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
-
-        if (handled)
-        {
-            // a lost Lease here is a warning rather than a failure: the effect really did happen, and the
-            // message is simply no longer ours to mark
-            await markHandled.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
-        }
+        await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
 
         dbContext.ChangeTracker.Clear();
 

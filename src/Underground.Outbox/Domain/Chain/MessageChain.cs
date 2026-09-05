@@ -11,11 +11,11 @@ namespace Underground.Outbox.Domain.Chain;
 /// of these concerns cannot be applied to one side and forgotten on the other.
 /// </summary>
 /// <remarks>
-/// What is deliberately *not* here: the transaction boundary, the claim, and the write that records the
-/// outcome. Those differ between the two sides - an outbox worker holds no transaction while it dispatches
-/// - and expressing them as stages would mean a context object carrying nullable transaction and Lease
-/// fields that every stage had to branch on. They live in <see cref="IProcessor{TEntity}"/> instead, one
-/// implementation per side.
+/// What is deliberately *not* here: the transaction boundary and the claim - what it takes to *hold* a
+/// message, as opposed to what is done to one once held. Those differ between the two sides - an outbox
+/// worker holds no transaction while it dispatches - and expressing them as stages would mean a context
+/// object carrying nullable transaction fields that every stage had to branch on. They live in
+/// <see cref="IProcessor{TEntity}"/> instead, one implementation per side.
 /// </remarks>
 internal sealed class MessageChain<TEntity>(
     IReadOnlyList<IMessageStage<TEntity>> stages,
@@ -23,13 +23,14 @@ internal sealed class MessageChain<TEntity>(
 ) where TEntity : class, IMessage
 {
     /// <summary>
-    /// Runs the chain for one claimed message.
+    /// Runs the chain for one claimed message, which ends in the write recording what became of it.
     /// </summary>
-    /// <returns>
-    /// Whether the message was handled. <c>false</c> means a stage caught the failure and recorded the
-    /// attempt, so the caller must not record the message as processed.
-    /// </returns>
-    internal Task<bool> ExecuteAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
+    /// <remarks>
+    /// Nothing is reported back. Whether the message was handled is settled inside the chain - by
+    /// <see cref="RecordSuccessStage{TEntity}"/> or <see cref="RecordFailureStage{TEntity}"/> - and a
+    /// caller has no decision left to make on it.
+    /// </remarks>
+    internal Task ExecuteAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
         => ExecuteFromAsync(0, message, scope, cancellationToken);
 
     private Task<bool> ExecuteFromAsync(int index, TEntity message, IServiceScope scope, CancellationToken cancellationToken)

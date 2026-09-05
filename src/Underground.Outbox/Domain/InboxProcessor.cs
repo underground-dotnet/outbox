@@ -14,7 +14,6 @@ namespace Underground.Outbox.Domain;
 internal sealed class InboxProcessor(
     IDbContext dbContext,
     ClaimHead<InboxMessage> claimHead,
-    MarkHandled<InboxMessage> markHandled,
     MessageChain<InboxMessage> chain
 ) : IProcessor<InboxMessage>
 {
@@ -29,12 +28,7 @@ internal sealed class InboxProcessor(
                 return false;
             }
 
-            var handled = await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
-
-            if (handled)
-            {
-                await markHandled.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
-            }
+            await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
 
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 

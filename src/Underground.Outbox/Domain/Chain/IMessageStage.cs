@@ -22,8 +22,9 @@ internal interface IMessageStage<TEntity> where TEntity : class, IMessage
     /// <param name="next">The rest of the chain.</param>
     /// <param name="cancellationToken">Cancellation for this stage.</param>
     /// <returns>
-    /// Whether the message was handled, and with it whether the caller should record it as processed. A
-    /// stage that reports <c>false</c> has already recorded the failed attempt itself.
+    /// Whether the message was handled. A stage that reports <c>false</c> has already recorded the failed
+    /// attempt itself; <see cref="RecordSuccessStage{TEntity}"/> reads this on the way back out and records
+    /// the message as processed when it is <c>true</c>.
     /// </returns>
     Task<bool> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken);
 }

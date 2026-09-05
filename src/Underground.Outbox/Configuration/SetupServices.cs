@@ -80,6 +80,7 @@ public static class SetupServices
         // but only ever composed by the factory, which owns the order between them - and which side gets
         // which of them.
         services.AddScoped<LogMessageStage<TEntity>>();
+        services.AddScoped<RecordSuccessStage<TEntity>>();
         services.AddScoped<RecordFailureStage<TEntity>>();
         services.AddScoped<TimeoutStage<TEntity>>();
         services.AddScoped<DispatchMessage<TEntity>>();
