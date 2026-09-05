@@ -1,5 +1,3 @@
-using System.Threading.Channels;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -18,18 +16,12 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ServiceConfiguration<TEntity> _config = config;
 
-    // used to wake idle workers, making sure only a limited number of runs can be queued
-    private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
-    {
-        FullMode = BoundedChannelFullMode.DropWrite,
-        SingleReader = false,
-        SingleWriter = false
-    });
+    private readonly WorkSignal _workSignal = new();
 
     /// <summary>
     /// Runs one worker per configured concurrent Group until the token is cancelled. Each worker serves
     /// itself: it repeats <see cref="ProcessNextAsync"/> for as long as that keeps finding work, and waits
-    /// for a trigger or the poll delay once it does not.
+    /// on the <see cref="WorkSignal"/> or the poll delay once it does not.
     /// </summary>
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -40,11 +32,12 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Asks the workers to look for new work. A run that is already scheduled is not scheduled twice.
+    /// Reports that work may have appeared, so that idle workers stop waiting and look. Notifying while a
+    /// notification is already pending is free and does nothing.
     /// </summary>
-    internal void ScheduleProcessingRun()
+    internal void NotifyWork()
     {
-        _triggerChannel.Writer.TryWrite(1);
+        _workSignal.Notify();
     }
 
     /// <summary>
@@ -86,39 +79,11 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
             // serving itself across a failure rather than dying and leaving the pool one short
             if (!await ProcessNextAsync(cancellationToken).ConfigureAwait(false))
             {
-                await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
+                await _workSignal
+                    .WaitAsync(TimeSpan.FromMilliseconds(_config.ProcessingDelayMilliseconds), cancellationToken)
+                    .ConfigureAwait(false);
             }
         }
-
-        cancellationToken.ThrowIfCancellationRequested();
-    }
-
-    /// <summary>
-    /// Waits until a processing run is scheduled, and gives up after the configured processing delay so
-    /// that work nothing pushed to us is still picked up.
-    /// </summary>
-    private async Task WaitForWorkAsync(CancellationToken cancellationToken)
-    {
-        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        wait.CancelAfter(_config.ProcessingDelayMilliseconds);
-
-        try
-        {
-            // waiting to read releases every idle worker rather than only the one that ends up taking the
-            // token, so a single commit puts the whole pool back to work
-            await _triggerChannel.Reader.WaitToReadAsync(wait.Token).ConfigureAwait(false);
-
-            // take the token so that the next wait blocks again; whichever worker wins the race is
-            // immaterial, because they have all been released by this point
-            _triggerChannel.Reader.TryRead(out _);
-        }
-        catch (OperationCanceledException)
-        {
-            // either the processing delay elapsed, which is itself a reason to look for work, or the
-            // application is shutting down, which the check below reports
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
     }
 
     [LoggerMessage(

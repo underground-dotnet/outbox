@@ -2,7 +2,7 @@
 
 `Underground.Outbox` is a .NET library for the transactional outbox and inbox patterns on top of EF Core and PostgreSQL.
 
-It stores messages in the same database transaction as your business changes, then processes them in the background. The library is group-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox.ProcessMessages()`.
+It stores messages in the same database transaction as your business changes, then processes them in the background. The library is group-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox.ProcessMessages()` — in-process only, so a commit on one instance does not wake another, which picks the work up on its next poll.
 
 ## How it works
 

@@ -16,7 +16,11 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public int MaxConcurrentGroups { get; set; } = 4;
 
     /// <summary>
-    /// Delay in milliseconds between processing cycles when messages are successfully processed.
+    /// How long an idle worker waits before looking for work again, in milliseconds. It applies only when
+    /// a claim came back empty: a worker that keeps finding Heads keeps claiming them and never waits at
+    /// all. A commit in this process wakes idle workers immediately, so this bounds the latency of work
+    /// nothing told us about - a message written by another application instance, or one that became
+    /// Settled only once some other transaction ended.
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
