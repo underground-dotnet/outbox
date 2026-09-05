@@ -22,11 +22,11 @@ internal sealed class ScheduleRetry<TEntity>(
 
     // The application supplies an interval and never an instant, so the new visibility is anchored to the
     // database's clock: an instance whose own clock is skewed cannot bring a message back early or late.
-    protected override string BuildSql(MessageTable table) => $"""
-        UPDATE {table.Name}
-        SET {table.RetryCount} = {table.RetryCount} + 1,
-            {table.VisibleAt} = clock_timestamp() + @delay
-        {Guard(table)}
+    protected override string Sql => $"""
+        UPDATE {TEntity.TableName}
+        SET retry_count = retry_count + 1,
+            visible_at = clock_timestamp() + @delay
+        {Guard}
         """;
 
     protected override void AddParameters(List<NpgsqlParameter> parameters, TEntity message)

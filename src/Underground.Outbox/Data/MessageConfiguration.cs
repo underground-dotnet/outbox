@@ -43,8 +43,10 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         // period, which is what the filter buys and which is the whole reason the index is partial.
         // PostgreSQL has no loose index scan, so the DISTINCT ON still walks every unprocessed entry
         // rather than skipping from one GroupKey to the next.
-        // A consumer that remaps the ProcessedAt column in its own configuration has to replace this index.
+        // The filter names the column literally because an IEntityTypeConfiguration runs before the
+        // mapping annotations are applied and so cannot read the name back off the model. That is safe
+        // only because the column names are fixed; see docs/adr/0005-fixed-table-and-column-names.md.
         builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
-            .HasFilter($"\"{MessageColumns.ProcessedAt}\" IS NULL");
+            .HasFilter("\"processed_at\" IS NULL");
     }
 }

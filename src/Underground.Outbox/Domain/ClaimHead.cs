@@ -1,21 +1,13 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 
-using System.Runtime.CompilerServices;
+using Npgsql;
 
 using Underground.Outbox.Data;
-using System.Data.Common;
-using Microsoft.Extensions.Logging;
-using System.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger<ClaimHead<TEntity>> logger) where TEntity : class, IMessage
+internal abstract class ClaimHead<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
 {
-#pragma warning disable S2743 // A static field in a generic type is not shared among instances of different close constructed types.
-    private static readonly ConditionalWeakTable<IModel, string> SqlByModel = [];
-#pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
-
     /// <summary>
     /// Claims the Head - the oldest settled unhandled message - of whichever Group currently offers the
     /// oldest one. Returns <c>null</c> when no Group offers anything: because there is nothing unhandled,
@@ -28,58 +20,40 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
     /// </remarks>
     internal async Task<TEntity?> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var sql = SqlByModel.GetValue(dbContext.Model, model => BuildSql(MessageTable.For<TEntity>(model)));
+        List<NpgsqlParameter> parameters = [];
+        AddParameters(parameters);
 
-        var connection = dbContext.Database.GetDbConnection();
-        var needsOpen = connection.State != ConnectionState.Open;
+        // The row is materialised by EF rather than read column by column, so the projection cannot drift
+        // from the entity. Two things about this call are load-bearing:
+        //
+        // AsNoTracking, because the claimed message must not be tracked. Every write to it goes through a
+        // GuardedWrite, and a tracked copy would let an application's SaveChanges inside the handler's
+        // transaction write the message behind that guard's back.
+        //
+        // ToListAsync rather than FirstOrDefaultAsync, because any LINQ operator composed onto FromSqlRaw
+        // makes EF wrap the statement in a subquery, which is invalid around the data-modifying CTE the
+        // outbox claims with. The statement already returns at most one row.
+        var claimed = await dbContext.Set<TEntity>()
+            .FromSqlRaw(Sql, [.. parameters])
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
-        if (needsOpen)
-        {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        try
-        {
-            var cmd = connection.CreateCommand();
-            await using (cmd.ConfigureAwait(false))
-            {
-                cmd.CommandText = sql;
-                AddParameters(cmd);
-
-                LogClaimSql(sql);
-                var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-                await using (reader.ConfigureAwait(false))
-                {
-                    return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
-                        ? BuildEntityFromReader(reader)
-                        : null;
-                }
-            }
-        }
-        finally
-        {
-            if (needsOpen)
-            {
-                await connection.CloseAsync().ConfigureAwait(false);
-            }
-        }
+        return claimed.Count > 0 ? claimed[0] : null;
     }
 
     /// <summary>
     /// The statement this side claims with, built around <see cref="LockedHeadCte"/>. The two sides differ
-    /// only in what they do with the row that CTE locks.
+    /// only in what they do with the row that CTE locks. It must return every mapped column, since EF
+    /// materialises the entity from the result set by column name.
     /// </summary>
-    /// <param name="table">
-    /// The table's identifiers, read off the EF model rather than written literally, since a consumer can
-    /// remap any of them through EF Core mappings.
-    /// </param>
-    protected abstract string BuildSql(MessageTable table);
+    protected abstract string Sql { get; }
 
     /// <summary>
-    /// Binds whatever <see cref="BuildSql"/> parameterised. Head discovery itself takes no parameters, so
-    /// this does nothing unless a side added one.
+    /// Binds whatever <see cref="Sql"/> parameterised. Head discovery itself takes no parameters, so this
+    /// does nothing unless a side added one.
     /// </summary>
-    protected virtual void AddParameters(DbCommand command)
+    protected virtual void AddParameters(List<NpgsqlParameter> parameters)
     {
         // nothing to bind by default
     }
@@ -89,7 +63,12 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
     /// yields at most one id, already locked for the calling transaction; a caller appends the statement
     /// that acts on it.
     /// </summary>
-    protected static string LockedHeadCte(MessageTable table)
+    /// <param name="table">
+    /// The message table, named literally: the names are fixed, and unqualified so that the schema is the
+    /// deployment's to choose through <c>search_path</c>. See
+    /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
+    /// </param>
+    protected static string LockedHeadCte(string table)
     {
         // Head discovery is deliberately in two stages. A Group's Head is the lowest (transaction_id, id)
         // among its settled unhandled rows *regardless of visibility*, and only then is visibility tested
@@ -123,42 +102,22 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
         // transaction that the inbox holds open across its handler.
         return $"""
             WITH heads AS (
-                SELECT DISTINCT ON ({table.GroupKey}) {table.Id}
-                FROM {table.Name}
-                WHERE {table.ProcessedAt} IS NULL
-                AND {table.TransactionId} < pg_snapshot_xmin(pg_current_snapshot())
-                ORDER BY {table.GroupKey}, {table.TransactionId}, {table.Id}
+                SELECT DISTINCT ON (group_key) id
+                FROM {table}
+                WHERE processed_at IS NULL
+                AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
+                ORDER BY group_key, transaction_id, id
             ),
             claimed AS (
-                SELECT m.{table.Id}
+                SELECT m.id
                 FROM heads h
-                JOIN {table.Name} m ON m.{table.Id} = h.{table.Id}
-                WHERE m.{table.ProcessedAt} IS NULL
-                AND m.{table.VisibleAt} <= clock_timestamp()
-                ORDER BY m.{table.TransactionId}, m.{table.Id}
+                JOIN {table} m ON m.id = h.id
+                WHERE m.processed_at IS NULL
+                AND m.visible_at <= clock_timestamp()
+                ORDER BY m.transaction_id, m.id
                 LIMIT 1
                 FOR UPDATE OF m SKIP LOCKED
             )
             """;
     }
-
-    /// <summary>
-    /// The projection <see cref="BuildEntityFromReader"/> expects, in order, over the table alias
-    /// <see cref="LockedHeadCte"/> uses. Shared so that a side which returns its row through
-    /// <c>RETURNING</c> cannot drift from one that returns it through a <c>SELECT</c>.
-    /// </summary>
-    protected static string Projection(MessageTable table) =>
-        $"m.{table.Id}, m.{table.EventId}, m.{table.TransactionId}, m.{table.CreatedAt}, "
-        + $"m.{table.Type}, m.{table.GroupKey}, m.{table.Data}, m.{table.RetryCount}, "
-        + $"m.{table.VisibleAt}, m.{table.ProcessedAt}";
-
-    protected abstract TEntity BuildEntityFromReader(DbDataReader reader);
-
-    // Debug rather than Information: the statement is the same on every claim, so an idle pool would log
-    // the same several lines once per worker per poll delay forever
-    [LoggerMessage(
-            EventId = 1,
-            Level = LogLevel.Debug,
-            Message = "Executing SQL to claim the next Head: {Sql}")]
-    private partial void LogClaimSql(string Sql);
 }

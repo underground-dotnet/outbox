@@ -2,6 +2,14 @@ namespace Underground.Outbox.Data;
 
 public interface IMessage
 {
+    /// <summary>
+    /// The name of the table this message type is stored in. It is fixed rather than read off the EF
+    /// model, because the raw statements name it literally; see
+    /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>. Declared here so that a write shared by
+    /// both message types can name its table without reflection.
+    /// </summary>
+    public static abstract string TableName { get; }
+
     public long Id { get; }
     public Guid EventId { get; init; }
 

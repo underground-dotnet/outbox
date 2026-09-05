@@ -70,6 +70,18 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 
 PostgreSQL 13 is the floor because ordering depends on the 64-bit transaction identifier type `xid8` and on `pg_current_xact_id()`, `pg_current_snapshot()` and `pg_snapshot_xmin()`, all of which arrived in that release. Claiming also relies on `FOR UPDATE ... SKIP LOCKED`.
 
+### Table names and `search_path`
+
+The library stores its messages in two tables named `inbox` and `outbox`. The names are fixed: mapping either entity to a different table, schema or column through EF Core is not supported, and doing so breaks the library at its first claim rather than at startup.
+
+The schema is still yours to choose. Claiming and completion are hand-written SQL that names the tables **unqualified**, so both must be reachable through the connection's `search_path`. The default arrangement — tables in the default schema, `search_path` left alone — already satisfies this. If you put your `DbContext` in another schema, say so on the connection:
+
+```
+Host=...;Database=...;Search Path=app
+```
+
+See [ADR 0005](docs/adr/0005-fixed-table-and-column-names.md) for why the names are fixed rather than read off the EF model.
+
 ## Getting started
 
 ### Installation
@@ -156,6 +168,8 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `RetryCount` | Number of failed processing attempts. |
 | `VisibleAt` | The instant from which the message may be handled. Defaulted by the database to the present, pushed into the future by the retry backoff, and — on the outbox — set to the lease expiry while a worker holds the message. |
 | `ProcessedAt` | Null until the message is completed successfully. |
+
+Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
 
 Handlers also receive `MessageMetadata` with `EventId`, `GroupKey`, and `RetryCount`.
 

@@ -6,11 +6,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Underground.Outbox.Data;
 
+/// <summary>
+/// A record of an intent to cause an effect outside this database.
+/// </summary>
+/// <remarks>
+/// The table and column names are fixed and may not be remapped: the statements that claim and complete
+/// a message name them literally. See <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
+/// </remarks>
 [Table("outbox")]
 [Index(nameof(EventId), IsUnique = true)]
 [EntityTypeConfiguration(typeof(OutboxMessageConfiguration))]
 public class OutboxMessage : IMessage
 {
+    /// <inheritdoc />
+    public static string TableName => "outbox";
+
     [Column("id")]
     [Key]
     public long Id { get; init; }
@@ -40,7 +50,7 @@ public class OutboxMessage : IMessage
     [Column("visible_at")]
     public DateTime VisibleAt { get; init; }
 
-    [Column(MessageColumns.ProcessedAt)]
+    [Column("processed_at")]
     public DateTime? ProcessedAt { get; set; }
 
     internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? processedAt)

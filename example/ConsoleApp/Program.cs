@@ -63,8 +63,9 @@ await using (var transaction = await dbContext.Database.BeginTransactionAsync())
     await transaction.CommitAsync();
 }
 
-// using custom table name "outbox_msgs"
-var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox_msgs").SingleAsync();
+// the table is named "outbox" and is not qualified here, so it is found through the connection's
+// search_path - the same way the library's own statements find it
+var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM outbox").SingleAsync();
 Console.WriteLine($"Added {count} messages to outbox.");
 
 await host.RunAsync();

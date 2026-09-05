@@ -15,9 +15,9 @@ internal sealed class MarkHandled<TEntity>(
 {
     // clock_timestamp() rather than an instant from here, so that the one column an operator reads to
     // reconstruct what happened is on the same clock as every other instant in the table
-    protected override string BuildSql(MessageTable table) => $"""
-        UPDATE {table.Name}
-        SET {table.ProcessedAt} = clock_timestamp()
-        {Guard(table)}
+    protected override string Sql => $"""
+        UPDATE {TEntity.TableName}
+        SET processed_at = clock_timestamp()
+        {Guard}
         """;
 }

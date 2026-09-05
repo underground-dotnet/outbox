@@ -1,8 +1,4 @@
-using System.Collections.Concurrent;
-using System.Runtime.CompilerServices;
-
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 
 using Npgsql;
@@ -29,12 +25,6 @@ namespace Underground.Outbox.Domain;
 /// </remarks>
 internal abstract partial class GuardedWrite<TEntity>(IDbContext dbContext, ILogger logger) where TEntity : class, IMessage
 {
-    // keyed by concrete type as well as by model, because every subclass closed over the same TEntity
-    // shares this field and they do not share a statement
-#pragma warning disable S2743 // A static field in a generic type is not shared among instances of different close constructed types.
-    private static readonly ConditionalWeakTable<IModel, ConcurrentDictionary<Type, string>> SqlByModel = [];
-#pragma warning restore S2743 // A static field in a generic type is not shared among instances of different close constructed types.
-
     /// <summary>
     /// Performs the write if this worker still holds the message.
     /// </summary>
@@ -44,9 +34,6 @@ internal abstract partial class GuardedWrite<TEntity>(IDbContext dbContext, ILog
     /// </returns>
     internal async Task<bool> ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
-        var sql = SqlByModel.GetOrCreateValue(dbContext.Model)
-            .GetOrAdd(GetType(), _ => BuildSql(MessageTable.For<TEntity>(dbContext.Model)));
-
         List<NpgsqlParameter> parameters =
         [
             new("id", message.Id),
@@ -55,7 +42,7 @@ internal abstract partial class GuardedWrite<TEntity>(IDbContext dbContext, ILog
         AddParameters(parameters, message);
 
         var rows = await dbContext.Database
-            .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
+            .ExecuteSqlRawAsync(Sql, parameters, cancellationToken)
             .ConfigureAwait(false);
 
         if (rows != 0)
@@ -68,13 +55,10 @@ internal abstract partial class GuardedWrite<TEntity>(IDbContext dbContext, ILog
     }
 
     /// <summary>
-    /// The statement to run, which must end in <see cref="Guard"/>.
+    /// The statement to run, which must end in <see cref="Guard"/>. It names its table through
+    /// <see cref="IMessage.TableName"/>, since one write serves both message types.
     /// </summary>
-    /// <param name="table">
-    /// The table's identifiers, read off the EF model rather than written literally, since a consumer can
-    /// remap any of them through EF Core mappings.
-    /// </param>
-    protected abstract string BuildSql(MessageTable table);
+    protected abstract string Sql { get; }
 
     /// <summary>
     /// Binds anything the statement needs beyond <c>@id</c> and <c>@lease</c>, which are already there.
@@ -88,10 +72,9 @@ internal abstract partial class GuardedWrite<TEntity>(IDbContext dbContext, ILog
     /// The predicate that makes a write this worker's to make: this message, and only while the Lease
     /// granted at claim time is still the one on the row.
     /// </summary>
-    protected static string Guard(MessageTable table) =>
-        $"""
-        WHERE {table.Id} = @id
-        AND {table.VisibleAt} = @lease
+    protected const string Guard = """
+        WHERE id = @id
+        AND visible_at = @lease
         """;
 
     // A warning rather than an exception: the Lease expired, another worker has since claimed the

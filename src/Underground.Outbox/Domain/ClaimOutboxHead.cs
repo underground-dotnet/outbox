@@ -1,9 +1,7 @@
+using Npgsql;
+
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-
-using System.Data.Common;
-
-using Microsoft.Extensions.Logging;
 
 namespace Underground.Outbox.Domain;
 
@@ -18,40 +16,26 @@ namespace Underground.Outbox.Domain;
 /// </remarks>
 internal sealed class ClaimOutboxHead(
     IDbContext dbContext,
-    ServiceConfiguration<OutboxMessage> config,
-    ILogger<ClaimOutboxHead> logger
-) : ClaimHead<OutboxMessage>(dbContext, logger)
+    ServiceConfiguration<OutboxMessage> config
+) : ClaimHead<OutboxMessage>(dbContext)
 {
-    protected override string BuildSql(MessageTable table) => $"""
-        {LockedHeadCte(table)}
-        UPDATE {table.Name} m
-        SET {table.VisibleAt} = clock_timestamp() + @lease
+    private static readonly string ClaimSql = $"""
+        {LockedHeadCte("outbox")}
+        UPDATE outbox m
+        SET visible_at = clock_timestamp() + @lease
         FROM claimed c
-        WHERE m.{table.Id} = c.{table.Id}
-        RETURNING {Projection(table)}
+        WHERE m.id = c.id
+        RETURNING m.*
         """;
+
+    protected override string Sql => ClaimSql;
 
     // an interval rather than an instant, so that the expiry is computed by the database: an instance with
     // a skewed clock cannot expire its own Lease early and cause systematic duplicates
-    protected override void AddParameters(DbCommand command)
+    protected override void AddParameters(List<NpgsqlParameter> parameters)
     {
-        var lease = command.CreateParameter();
-        lease.ParameterName = "lease";
-        lease.Value = config.LeaseDuration;
+        ArgumentNullException.ThrowIfNull(parameters);
 
-        command.Parameters.Add(lease);
+        parameters.Add(new NpgsqlParameter("lease", config.LeaseDuration));
     }
-
-    protected override OutboxMessage BuildEntityFromReader(DbDataReader reader) => new(
-        id: reader.GetInt64(0),
-        eventId: reader.GetGuid(1),
-        transactionId: reader.GetFieldValue<ulong>(2),
-        createdAt: reader.GetDateTime(3),
-        type: reader.GetString(4),
-        groupKey: reader.GetString(5),
-        data: reader.GetString(6),
-        retryCount: reader.GetInt32(7),
-        visibleAt: reader.GetDateTime(8),
-        processedAt: reader.IsDBNull(9) ? null : reader.GetDateTime(9)
-    );
 }
