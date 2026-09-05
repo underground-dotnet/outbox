@@ -5,33 +5,51 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox.Domain.Chain;
 
 /// <summary>
-/// Assembles the one chain both sides run. It is internal and takes no options on purpose: the order
+/// Assembles the chain each side runs. It is internal and takes no options on purpose: the order
 /// between stages is a correctness property, not a preference a consumer should be able to express.
 /// </summary>
+/// <remarks>
+/// <para>The order, outermost first, and why:</para>
+/// <list type="bullet">
+/// <item><see cref="LogMessageStage{TEntity}"/> outermost, so that the message is announced whatever
+/// becomes of it.</item>
+/// <item><see cref="RecordFailureStage{TEntity}"/> outside the savepoint, because the attempt
+/// bookkeeping it writes must survive the rollback that discards the failed Handler's writes.</item>
+/// <item><see cref="SavepointStage{TEntity}"/> around the dispatch whose writes it isolates - and
+/// absent from the outbox, which holds no transaction to roll back.</item>
+/// <item><see cref="TimeoutStage{TEntity}"/> innermost, so that the Handler and the save that follows
+/// it are the only things running on the narrowed token; the rollback and the attempt bookkeeping a
+/// timeout leads to are outside it, and so still have a live token to run on.</item>
+/// </list>
+/// </remarks>
 internal static class MessageChainFactory
 {
     /// <summary>
-    /// Builds the chain, outermost stage first.
+    /// The inbox chain. It runs inside the transaction that also records the outcome, so a failed
+    /// Handler's writes have a savepoint to be rolled back to.
     /// </summary>
-    internal static MessageChain<TEntity> Create<TEntity>(IServiceProvider services) where TEntity : class, IMessage
+    internal static MessageChain<InboxMessage> CreateInbox(IServiceProvider services)
         => new(
             [
-                // outermost, so that the message is announced whatever becomes of it
-                services.GetRequiredService<LogMessageStage<TEntity>>(),
-
-                // outside the savepoint, because the attempt bookkeeping it writes must survive the
-                // rollback that discards the failed Handler's writes
-                services.GetRequiredService<RecordFailureStage<TEntity>>(),
-
-                // around the dispatch whose writes it isolates. Absent from a side that holds no
-                // transaction across the dispatch and so has nothing to roll back to; today both sides
-                // hold one, so both sides get it.
-                services.GetRequiredService<SavepointStage<TEntity>>(),
-
-                // innermost, so that the Handler and the save that follows it are the only things running
-                // on the narrowed token - the rollback and the attempt bookkeeping a timeout leads to are
-                // outside it, and so still have a live token to run on
-                services.GetRequiredService<TimeoutStage<TEntity>>(),
+                services.GetRequiredService<LogMessageStage<InboxMessage>>(),
+                services.GetRequiredService<RecordFailureStage<InboxMessage>>(),
+                services.GetRequiredService<SavepointStage<InboxMessage>>(),
+                services.GetRequiredService<TimeoutStage<InboxMessage>>(),
             ],
-            services.GetRequiredService<DispatchMessage<TEntity>>());
+            services.GetRequiredService<DispatchMessage<InboxMessage>>());
+
+    /// <summary>
+    /// The outbox chain. No savepoint: an outbox worker dispatches with no transaction open, so there is
+    /// nothing to roll back to. A Handler that writes to this database and then fails therefore keeps
+    /// those writes - an outbox Handler's business is an effect outside this database, and one that also
+    /// writes to it is asking for the inbox.
+    /// </summary>
+    internal static MessageChain<OutboxMessage> CreateOutbox(IServiceProvider services)
+        => new(
+            [
+                services.GetRequiredService<LogMessageStage<OutboxMessage>>(),
+                services.GetRequiredService<RecordFailureStage<OutboxMessage>>(),
+                services.GetRequiredService<TimeoutStage<OutboxMessage>>(),
+            ],
+            services.GetRequiredService<DispatchMessage<OutboxMessage>>());
 }

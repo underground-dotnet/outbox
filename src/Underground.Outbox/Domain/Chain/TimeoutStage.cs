@@ -9,7 +9,8 @@ namespace Underground.Outbox.Domain.Chain;
 /// <summary>
 /// Bounds how long a Handler may run, by narrowing the token the rest of the chain sees. A Handler that
 /// never returns therefore gives its worker back rather than occupying it for good - and gives back the
-/// transaction it would otherwise have held open along with it.
+/// transaction it would otherwise have held open along with it. On the outbox it is also what keeps a
+/// worker inside its Lease: the Lease is this budget plus a margin, so the token fires first.
 /// </summary>
 /// <remarks>
 /// The cancellation is translated into a <see cref="HandlerTimeoutException"/> rather than left as an

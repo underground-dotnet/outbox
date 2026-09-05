@@ -27,6 +27,11 @@ public static class SetupServices
         services.AddScoped<IOutbox, OutboxImpl>();
         services.AddScoped<ClaimHead<OutboxMessage>, ClaimOutboxHead>();
 
+        // the outbox dispatches with no transaction open, so its chain leaves the savepoint out and its
+        // outer loop is the three-transaction one
+        services.AddScoped(MessageChainFactory.CreateOutbox);
+        services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
+
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
     }
 
@@ -44,6 +49,11 @@ public static class SetupServices
         services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, InboxImpl>();
         services.AddScoped<ClaimHead<InboxMessage>, ClaimInboxHead>();
+
+        // one transaction spans the claim, the Handler and the outcome, so the inbox keeps the savepoint
+        services.AddScoped<SavepointStage<InboxMessage>>();
+        services.AddScoped(MessageChainFactory.CreateInbox);
+        services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
     }
@@ -64,17 +74,16 @@ public static class SetupServices
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<ScheduleRetry<TEntity>>();
+        services.AddScoped<MarkHandled<TEntity>>();
 
-        // the per-message chain, shared by the inbox and the outbox. Its stages are registered
-        // individually but only ever composed by the factory, which owns the order between them.
+        // the per-message stages, shared by the inbox and the outbox. They are registered individually
+        // but only ever composed by the factory, which owns the order between them - and which side gets
+        // which of them.
         services.AddScoped<LogMessageStage<TEntity>>();
         services.AddScoped<RecordFailureStage<TEntity>>();
-        services.AddScoped<SavepointStage<TEntity>>();
         services.AddScoped<TimeoutStage<TEntity>>();
         services.AddScoped<DispatchMessage<TEntity>>();
-        services.AddScoped(MessageChainFactory.Create<TEntity>);
 
-        services.AddScoped<Processor<TEntity>>();
         services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
         services.AddHostedService<CleanupBackgroundService<TEntity>>();

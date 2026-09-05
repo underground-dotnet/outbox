@@ -30,6 +30,25 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromSeconds(45);
 
     /// <summary>
+    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write
+    /// after the Handler's own budget is up. It is a constant rather than a setting because the only thing
+    /// a second knob could express is a Lease shorter than the timeout, which guarantees double delivery on
+    /// every slow message.
+    /// </summary>
+    private const int LeaseMarginSeconds = 15;
+
+    /// <summary>
+    /// How long an outbox worker's Lease on a claimed message runs for, measured from the claim. It is
+    /// derived from <see cref="HandlerTimeout"/> rather than configured, so the Handler's cancellation
+    /// always fires with the margin still to spare and a message can never be taken from a live worker.
+    /// </summary>
+    /// <remarks>
+    /// Read only by the outbox. The inbox holds a row lock for the length of its transaction and has
+    /// nothing to expire.
+    /// </remarks>
+    internal TimeSpan LeaseDuration => HandlerTimeout + TimeSpan.FromSeconds(LeaseMarginSeconds);
+
+    /// <summary>
     /// Delay before a message that failed for the first time is offered again. Every further failure
     /// doubles it, up to <see cref="MaxBackoff"/>.
     /// </summary>

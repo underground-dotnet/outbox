@@ -18,13 +18,17 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
 
     /// <summary>
     /// Claims the Head - the oldest settled unhandled message - of whichever Group currently offers the
-    /// oldest one, and locks it for the calling transaction. Returns <c>null</c> when no Group offers
-    /// anything: because there is nothing unhandled, because every candidate Head is not yet visible, and
-    /// because another worker already holds the ones that are.
+    /// oldest one. Returns <c>null</c> when no Group offers anything: because there is nothing unhandled,
+    /// because every candidate Head is not yet visible, and because another worker already holds the ones
+    /// that are.
     /// </summary>
+    /// <remarks>
+    /// What holding the claim means is the subclass's answer: the inbox keeps the row lock for its
+    /// transaction, the outbox commits a Lease and lets the lock go.
+    /// </remarks>
     internal async Task<TEntity?> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var sql = SqlByModel.GetValue(dbContext.Model, static model => BuildSql(model));
+        var sql = SqlByModel.GetValue(dbContext.Model, model => BuildSql(MessageTable.For<TEntity>(model)));
 
         var connection = dbContext.Database.GetDbConnection();
         var needsOpen = connection.State != ConnectionState.Open;
@@ -40,6 +44,7 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
             await using (cmd.ConfigureAwait(false))
             {
                 cmd.CommandText = sql;
+                AddParameters(cmd);
 
                 LogClaimSql(sql);
                 var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -60,19 +65,39 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
         }
     }
 
-    private static string BuildSql(IModel model)
-    {
-        // table and column names are read off the model rather than written literally, since a consumer
-        // can remap any of them through EF Core mappings
-        var table = MessageTable.For<TEntity>(model);
+    /// <summary>
+    /// The statement this side claims with, built around <see cref="LockedHeadCte"/>. The two sides differ
+    /// only in what they do with the row that CTE locks.
+    /// </summary>
+    /// <param name="table">
+    /// The table's identifiers, read off the EF model rather than written literally, since a consumer can
+    /// remap any of them through EF Core mappings.
+    /// </param>
+    protected abstract string BuildSql(MessageTable table);
 
+    /// <summary>
+    /// Binds whatever <see cref="BuildSql"/> parameterised. Head discovery itself takes no parameters, so
+    /// this does nothing unless a side added one.
+    /// </summary>
+    protected virtual void AddParameters(DbCommand command)
+    {
+        // nothing to bind by default
+    }
+
+    /// <summary>
+    /// The Head discovery both sides share, as two CTEs named <c>heads</c> and <c>claimed</c>. The second
+    /// yields at most one id, already locked for the calling transaction; a caller appends the statement
+    /// that acts on it.
+    /// </summary>
+    protected static string LockedHeadCte(MessageTable table)
+    {
         // Head discovery is deliberately in two stages. A Group's Head is the lowest (transaction_id, id)
         // among its settled unhandled rows *regardless of visibility*, and only then is visibility tested
         // against that one row. Filtering by visible_at first would hand out the message behind a Head that
         // is in backoff or scheduled for later, which is exactly the reordering this design exists to
         // prevent. A Group whose Head is invisible therefore offers nothing at all.
         //
-        // The CTE collects one Head per Group and the outer query takes the oldest of them that is both
+        // The first CTE collects one Head per Group and the second takes the oldest of them that is both
         // visible and unlocked. That single statement is what distributes Groups across workers: there is no
         // discovery stage handing Groups out, every worker just runs this and the database decides.
         //
@@ -90,9 +115,9 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
         // another worker already holds is simply passed over in favour of the next Group's, instead of
         // aborting a statement that now spans every Group.
         //
-        // The outer WHERE repeats processed_at IS NULL because the CTE reads its snapshot without a lock: if
-        // a concurrent worker commits processed_at in between, FOR UPDATE re-evaluates only the outer WHERE
-        // against the new row version, and without the repeated check that race hands out a handled message.
+        // The second CTE repeats processed_at IS NULL because the first reads its snapshot without a lock:
+        // if a concurrent worker commits processed_at in between, FOR UPDATE re-evaluates only the repeated
+        // predicate against the new row version, and without it that race hands out a handled message.
         //
         // Both instants are compared against clock_timestamp() rather than now(), which is frozen for the
         // transaction that the inbox holds open across its handler.
@@ -103,22 +128,34 @@ internal abstract partial class ClaimHead<TEntity>(IDbContext dbContext, ILogger
                 WHERE {table.ProcessedAt} IS NULL
                 AND {table.TransactionId} < pg_snapshot_xmin(pg_current_snapshot())
                 ORDER BY {table.GroupKey}, {table.TransactionId}, {table.Id}
+            ),
+            claimed AS (
+                SELECT m.{table.Id}
+                FROM heads h
+                JOIN {table.Name} m ON m.{table.Id} = h.{table.Id}
+                WHERE m.{table.ProcessedAt} IS NULL
+                AND m.{table.VisibleAt} <= clock_timestamp()
+                ORDER BY m.{table.TransactionId}, m.{table.Id}
+                LIMIT 1
+                FOR UPDATE OF m SKIP LOCKED
             )
-            SELECT m.{table.Id}, m.{table.EventId}, m.{table.TransactionId}, m.{table.CreatedAt}, m.{table.Type}, m.{table.GroupKey}, m.{table.Data}, m.{table.RetryCount}, m.{table.VisibleAt}, m.{table.ProcessedAt}
-            FROM heads h
-            JOIN {table.Name} m ON m.{table.Id} = h.{table.Id}
-            WHERE m.{table.ProcessedAt} IS NULL
-            AND m.{table.VisibleAt} <= clock_timestamp()
-            ORDER BY m.{table.TransactionId}, m.{table.Id}
-            LIMIT 1
-            FOR UPDATE OF m SKIP LOCKED
             """;
     }
 
+    /// <summary>
+    /// The projection <see cref="BuildEntityFromReader"/> expects, in order, over the table alias
+    /// <see cref="LockedHeadCte"/> uses. Shared so that a side which returns its row through
+    /// <c>RETURNING</c> cannot drift from one that returns it through a <c>SELECT</c>.
+    /// </summary>
+    protected static string Projection(MessageTable table) =>
+        $"m.{table.Id}, m.{table.EventId}, m.{table.TransactionId}, m.{table.CreatedAt}, "
+        + $"m.{table.Type}, m.{table.GroupKey}, m.{table.Data}, m.{table.RetryCount}, "
+        + $"m.{table.VisibleAt}, m.{table.ProcessedAt}";
+
     protected abstract TEntity BuildEntityFromReader(DbDataReader reader);
 
-    // Debug rather than Information: the statement carries no parameters, so every claim would log the
-    // same several lines, and an idle pool claims once per worker per poll delay forever
+    // Debug rather than Information: the statement is the same on every claim, so an idle pool would log
+    // the same several lines once per worker per poll delay forever
     [LoggerMessage(
             EventId = 1,
             Level = LogLevel.Debug,

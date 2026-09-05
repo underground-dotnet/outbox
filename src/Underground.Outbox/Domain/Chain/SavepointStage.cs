@@ -10,8 +10,10 @@ namespace Underground.Outbox.Domain.Chain;
 /// and the new visibility instant still commit together with the rollback.
 /// </summary>
 /// <remarks>
-/// Only ever assembled into a chain that runs inside a transaction; a side that dispatches with nothing
-/// open leaves this stage out rather than making it optional at runtime.
+/// Only ever assembled into a chain that runs inside a transaction, which today is the inbox alone. The
+/// outbox dispatches with nothing open and leaves this stage out rather than making it optional at
+/// runtime, which is why <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction"/> can be
+/// read here without a null check.
 /// </remarks>
 internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageStage<TEntity> where TEntity : class, IMessage
 {

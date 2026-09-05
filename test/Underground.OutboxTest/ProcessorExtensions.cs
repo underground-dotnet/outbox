@@ -7,7 +7,7 @@ namespace Underground.OutboxTest;
 
 public static class ProcessorExtensions
 {
-    extension<TEntity>(Processor<TEntity>) where TEntity : class, IMessage
+    extension<TEntity>(IProcessor<TEntity>) where TEntity : class, IMessage
     {
         /// <summary>
         /// Claims and handles one Head once. A claim yields one message, so a test that lines up two
@@ -16,7 +16,7 @@ public static class ProcessorExtensions
         internal static async Task ProcessWithDefaultValues(IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<Processor<OutboxMessage>>();
+            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<OutboxMessage>>();
             await processor.ProcessHeadAsync(scope, cancellationToken);
         }
     }

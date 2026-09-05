@@ -64,7 +64,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             // use a separate scope & context for each claim
             using var scope = _scopeFactory.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
+            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
 
             return await processor.ProcessHeadAsync(scope, cancellationToken).ConfigureAwait(false);
         }

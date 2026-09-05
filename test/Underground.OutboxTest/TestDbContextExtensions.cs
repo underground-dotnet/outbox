@@ -43,9 +43,20 @@ public static class TestDbContextExtensions
         }
 
         /// <summary>
+        /// The message's visibility instant as the database holds it. On a claimed outbox message this is
+        /// the Lease expiry, so it is also how a test tells one worker's claim from another's.
+        /// </summary>
+        internal async Task<DateTime> VisibleAtAsync(long messageId, CancellationToken cancellationToken)
+        {
+            return await context.Database
+                .SqlQuery<DateTime>($"""SELECT visible_at AS "Value" FROM public.outbox WHERE id = {messageId}""")
+                .SingleAsync(cancellationToken);
+        }
+
+        /// <summary>
         /// Brings every unhandled message's visibility instant forward to now. All timing is decided by the
         /// database, so this is indistinguishable from having waited for that instant to arrive - whether it
-        /// was a retry backoff or a scheduled delivery that put it into the future.
+        /// was a retry backoff, a scheduled delivery or an outbox Lease that put it into the future.
         /// </summary>
         internal async Task MakeUnhandledMessagesVisibleAsync(CancellationToken cancellationToken)
         {

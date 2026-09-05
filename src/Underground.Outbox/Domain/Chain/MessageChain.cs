@@ -6,14 +6,16 @@ namespace Underground.Outbox.Domain.Chain;
 
 /// <summary>
 /// Everything done to one claimed message, in order: the stages wrap each other outermost-first and
-/// <see cref="DispatchMessage{TEntity}"/> sits innermost. The inbox and the outbox run the same chain, so
-/// a change to any of these concerns cannot be applied to one side and forgotten on the other.
+/// <see cref="DispatchMessage{TEntity}"/> sits innermost. The inbox and the outbox run near-identical
+/// chains - they differ by one stage, assembled in <see cref="MessageChainFactory"/> - so a change to any
+/// of these concerns cannot be applied to one side and forgotten on the other.
 /// </summary>
 /// <remarks>
 /// What is deliberately *not* here: the transaction boundary, the claim, and the write that records the
 /// outcome. Those differ between the two sides - an outbox worker holds no transaction while it dispatches
 /// - and expressing them as stages would mean a context object carrying nullable transaction and Lease
-/// fields that every stage had to branch on.
+/// fields that every stage had to branch on. They live in <see cref="IProcessor{TEntity}"/> instead, one
+/// implementation per side.
 /// </remarks>
 internal sealed class MessageChain<TEntity>(
     IReadOnlyList<IMessageStage<TEntity>> stages,
