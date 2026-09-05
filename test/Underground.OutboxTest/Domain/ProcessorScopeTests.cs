@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
@@ -29,24 +30,21 @@ public class ProcessorScopeTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
-        {
-            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped);
-            cfg.BatchSize = 2;
-        });
+            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped));
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 
     [Fact]
-    public async Task ProcessPartitionsInSeparateScopes()
+    public async Task ProcessGroupsInSeparateScopes()
     {
         // Arrange
         var context = CreateDbContext();
-        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "B" };
+        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "B" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -55,45 +53,22 @@ public class ProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
     }
 
     [Fact]
-    public async Task ProcessingInsidePartitionBatchUsesSameScope()
+    public async Task ProcessingUsesANewScopeForEachMessageOfAGroup()
     {
         // Arrange
         var context = CreateDbContext();
-        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
+        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "A" };
+        var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { GroupKey = "A" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
-
-        // Act
-        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
-        {
-            await outbox.AddMessageAsync(context, msg1, TestContext.Current.CancellationToken);
-            await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
-            await transaction.CommitAsync(TestContext.Current.CancellationToken);
-        }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Single(ExampleMessageHandler.ObjectIds);
-    }
-
-    [Fact]
-    public async Task ProcessingUsesNewScopeForEachBatch()
-    {
-        // Arrange
-        var context = CreateDbContext();
-        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
-        var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { PartitionKey = "A" };
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -103,11 +78,11 @@ public class ProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg3, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
-        // Assert
+        // Assert: a Group offers one message per claim, and every claim takes a scope of its own
         Assert.Equal(3, ExampleMessageHandler.CalledWith.Count);
-        Assert.Equal(2, ExampleMessageHandler.ObjectIds.Count);
+        Assert.Equal(3, ExampleMessageHandler.ObjectIds.Count);
     }
 
     [Fact]
@@ -115,11 +90,11 @@ public class ProcessorScopeTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { PartitionKey = "A" };
-        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { PartitionKey = "A" };
-        var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { PartitionKey = "A" };
+        var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
+        var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "A" };
+        var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { GroupKey = "A" };
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -129,8 +104,7 @@ public class ProcessorScopeTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg3, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        // Batch 1
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database

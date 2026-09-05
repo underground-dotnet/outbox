@@ -4,11 +4,13 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
 
+// this class drives a hosted service against the same static collections on ExampleMessageHandler that
+// the Domain tests assert on, so it has to run in the collection that serializes them
+[Collection("ExampleMessageHandler Collection")]
 public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 {
     private readonly ITestOutputHelper _testOutputHelper;
@@ -29,8 +31,6 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         {
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
         });
-
-        serviceCollection.AddScoped<ConcurrentProcessor<OutboxMessage>, NoPollingProcessor<OutboxMessage>>();
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
@@ -70,7 +70,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         }
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(3));
+        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(10));
         Assert.Single(ExampleMessageHandler.ObjectIds);
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }

@@ -17,6 +17,6 @@ internal sealed class InboxImpl(AddMessagesToInbox addMessage, ConcurrentProcess
 
     public void ProcessMessages()
     {
-        processor.ScheduleProcessingRun();
+        processor.NotifyWork();
     }
 }

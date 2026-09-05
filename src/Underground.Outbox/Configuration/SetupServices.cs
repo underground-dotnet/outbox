@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
+using Underground.Outbox.Domain.Chain;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
@@ -24,7 +25,12 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToOutbox>();
         services.AddScoped<IOutbox, OutboxImpl>();
-        services.AddScoped<FetchMessages<OutboxMessage>, FetchOutboxMessages>();
+        services.AddScoped<ClaimHead<OutboxMessage>, ClaimOutboxHead>();
+
+        // the outbox dispatches with no transaction open, so its chain leaves the savepoint out and its
+        // outer loop is the three-transaction one
+        services.AddScoped(MessageChainFactory.CreateOutbox);
+        services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
     }
@@ -42,7 +48,12 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, InboxImpl>();
-        services.AddScoped<FetchMessages<InboxMessage>, FetchInboxMessages>();
+        services.AddScoped<ClaimHead<InboxMessage>, ClaimInboxHead>();
+
+        // one transaction spans the claim, the Handler and the outcome, so the inbox keeps the savepoint
+        services.AddScoped<SavepointStage<InboxMessage>>();
+        services.AddScoped(MessageChainFactory.CreateInbox);
+        services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
     }
@@ -58,12 +69,22 @@ public static class SetupServices
         // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
 
-        services.AddScoped<FetchPartitions<TEntity>>();
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddScoped<Processor<TEntity>>();
+        services.AddScoped<ScheduleRetry<TEntity>>();
+        services.AddScoped<MarkHandled<TEntity>>();
+
+        // the per-message stages, shared by the inbox and the outbox. They are registered individually
+        // but only ever composed by the factory, which owns the order between them - and which side gets
+        // which of them.
+        services.AddScoped<LogMessageStage<TEntity>>();
+        services.AddScoped<RecordSuccessStage<TEntity>>();
+        services.AddScoped<RecordFailureStage<TEntity>>();
+        services.AddScoped<TimeoutStage<TEntity>>();
+        services.AddScoped<DispatchMessage<TEntity>>();
+
         services.AddScoped<DeleteProcessedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
         services.AddHostedService<CleanupBackgroundService<TEntity>>();

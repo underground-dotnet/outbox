@@ -25,7 +25,7 @@ public class ProcessorErrorTests : DatabaseTest
         ExampleMessageHandler.ObjectIds.Clear();
         FailedMessageHandler.CalledWith.Clear();
         SecondMessageHandler.CalledWith.Clear();
-        FailedUserMessageHandler.CalledWithTransaction = null;
+        FailedUserMessageHandler.Reset();
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // Second message handler should not be called due to error in first message handler
@@ -79,7 +79,7 @@ public class ProcessorErrorTests : DatabaseTest
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(11));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -88,7 +88,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var completed = await context.Database
@@ -123,7 +123,9 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        // a Group offers one message per claim, so the failing message behind the first one needs a second
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
@@ -139,8 +141,14 @@ public class ProcessorErrorTests : DatabaseTest
         Assert.Equal(1, notCompleted);
     }
 
+    /// <summary>
+    /// An outbox Handler dispatches with no transaction open, so whatever it wrote to this database is
+    /// already committed by the time it throws. There is nothing to roll it back to, and that is the
+    /// bargain of the Lease: short transactions, at-least-once delivery, and an outbox Handler whose
+    /// business is an effect outside this database.
+    /// </summary>
     [Fact]
-    public async Task RollbackHandlerDbChangesOnError()
+    public async Task HandlerDbChangesSurviveAnErrorBecauseTheOutboxHoldsNoTransaction()
     {
         // Arrange
         var context = CreateDbContext();
@@ -164,14 +172,18 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Single(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
+    /// <summary>
+    /// The same, for a Handler that writes through raw SQL rather than through the change tracker: neither
+    /// route is inside a transaction on the outbox, so neither is undone.
+    /// </summary>
     [Fact]
-    public async Task RollbackHandlerCustomSqlChangesOnError()
+    public async Task HandlerCustomSqlChangesSurviveAnErrorBecauseTheOutboxHoldsNoTransaction()
     {
         // Arrange
         var context = CreateDbContext();
@@ -196,10 +208,10 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+        Assert.Single(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -226,27 +238,29 @@ public class ProcessorErrorTests : DatabaseTest
         {
             // first message processing is successful and will insert a new user
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
-            // second message processing fails and the second inserted user should be rolled back
+            // second message processing fails after inserting a user of its own, which the outbox has no
+            // transaction to undo - what this test pins is that the first message's write is untouched by it
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
 
         // Act
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        // a Group offers one message per claim, so the failing message behind the first one needs a second
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
-        var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.users")
-            .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Equal(1, completed);
-
         var users = await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
-        Assert.Single(users);
-        Assert.Equal("Testuser Success", users[0].Name);
+        Assert.Contains(users, u => string.Equals(u.Name, "Testuser Success", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// The claim is committed before the Handler is entered, so a Handler's DbContext has no ambient
+    /// transaction: nothing it does can hold the claim transaction open across a call to an external
+    /// system, which is the whole point of the Lease.
+    /// </summary>
     [Fact]
-    public async Task OutboxTransactionIsUsedByInjectedDbContext()
+    public async Task OutboxHandlerRunsWithNoTransactionOpen()
     {
         // Arrange
         var context = CreateDbContext();
@@ -270,10 +284,11 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await Processor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.NotNull(FailedUserMessageHandler.CalledWithTransaction);
+        Assert.True(FailedUserMessageHandler.WasCalled, "the handler never ran");
+        Assert.Null(FailedUserMessageHandler.CalledWithTransaction);
     }
 
     [Fact]
@@ -294,7 +309,7 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -302,7 +317,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -326,7 +341,7 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -334,7 +349,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Empty(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -362,7 +377,7 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -370,7 +385,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -396,7 +411,7 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -404,7 +419,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsProcessedExceptionHandler<OutboxMessage>>().CallCount);
@@ -429,7 +444,7 @@ public class ProcessorErrorTests : DatabaseTest
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMultiMessageB(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
-        var processor = serviceProvider.GetRequiredService<Processor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<IProcessor<OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -437,7 +452,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessMessagesAsync("default", 5, serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
+        await processor.ProcessHeadAsync(serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
 
         // Assert
         var failedMessage = await context.OutboxMessages

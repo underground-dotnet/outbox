@@ -8,17 +8,70 @@ namespace Underground.Outbox.Configuration;
 public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
-    /// Number of messages to process in a single batch.
-    /// The whole batch is processed within a single transaction. If you want to have a transaction per message, set this to 1.
+    /// Maximum number of Groups that can be handled concurrently. It is the number of workers that run:
+    /// each one claims a Head for itself and the database keeps two of them off the same Group, so this
+    /// caps how many Groups are ever in flight at once. A value of one means strictly serial handling
+    /// across all Groups - one message anywhere in the system at a time - not one message per Group.
     /// </summary>
-    public int BatchSize { get; set; } = 5;
-
-    public int ParallelProcessingOfPartitions { get; set; } = 4;
+    public int MaxConcurrentGroups { get; set; } = 4;
 
     /// <summary>
-    /// Delay in milliseconds between processing cycles when messages are successfully processed.
+    /// How long an idle worker waits before looking for work again, in milliseconds. It applies only when
+    /// a claim came back empty: a worker that keeps finding Heads keeps claiming them and never waits at
+    /// all. A commit in this process wakes idle workers immediately, so this bounds the latency of work
+    /// nothing told us about - a message written by another application instance, or one that became
+    /// Settled only once some other transaction ended.
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
+
+    /// <summary>
+    /// The time a Handler is given to complete. When it elapses, the cancellation token the Handler was
+    /// passed is cancelled and the message is recorded as a failed attempt, so a hung external call costs
+    /// its own Group a backoff rather than occupying a worker - and, on the inbox, rather than holding a
+    /// transaction open behind it. There is no way to switch it off: an unbounded Handler is what this
+    /// exists to prevent.
+    /// </summary>
+    public TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromSeconds(45);
+
+    /// <summary>
+    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write
+    /// after the Handler's own budget is up. It is a constant rather than a setting because the only thing
+    /// a second knob could express is a Lease shorter than the timeout, which guarantees double delivery on
+    /// every slow message.
+    /// </summary>
+    private const int LeaseMarginSeconds = 15;
+
+    /// <summary>
+    /// How long an outbox worker's Lease on a claimed message runs for, measured from the claim. It is
+    /// derived from <see cref="HandlerTimeout"/> rather than configured, so the Handler's cancellation
+    /// always fires with the margin still to spare and a message can never be taken from a live worker.
+    /// </summary>
+    /// <remarks>
+    /// Read only by the outbox. The inbox holds a row lock for the length of its transaction and has
+    /// nothing to expire.
+    /// </remarks>
+    internal TimeSpan LeaseDuration => HandlerTimeout + TimeSpan.FromSeconds(LeaseMarginSeconds);
+
+    /// <summary>
+    /// Delay before a message that failed for the first time is offered again. Every further failure
+    /// doubles it, up to <see cref="MaxBackoff"/>.
+    /// </summary>
+    public TimeSpan BackoffBase { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Ceiling the doubling stops at, so that a message which recovers after a long outage is still
+    /// picked up within a predictable time rather than after an ever-growing wait. It bounds the
+    /// doubling rather than the delay itself: <see cref="BackoffJitter"/> is applied afterwards, so an
+    /// actual delay may exceed this by the jitter proportion.
+    /// </summary>
+    public TimeSpan MaxBackoff { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Proportion by which each retry delay is randomly varied, either way: 0.2 means plus or minus
+    /// 20%. It keeps Groups that all failed against one shared dependency from retrying in lockstep.
+    /// Set to 0 for exact delays.
+    /// </summary>
+    public double BackoffJitter { get; set; } = 0.2;
 
     /// <summary>
     /// Retention period for processed messages before they are eligible for cleanup.
@@ -42,19 +95,35 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
 
     internal void Validate()
     {
-        if (BatchSize <= 0)
+        if (MaxConcurrentGroups <= 0)
         {
-            throw new ArgumentOutOfRangeException($"BatchSize ({BatchSize}) must be greater than 0.");
-        }
-
-        if (ParallelProcessingOfPartitions <= 0)
-        {
-            throw new ArgumentOutOfRangeException($"ParallelProcessingOfPartitions ({ParallelProcessingOfPartitions}) must be greater than 0.");
+            throw new ArgumentOutOfRangeException($"MaxConcurrentGroups ({MaxConcurrentGroups}) must be greater than 0.");
         }
 
         if (ProcessingDelayMilliseconds < 0)
         {
             throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+        }
+
+        if (HandlerTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException($"HandlerTimeout ({HandlerTimeout}) must be greater than zero.");
+        }
+
+        if (BackoffBase <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException($"BackoffBase ({BackoffBase}) must be greater than zero.");
+        }
+
+        if (MaxBackoff < BackoffBase)
+        {
+            throw new ArgumentOutOfRangeException($"MaxBackoff ({MaxBackoff}) cannot be shorter than BackoffBase ({BackoffBase}).");
+        }
+
+        // a jitter of 1 or more could produce a delay of zero or a negative one, which would retry immediately
+        if (BackoffJitter is < 0 or >= 1)
+        {
+            throw new ArgumentOutOfRangeException($"BackoffJitter ({BackoffJitter}) must be at least 0 and less than 1.");
         }
 
         if (ProcessedMessageRetention < TimeSpan.Zero)

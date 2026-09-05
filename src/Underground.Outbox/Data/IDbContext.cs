@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Underground.Outbox.Data;
 
@@ -12,8 +11,6 @@ public interface IDbContext : IAsyncDisposable
 #pragma warning disable CA1716 // Identifiers should not match keywords
     public DbSet<TEntity> Set<TEntity>() where TEntity : class;
 #pragma warning restore CA1716 // Identifiers should not match keywords
-
-    public IModel Model { get; }
 
     /// <summary>
     /// Asynchronously saves all changes made in this context to the database.
