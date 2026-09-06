@@ -18,8 +18,6 @@ public class ProcessorScopeTests : DatabaseTest
 
     public ProcessorScopeTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         _testOutputHelper = testOutputHelper;
 
         // clear the static lists to avoid interference between tests
@@ -32,7 +30,7 @@ public class ProcessorScopeTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped));
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 

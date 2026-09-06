@@ -17,11 +17,9 @@ public class OutboxTests : DatabaseTest
 
     public OutboxTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         _testOutputHelper = testOutputHelper;
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg => { });
 
@@ -115,13 +113,13 @@ public class OutboxTests : DatabaseTest
     //     var serviceCollection = new ServiceCollection();
     //     serviceCollection.AddOutboxServices("module1", cfg =>
     //     {
-    //         cfg.ConnectionString = _fixture.PostgreSqlContainer.GetConnectionString();
+    //         cfg.ConnectionString = _fixture.PostgreSqlDatabase.ConnectionString;
     //         cfg.AddHandler<ExampleMessageHandler>();
     //     });
 
     //     serviceCollection.AddOutboxServices("module2", cfg =>
     //     {
-    //         cfg.ConnectionString = _fixture.PostgreSqlContainer.GetConnectionString();
+    //         cfg.ConnectionString = _fixture.PostgreSqlDatabase.ConnectionString;
     //         cfg.AddHandler<ExampleMessageAnotherHandler>();
     //     });
     // }

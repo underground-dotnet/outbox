@@ -15,9 +15,10 @@ could still insert ahead of it.
 Ordering now reflects the order in which transactions *started*, not the order in which messages
 were appended. Messages appended within one transaction keep their relative order.
 
-Delivery latency is coupled to the oldest running **write** transaction in the database: a
-long-running writer holds the snapshot minimum back and stalls all message delivery until it
-commits. Read-only transactions are unaffected, as they are assigned no transaction id. This is
+Delivery latency is coupled to the oldest running **write** transaction on the Postgres *instance*: a
+long-running writer holds the snapshot minimum back and stalls all message delivery until it commits.
+Transaction ids are cluster-wide, so a writer in an unrelated database on the same instance counts.
+Read-only transactions are unaffected, as they are assigned no transaction id. This is
 the same coupling logical replication and CDC have, and it needs monitoring.
 
 **The inbox is itself one of those writers.** Per ADR 0001 an inbox worker holds a single
@@ -26,7 +27,7 @@ onwards: `SELECT ... FOR UPDATE` records the locker in the tuple's `xmax`, which
 transaction id. So for as long as a Handler runs, that worker's id is a floor under
 `pg_snapshot_xmin` for every other session.
 
-The watermark is database-wide, and the filter runs before `DISTINCT ON (group_key)`, so the stall
+The watermark is cluster-wide, and the filter runs before `DISTINCT ON (group_key)`, so the stall
 is not confined to the busy worker, to the inbox, or to that Handler's group: one slow inbox
 Handler withholds every message newer than its claim from every worker on both sides. Under steady
 load some worker is nearly always mid-Handler, which makes this a standing delivery-latency floor

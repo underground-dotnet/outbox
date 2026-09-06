@@ -185,7 +185,7 @@ public class OutboxLeaseTests : DatabaseTest
     {
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddOutboxServices<TestDbContext>(configure);
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         serviceCollection.AddLogging(builder => builder.AddProvider(_logs));
 
         return serviceCollection.BuildServiceProvider();

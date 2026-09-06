@@ -40,7 +40,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
@@ -73,7 +73,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
@@ -109,7 +109,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage(10));
@@ -160,7 +160,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
@@ -196,7 +196,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<CustomSqlMessageHandler, CustomSqlMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new CustomSqlMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
@@ -228,7 +228,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new UserMessage(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(11));
@@ -272,7 +272,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedUserMessage(10));
         var outbox = serviceProvider.GetRequiredService<IOutbox>();
@@ -304,7 +304,7 @@ public class ProcessorErrorTests : DatabaseTest
                 .Discard();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
@@ -336,7 +336,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
@@ -371,7 +371,7 @@ public class ProcessorErrorTests : DatabaseTest
                 .OnException<DataException>().MarkAsCompleted();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
@@ -405,7 +405,7 @@ public class ProcessorErrorTests : DatabaseTest
                 .OnException<DataException>().MarkAsCompleted();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
@@ -439,7 +439,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.AddHandler<FailedMultipleMessagesHandler, FailedMultiMessageB>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMultiMessageB(10));

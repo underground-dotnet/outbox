@@ -1,8 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-using Testcontainers.PostgreSql;
-
 using Underground.Outbox;
 using Underground.Outbox.Data;
 using Underground.OutboxTest.TestHandler;
@@ -18,21 +16,21 @@ public class TestDbContext : DbContext, IOutboxDbContext
     {
     }
 
-    public TestDbContext(PostgreSqlContainer container, ILoggerFactory loggerFactory, ProcessMessagesOnSaveChangesInterceptor? interceptor) : base(
-        ConfigureDbContext(new DbContextOptionsBuilder<TestDbContext>(), container, loggerFactory, interceptor).Options
+    public TestDbContext(TestDatabase database, ILoggerFactory loggerFactory, ProcessMessagesOnSaveChangesInterceptor? interceptor) : base(
+        ConfigureDbContext(new DbContextOptionsBuilder<TestDbContext>(), database, loggerFactory, interceptor).Options
     )
     {
     }
 
     public static DbContextOptionsBuilder ConfigureDbContext(
         DbContextOptionsBuilder options,
-        PostgreSqlContainer container,
+        TestDatabase database,
         ILoggerFactory loggerFactory,
         ProcessMessagesOnSaveChangesInterceptor? interceptor
     )
     {
         var builder = options
-            .UseNpgsql(container.GetConnectionString())
+            .UseNpgsql(database.ConnectionString)
             .UseLoggerFactory(loggerFactory)
             .EnableSensitiveDataLogging();
 
