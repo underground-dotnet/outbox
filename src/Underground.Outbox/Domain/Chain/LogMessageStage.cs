@@ -6,13 +6,12 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox.Domain.Chain;
 
 /// <summary>
-/// Announces the claimed message before anything is done to it, so that a Handler which never returns is
-/// still attributable to a message and a Group, and reports what became of it on the way back out.
+/// Announces the claimed message before anything is done to it, so a Handler that never returns is still
+/// attributable, and reports what became of it on the way back out.
 /// </summary>
 /// <remarks>
-/// Outermost, so the outcome line is written after every other stage has had its say. An inbound line with
-/// no outbound line is therefore not a gap in the logging but a signal in its own right: the application
-/// went down mid-attempt, and nothing about that message was recorded.
+/// Outermost, so an inbound line with no outbound line is a signal in its own right: the application went
+/// down mid-attempt and nothing about that message was recorded.
 /// </remarks>
 internal sealed partial class LogMessageStage<TEntity>(
     ILogger<LogMessageStage<TEntity>> logger
@@ -32,8 +31,7 @@ internal sealed partial class LogMessageStage<TEntity>(
         }
         else
         {
-            // the exception is attached rather than formatted into the message, so that a failure and a
-            // discarded attempt read the same way whichever of the two stages below settled it
+            // attached rather than formatted in, so both failure kinds read the same way
             LogMessageNotHandled(message.Id, attempt.Status.ToString(), attempt.Failure);
         }
 

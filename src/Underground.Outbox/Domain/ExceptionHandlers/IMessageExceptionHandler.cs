@@ -4,9 +4,8 @@ using Underground.Outbox.Exceptions;
 namespace Underground.Outbox.Domain.ExceptionHandlers;
 
 /// <summary>
-/// Defines an exception handler for processing messages.
-/// Implement this interface to add custom error handling operations when a message handler throws an exception.
-/// Do not forget to register the implementation in the dependency injection container.
+/// Custom error handling for when a message handler throws. Register the implementation in the DI
+/// container.
 /// </summary>
 /// <typeparam name="TEntity">The message entity type that implements <see cref="IMessage"/>.</typeparam>
 public interface IMessageExceptionHandler<in TEntity> where TEntity : class, IMessage

@@ -10,16 +10,13 @@ namespace Underground.Outbox.Domain.Chain;
 /// and the new visibility instant still commit together with the rollback.
 /// </summary>
 /// <remarks>
-/// Only ever assembled into a chain that runs inside a transaction, which today is the inbox alone. The
-/// outbox dispatches with nothing open and leaves this stage out rather than making it optional at
-/// runtime, which is why <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction"/> can be
-/// read here without a null check.
+/// Only ever assembled into a chain that runs inside a transaction - today the inbox alone - which is why
+/// <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction"/> is read without a null check.
 /// </remarks>
 internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageStage<TEntity> where TEntity : class, IMessage
 {
     public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
     {
-        // the factory only places this stage on a side that holds a transaction across the dispatch
         var transaction = dbContext.Database.CurrentTransaction!;
 
         var savepointName = $"processing_message_{message.Id}";
@@ -34,8 +31,7 @@ internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageSt
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // a cancellation is left alone: the transaction is about to be disposed and rolled back whole,
-            // and issuing another statement on a cancelled token would only fail again
+            // a cancellation is left alone: the transaction is about to be rolled back whole
             await transaction.RollbackToSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
 
             throw;
