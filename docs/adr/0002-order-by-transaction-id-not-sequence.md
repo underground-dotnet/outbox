@@ -20,6 +20,24 @@ long-running writer holds the snapshot minimum back and stalls all message deliv
 commits. Read-only transactions are unaffected, as they are assigned no transaction id. This is
 the same coupling logical replication and CDC have, and it needs monitoring.
 
+**The inbox is itself one of those writers.** Per ADR 0001 an inbox worker holds a single
+transaction across claim, Handler and outcome, and it is a *write* transaction from the claim
+onwards: `SELECT ... FOR UPDATE` records the locker in the tuple's `xmax`, which requires a real
+transaction id. So for as long as a Handler runs, that worker's id is a floor under
+`pg_snapshot_xmin` for every other session.
+
+The watermark is database-wide, and the filter runs before `DISTINCT ON (group_key)`, so the stall
+is not confined to the busy worker, to the inbox, or to that Handler's group: one slow inbox
+Handler withholds every message newer than its claim from every worker on both sides. Under steady
+load some worker is nearly always mid-Handler, which makes this a standing delivery-latency floor
+of roughly the slowest concurrent inbox Handler rather than an occasional stall.
+
+Neither half of that can be relaxed without giving something up. Shortening the inbox transaction
+would cost the exactly-once delivery ADR 0001 exists to preserve, and the watermark cannot be
+narrowed to a group because a running transaction's id says nothing about which group it will
+insert into. The mitigation is therefore operational: keep inbox Handlers short, and monitor
+delivery lag against the oldest running write transaction.
+
 Ordering by `id` alone would remain incorrect even with the watermark in place, because a message
 inserted earlier can belong to a transaction that started later and so is released later. The
 sort key and the watermark must both be `transaction_id`.

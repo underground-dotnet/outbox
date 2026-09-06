@@ -38,6 +38,7 @@ An identity value is assigned when a row is inserted, not when its transaction c
 Two consequences are worth knowing before you rely on this:
 
 - **A long-running write transaction anywhere in the database delays delivery.** The stability test is against the snapshot minimum, which an open write transaction holds back, so a long writer stalls *all* message delivery until it commits — not just delivery of its own group. Read-only transactions are unaffected, as they are assigned no transaction id. This is the same coupling logical replication and CDC have, and it needs monitoring.
+- **A slow inbox handler does the same thing.** An inbox handler runs inside the transaction that claims its message and records the outcome, and that transaction is a writer for its whole length — so while it runs it holds the snapshot minimum back exactly as any other long writer would, delaying delivery for every group on both the inbox and the outbox. This is the price of exactly-once inbox delivery ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)); keep inbox handlers short, and move slow or external work to the outbox, whose claim transaction commits immediately.
 - Messages appended within one transaction keep their relative order.
 
 ## Two behaviours that look like defects

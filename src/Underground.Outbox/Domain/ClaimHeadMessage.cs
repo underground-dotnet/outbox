@@ -61,6 +61,10 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         // not at commit, so a transaction starting later but committing first would otherwise win. The
         // stable filter is safe here for the same reason - an unstable row sorts after every stable one.
         //
+        // pg_snapshot_xmin is database-wide, so the stable filter costs what ADR 0002 records: any open write
+        // transaction withholds every message newer than it, from both sides and every Group. The inbox is one
+        // of those writers for the length of its Handler - FOR UPDATE below assigns it a real xid.
+        //
         // FOR UPDATE cannot be combined with DISTINCT ON, hence the second CTE. SKIP LOCKED so a HeadMessage
         // another worker holds is passed over rather than aborting a statement spanning every Group.
         // It repeats completed_at IS NULL because FOR UPDATE re-evaluates only that predicate against the
