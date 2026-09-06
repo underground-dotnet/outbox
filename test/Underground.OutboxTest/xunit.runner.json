@@ -1,5 +1,8 @@
 {
   "$schema": "https://xunit.net/schema/current/xunit.runner.schema.json",
+  // Collections must not run in parallel: every test shares one Postgres instance and pg_snapshot_xmin is
+  // cluster-wide, so an open write transaction in one test withholds messages from every other test.
+  "parallelizeTestCollections": false,
   "diagnosticMessages": true,
   "internalDiagnosticMessages": false,
   "showLiveOutput": true, // can be used with `--output Detailed` flag to show success logs
