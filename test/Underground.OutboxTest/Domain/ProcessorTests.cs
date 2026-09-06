@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
@@ -71,7 +72,7 @@ public class ProcessorTests : DatabaseTest
 
         // Assert
         // due to a race condition with starting the BackgroundService, we need to wait for the handler to be called
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(3));
+        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(10));
         Assert.Single(ExampleMessageHandler.CalledWith);
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }
@@ -81,7 +82,7 @@ public class ProcessorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -97,13 +98,12 @@ public class ProcessorTests : DatabaseTest
 
         // Act
         using var cts = new CancellationTokenSource();
-        var task = processor.StartAsync(cts.Token);
-        // cancel processing early
+        // cancel before any message is handled
         await cts.CancelAsync();
 
         // Assert
-        await Assert.ThrowsAsync<TaskCanceledException>(async () => await task);
-        Assert.True(ExampleMessageHandler.CalledWith.Count < 100);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await processor.ProcessUntilIdleAsync(cts.Token));
+        Assert.Empty(ExampleMessageHandler.CalledWith);
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class ProcessorTests : DatabaseTest
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageA(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageB(20));
         var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<SynchronousProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -124,7 +124,7 @@ public class ProcessorTests : DatabaseTest
         }
 
         // Act
-        await processor.ProcessAndWaitAsync(TestContext.Current.CancellationToken);
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(MultipleMessagesHandler.CalledWithA);

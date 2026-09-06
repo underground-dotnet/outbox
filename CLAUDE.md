@@ -34,6 +34,12 @@ dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTes
   usually trips on, so build before handing work back.
 - `net10.0`, nullable and implicit usings enabled. The source generator project must stay
   `netstandard2.0`.
+- Keep comments short. Prefer readable code — naming, small methods, types that make the invariant
+  obvious — over a comment explaining unclear code. Comment the *why* that the code cannot express
+  (a non-obvious SQL predicate, an analyzer suppression, a subtle ordering), never the *what*.
+  XML `<summary>` on a public member is one or two lines; `<remarks>` is for rationale that would
+  otherwise be lost, at a few lines at most. Drop comments that restate the line below them and
+  empty doc tags (`<param></param>`, `<returns></returns>`).
 
 ## Agent skills
 

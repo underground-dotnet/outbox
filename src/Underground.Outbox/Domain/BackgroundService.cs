@@ -13,14 +13,14 @@ internal sealed class BackgroundService<TEntity>(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // TODO: if user wants to process on only one machine
-        // var lockKey = $"{typeof(TEntity)}-{partitionKey}";
+        // var lockKey = $"{typeof(TEntity)}-{groupKey}";
         // await using var handle = await synchronizationProvider.TryAcquireLockAsync(lockKey, cancellationToken: cancellationToken);
         // if (handle is null)
         // {
-        //     // another instance is already processing the partition
+        //     // another instance is already processing the group
         //     return false;
         // }
 
-        await _processor.StartAsync(stoppingToken).ConfigureAwait(false);
+        await _processor.RunAsync(stoppingToken).ConfigureAwait(false);
     }
 }

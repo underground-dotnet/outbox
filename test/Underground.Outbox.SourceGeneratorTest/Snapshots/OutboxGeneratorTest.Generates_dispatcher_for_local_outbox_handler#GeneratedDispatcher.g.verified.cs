@@ -15,7 +15,7 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
 {
     public async Task ExecuteAsync(IServiceScope scope, TMessage message, CancellationToken cancellationToken)
     {
-        var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);
+        var metadata = new MessageMetadata(message.EventId, message.GroupKey, message.RetryCount);
         var serviceProvider = scope.ServiceProvider;
         if (typeof(TMessage) == typeof(InboxMessage))
         {

@@ -11,7 +11,7 @@ public class InboxMessageHandler(ILogger<InboxMessageHandler> logger) : IInboxMe
 {
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        logger.LogInformation("received inbox: messageId: {EventId}, partition: {PartitionKey}", metadata.EventId, metadata.PartitionKey);
+        logger.LogInformation("received inbox: messageId: {EventId}, group: {GroupKey}", metadata.EventId, metadata.GroupKey);
         return Task.CompletedTask;
     }
 }

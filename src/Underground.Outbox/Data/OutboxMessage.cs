@@ -6,11 +6,21 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Underground.Outbox.Data;
 
+/// <summary>
+/// A record of an intent to cause an effect outside this database.
+/// </summary>
+/// <remarks>
+/// The table and column names are fixed and may not be remapped; see
+/// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
+/// </remarks>
 [Table("outbox")]
 [Index(nameof(EventId), IsUnique = true)]
-[Index(nameof(ProcessedAt), nameof(PartitionKey))]
+[EntityTypeConfiguration(typeof(OutboxMessageConfiguration))]
 public class OutboxMessage : IMessage
 {
+    /// <inheritdoc />
+    public static string TableName => "outbox";
+
     [Column("id")]
     [Key]
     public long Id { get; init; }
@@ -19,14 +29,17 @@ public class OutboxMessage : IMessage
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
     public Guid EventId { get; init; }
 
+    [Column("transaction_id")]
+    public ulong TransactionId { get; init; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; init; }
 
     [Column("type")]
     public string Type { get; init; }
 
-    [Column("partition_key")]
-    public string PartitionKey { get; init; }
+    [Column("group_key")]
+    public string GroupKey { get; init; }
 
     [Column("data", TypeName = "jsonb")]
     public string Data { get; init; }
@@ -34,36 +47,73 @@ public class OutboxMessage : IMessage
     [Column("retry_count")]
     public int RetryCount { get; set; } = 0;
 
-    [Column("processed_at")]
-    public DateTime? ProcessedAt { get; set; }
+    [Column("visible_at")]
+    public DateTime VisibleAt { get; init; }
 
-    internal OutboxMessage(long id, Guid eventId, DateTime createdAt, string type, string partitionKey, string data, int retryCount, DateTime? processedAt)
+    [Column("completed_at")]
+    public DateTime? CompletedAt { get; set; }
+
+    internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
         Id = id;
         EventId = eventId;
+        TransactionId = transactionId;
         CreatedAt = createdAt;
         Type = type;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         Data = data;
         RetryCount = retryCount;
-        ProcessedAt = processedAt;
+        VisibleAt = visibleAt;
+        CompletedAt = completedAt;
     }
 
-    public OutboxMessage(Guid eventId, DateTime createdAt, string type, string data, string partitionKey = "default")
+    /// <summary>
+    /// Creates a message whose body is already serialized.
+    /// </summary>
+    /// <param name="eventId">Identifies the message. A second message with the same value is rejected.</param>
+    /// <param name="createdAt">When the message was created, in UTC.</param>
+    /// <param name="type">The name of the message type, which selects the handler.</param>
+    /// <param name="data">The serialized message body.</param>
+    /// <param name="groupKey">
+    /// The Group this message belongs to. Messages of one Group are handled one at a time, in order.
+    /// </param>
+    /// <param name="visibleAt">
+    /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
+    /// soon as it is Stable. Scheduling a message also delays every message added to its Group after it,
+    /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
+    /// </param>
+    public OutboxMessage(Guid eventId, DateTime createdAt, string type, string data, string groupKey = "default", DateTime? visibleAt = null)
     {
         EventId = eventId;
         CreatedAt = createdAt;
         Type = type;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         Data = data;
+        VisibleAt = visibleAt.GetValueOrDefault();
     }
 
-    public OutboxMessage(Guid eventId, DateTime createdAt, object data, string partitionKey = "default")
+    /// <summary>
+    /// Creates a message whose body is serialized to JSON, and whose type is taken from
+    /// <paramref name="data"/>.
+    /// </summary>
+    /// <param name="eventId">Identifies the message. A second message with the same value is rejected.</param>
+    /// <param name="createdAt">When the message was created, in UTC.</param>
+    /// <param name="data">The message body.</param>
+    /// <param name="groupKey">
+    /// The Group this message belongs to. Messages of one Group are handled one at a time, in order.
+    /// </param>
+    /// <param name="visibleAt">
+    /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
+    /// soon as it is Stable. Scheduling a message also delays every message added to its Group after it,
+    /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
+    /// </param>
+    public OutboxMessage(Guid eventId, DateTime createdAt, object data, string groupKey = "default", DateTime? visibleAt = null)
     {
         EventId = eventId;
         CreatedAt = createdAt;
         Type = data.GetType().FullName!;
-        PartitionKey = partitionKey;
+        GroupKey = groupKey;
         Data = JsonSerializer.Serialize(data);
+        VisibleAt = visibleAt.GetValueOrDefault();
     }
 }

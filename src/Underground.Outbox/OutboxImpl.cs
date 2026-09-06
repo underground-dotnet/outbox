@@ -17,6 +17,6 @@ internal sealed class OutboxImpl(AddMessagesToOutbox addMessage, ConcurrentProce
 
     public void ProcessMessages()
     {
-        processor.ScheduleProcessingRun();
+        processor.NotifyWork();
     }
 }

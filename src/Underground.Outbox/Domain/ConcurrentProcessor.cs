@@ -8,7 +8,7 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal partial class ConcurrentProcessor<TEntity>(
+internal sealed partial class ConcurrentProcessor<TEntity>(
     ILogger<ConcurrentProcessor<TEntity>> logger,
     IServiceScopeFactory scopeFactory,
     ServiceConfiguration<TEntity> config
@@ -18,139 +18,134 @@ internal partial class ConcurrentProcessor<TEntity>(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ServiceConfiguration<TEntity> _config = config;
 
-    // used to trigger processing runs, making sure only a limited number of runs can be queued
-    private readonly Channel<int> _triggerChannel = Channel.CreateBounded<int>(new BoundedChannelOptions(1)
-    {
-        FullMode = BoundedChannelFullMode.DropWrite,
-        SingleReader = true,
-        SingleWriter = false
-    });
-
-    // contains partitions to be processed
-    private readonly Channel<string> _partitionsChannel = Channel.CreateBounded<string>(new BoundedChannelOptions(20)
+    /// <summary>
+    /// Wake-up signal for idle workers. Carries no information beyond "look again".
+    /// </summary>
+    /// <remarks>
+    /// Two properties are load-bearing: a notification releases every waiter (<c>WaitToReadAsync</c>
+    /// completes for all of them before the token is drained), and it is buffered, so one that lands
+    /// just before a worker starts waiting is not lost. Bounded at one with
+    /// <see cref="BoundedChannelFullMode.DropWrite"/>: a second token says nothing the first did not.
+    /// </remarks>
+    private readonly Channel<byte> _workSignal = Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
     {
         FullMode = BoundedChannelFullMode.DropWrite,
         SingleReader = false,
         SingleWriter = false
     });
 
-    // called only on startup in the BackgroundWorker
-    internal virtual async Task StartAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until cancelled.
+    /// Each worker claims for itself and waits on the work signal once nothing is offered.
+    /// </summary>
+    internal async Task RunAsync(CancellationToken cancellationToken)
     {
-        CreateWorkers(cancellationToken);
+        var workers = Enumerable.Range(0, _config.MaxConcurrentGroups)
+            .Select(_ => RunWorkerAsync(cancellationToken))
+            .Append(RunPollAsync(cancellationToken));
+
+        await Task.WhenAll(workers).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reports that work may have appeared, releasing every waiting worker. Never blocks, never fails.
+    /// </summary>
+    /// <remarks>
+    /// Polling is what guarantees delivery; the commit interceptor calling this is only a latency
+    /// optimisation, and a lost notification therefore costs time rather than correctness.
+    /// </remarks>
+    internal void NotifyWork()
+    {
+        _workSignal.Writer.TryWrite(0);
+    }
+
+    /// <summary>
+    /// Waits until <see cref="NotifyWork"/> is called. Returns rather than throwing on cancellation; the
+    /// worker loop decides what that means.
+    /// </summary>
+    internal async Task WaitForWorkAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _workSignal.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
+
+            // take the token so that the next wait blocks again
+            _workSignal.Reader.TryRead(out _);
+        }
+        catch (OperationCanceledException)
+        {
+            // the application is shutting down, which the worker loop sees on its own token
+        }
+    }
+
+    /// <summary>
+    /// Handles at most one unit of work: the HeadMessage of whichever Group offers the oldest one. The
+    /// skip-locked claim is what keeps two workers off the same Group.
+    /// </summary>
+    /// <returns>
+    /// Whether a message was claimed, and with it whether it is worth calling again right away. A failed
+    /// claim is logged and reported as <see cref="ClaimResult.NothingOffered"/> so a worker survives it.
+    /// </returns>
+    internal async Task<ClaimResult> ProcessNextAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            // use a separate scope & context for each claim
+            using var scope = _scopeFactory.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
+
+            return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogProcessingError(ex);
+
+            // no work rather than an immediate retry, so a database refusing connections is not hammered
+            return ClaimResult.NothingOffered;
+        }
+    }
+
+    private async Task RunWorkerAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker
+            // survives a failure rather than leaving the pool one short
+            if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadMessageClaimed)
+            {
+                await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Notifies on a fixed cadence, so a wait ends even when nothing notified it. It ticks whether or not
+    /// anyone is idle; suppressing that would cost a shared idle count for the sake of one empty claim.
+    /// </summary>
+    private async Task RunPollAsync(CancellationToken cancellationToken)
+    {
+        var delay = TimeSpan.FromMilliseconds(_config.ProcessingDelayMilliseconds);
 
         while (!cancellationToken.IsCancellationRequested)
         {
-            ScheduleProcessingRun();
-            await Task.Delay(_config.ProcessingDelayMilliseconds, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    internal void ScheduleProcessingRun()
-    {
-        _triggerChannel.Writer.TryWrite(1);
-    }
-
-    protected void CreateWorkers(CancellationToken cancellationToken)
-    {
-        var triggerWorker = CreateTriggerWorker(cancellationToken);
-
-        var partitionsWorkers = Enumerable.Range(0, _config.ParallelProcessingOfPartitions)
-                    .Select(_ => CreatePartitionWorker(cancellationToken))
-                    .ToArray();
-
-        List<Task> tasks = [.. partitionsWorkers, triggerWorker];
-        tasks.ForEach(t =>
-            // since we are not awaiting the tasks here, we need to log exceptions manually to avoid unobserved task exceptions
-            _ = t.ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                    {
-                        LogWorkerFailed(t.Exception);
-                    }
-                },
-                TaskContinuationOptions.OnlyOnFaulted
-            )
-        );
-    }
-
-    private async Task CreateTriggerWorker(CancellationToken cancellationToken)
-    {
-        await foreach (var _ in _triggerChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-        {
             try
             {
-                using var scope = _scopeFactory.CreateScope();
-                var partitions = await scope.ServiceProvider.GetRequiredService<FetchPartitions<TEntity>>().ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-                foreach (var partition in partitions)
-                {
-                    await _partitionsChannel.Writer.WriteAsync(partition, cancellationToken).ConfigureAwait(false);
-                }
-
-                if (!partitions.Any())
-                {
-                    NoMessagesForProcessingFound();
-                }
+                // delay first: a worker claims before it ever waits, so a startup tick releases nobody
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException)
             {
-                LogFetchPartitionsError(ex);
-                NoMessagesForProcessingFound();
+                // shutting down; returning rather than throwing keeps RunAsync from faulting on every stop
+                return;
             }
+
+            NotifyWork();
         }
-    }
-
-    private async Task CreatePartitionWorker(CancellationToken cancellationToken)
-    {
-        await foreach (var partitionKey in _partitionsChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
-        {
-            try
-            {
-                var messagesProcessed = await AcquireLockAndProcess(partitionKey, cancellationToken).ConfigureAwait(false);
-
-                if (messagesProcessed)
-                {
-                    // re-enqueue the partition for further processing, because there might be more messages
-                    _partitionsChannel.Writer.TryWrite(partitionKey);
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                LogPartitionProcessingError(partitionKey, ex);
-            }
-        }
-    }
-
-    // locking right not is performed through the `FOR UPDATE NOWAIT` clause in `FetchMessages`
-    private async Task<bool> AcquireLockAndProcess(string partitionKey, CancellationToken cancellationToken)
-    {
-        // use separate scope & context for each partition
-        using var scope = _scopeFactory.CreateScope();
-        var processor = scope.ServiceProvider.GetRequiredService<Processor<TEntity>>();
-        return await processor.ProcessMessagesAsync(partitionKey, _config.BatchSize, scope, cancellationToken).ConfigureAwait(false);
-    }
-
-    protected virtual void NoMessagesForProcessingFound()
-    {
-        // only used to improve test setup with async processes
     }
 
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Error,
-        Message = "Worker failed with an exception")]
-    private partial void LogWorkerFailed(Exception exception);
-
-    [LoggerMessage(
-        EventId = 2,
-        Level = LogLevel.Error,
-        Message = "Error fetching partitions for processing")]
-    private partial void LogFetchPartitionsError(Exception exception);
-
-    [LoggerMessage(
-        EventId = 3,
-        Level = LogLevel.Error,
-        Message = "Error processing partition {PartitionKey}")]
-    private partial void LogPartitionProcessingError(string partitionKey, Exception exception);
+        Message = "Error claiming or handling the next HeadMessage")]
+    private partial void LogProcessingError(Exception exception);
 }

@@ -12,13 +12,13 @@ public class ExampleMessageHandler(ILogger<ExampleMessageHandler> logger) : IOut
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
 
-        logger.LogInformation("received outbox: messageId: {EventId}, partition: {PartitionKey}", metadata.EventId, metadata.PartitionKey);
+        logger.LogInformation("received outbox: messageId: {EventId}, group: {GroupKey}", metadata.EventId, metadata.GroupKey);
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(SecondMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        logger.LogInformation("received second message type: messageId: {EventId}, partition: {PartitionKey}", metadata.EventId, metadata.PartitionKey);
+        logger.LogInformation("received second message type: messageId: {EventId}, group: {GroupKey}", metadata.EventId, metadata.GroupKey);
         return Task.CompletedTask;
     }
 }

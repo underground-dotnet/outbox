@@ -31,7 +31,7 @@ internal sealed partial class CleanupBackgroundService<TEntity>(
             var scope = scopeFactory.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
             {
-                var cleanup = scope.ServiceProvider.GetRequiredService<DeleteProcessedMessages<TEntity>>();
+                var cleanup = scope.ServiceProvider.GetRequiredService<DeleteCompletedMessages<TEntity>>();
                 var deletedCount = await cleanup.ExecuteAsync(stoppingToken).ConfigureAwait(false);
 
                 LogDeletedMessages(deletedCount, typeof(TEntity).Name);

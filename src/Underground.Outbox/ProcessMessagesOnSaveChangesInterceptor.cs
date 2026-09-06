@@ -10,13 +10,20 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox;
 
 /// <summary>
-/// Triggers push-based inbox/outbox processing after a successful save when new inbox or outbox messages were added.
+/// Triggers push-based inbox/outbox processing after a successful commit when new inbox or outbox messages were added.
 /// </summary>
+/// <remarks>
+/// What is pending belongs to the transaction that staged it, which is why the transaction is recorded
+/// alongside: a save under a different one discards what an abandoned predecessor left, so a transaction that
+/// never committed cannot make a later one notify. Plain fields suffice: the interceptor is scoped alongside
+/// its <see cref="DbContext"/>, which forbids concurrent use.
+/// </remarks>
 public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProvider serviceProvider, ILogger<ProcessMessagesOnSaveChangesInterceptor> logger) : DbTransactionInterceptor, ISaveChangesInterceptor
 {
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private bool _hasOutboxChanges;
     private bool _hasInboxChanges;
+    private Guid? _stagingTransactionId;
     private readonly ILogger<ProcessMessagesOnSaveChangesInterceptor> _logger = logger;
 
     public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData)
@@ -27,6 +34,17 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
     public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
     {
         TriggerProcessing();
+        return Task.CompletedTask;
+    }
+
+    public override void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
+    {
+        ClearPendingChanges();
+    }
+
+    public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+    {
+        ClearPendingChanges();
         return Task.CompletedTask;
     }
 
@@ -53,33 +71,43 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
             return;
         }
 
-        var processOutbox = context is IOutboxDbContext && context.ChangeTracker.Entries<OutboxMessage>().Any(entry => entry.State == EntityState.Added);
-        var processInbox = context is IInboxDbContext && context.ChangeTracker.Entries<InboxMessage>().Any(entry => entry.State == EntityState.Added);
-
-        if (!processOutbox && !processInbox)
+        var transactionId = context.Database.CurrentTransaction?.TransactionId;
+        if (transactionId != _stagingTransactionId)
         {
-            return;
+            ClearPendingChanges();
+            _stagingTransactionId = transactionId;
         }
 
-        Interlocked.Exchange(ref _hasOutboxChanges, processOutbox);
-        Interlocked.Exchange(ref _hasInboxChanges, processInbox);
+        // accumulate: a transaction stages over several saves, and a later one adding nothing says nothing
+        // about what an earlier one added
+        _hasOutboxChanges |= context is IOutboxDbContext && context.ChangeTracker.Entries<OutboxMessage>().Any(entry => entry.State == EntityState.Added);
+        _hasInboxChanges |= context is IInboxDbContext && context.ChangeTracker.Entries<InboxMessage>().Any(entry => entry.State == EntityState.Added);
     }
 
     private void TriggerProcessing()
     {
-        if (_hasOutboxChanges)
+        var processOutbox = _hasOutboxChanges;
+        var processInbox = _hasInboxChanges;
+        ClearPendingChanges();
+
+        if (processOutbox)
         {
             LogNewMessagesDetected("outbox");
             _serviceProvider.GetRequiredService<IOutbox>().ProcessMessages();
-            Interlocked.Exchange(ref _hasOutboxChanges, false);
         }
 
-        if (_hasInboxChanges)
+        if (processInbox)
         {
             LogNewMessagesDetected("inbox");
             _serviceProvider.GetRequiredService<IInbox>().ProcessMessages();
-            Interlocked.Exchange(ref _hasInboxChanges, false);
         }
+    }
+
+    private void ClearPendingChanges()
+    {
+        _hasOutboxChanges = false;
+        _hasInboxChanges = false;
+        _stagingTransactionId = null;
     }
 
     [LoggerMessage(

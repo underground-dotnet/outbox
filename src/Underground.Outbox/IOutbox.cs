@@ -9,29 +9,21 @@ public interface IOutbox
     /// <summary>
     /// Adds a message to the outbox.
     /// </summary>
-    /// <param name="context"></param>
-    /// <param name="message"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
     /// <exception cref="DbUpdateException">
     /// When a message with the same EventId already exists in the outbox.
     /// </exception>
     public Task AddMessageAsync(IOutboxDbContext context, OutboxMessage message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Adds a message to the outbox.
+    /// Adds several messages to the outbox.
     /// </summary>
-    /// <param name="context"></param>
-    /// <param name="messages"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
     /// <exception cref="DbUpdateException">
     /// When a message with the same EventId already exists in the outbox.
     /// </exception>
     public Task AddMessagesAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Trigger a processing run of the outbox messages. It will run asynchronously in the background.
+    /// Triggers a processing run in the background.
     /// </summary>
     public void ProcessMessages();
 }

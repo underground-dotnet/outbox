@@ -224,7 +224,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         if (handlers.Count != 0)
         {
-            sb.AppendLine("        var metadata = new MessageMetadata(message.EventId, message.PartitionKey, message.RetryCount);");
+            sb.AppendLine("        var metadata = new MessageMetadata(message.EventId, message.GroupKey, message.RetryCount);");
             sb.AppendLine("        var serviceProvider = scope.ServiceProvider;");
         }
         sb.AppendLine("        if (typeof(TMessage) == typeof(InboxMessage))");

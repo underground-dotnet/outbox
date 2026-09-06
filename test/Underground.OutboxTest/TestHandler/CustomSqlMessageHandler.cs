@@ -11,8 +11,10 @@ public class CustomSqlMessageHandler(TestDbContext dbContext) : IOutboxMessageHa
 {
     public async Task HandleAsync(CustomSqlMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
+        // the table and its columns are mapped in lower case, so the identifiers have to be too: quoted
+        // the other way round this statement fails on its own and the handler proves nothing
         await dbContext.Database.ExecuteSqlAsync(
-            $"""INSERT INTO "Users" ("Id", "Name") VALUES (100, 'CustomSqlUser')""",
+            $"""INSERT INTO "users" ("id", "name") VALUES (100, 'CustomSqlUser')""",
             cancellationToken
         );
         await dbContext.SaveChangesAsync(cancellationToken);
