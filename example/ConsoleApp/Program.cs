@@ -40,33 +40,37 @@ builder.Services.AddInboxServices<AppDbContext>(cfg =>
 
 IHost host = builder.Build();
 
-var outbox = host.Services.GetRequiredService<IOutbox>();
-var inbox = host.Services.GetRequiredService<IInbox>();
-var dbContext = host.Services.GetRequiredService<AppDbContext>();
-await dbContext.Database.EnsureCreatedAsync();
-
-await using (var transaction = await dbContext.Database.BeginTransactionAsync())
+// IOutbox, IInbox and the DbContext are scoped, so seeding needs its own scope rather than the root provider
+await using (var scope = host.Services.CreateAsyncScope())
 {
-    for (int i = 0; i < 10; i++)
-    {
-        var groupKey = (i % 3).ToString();
-        var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"group {groupKey}: {i}"), groupKey);
-        await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
+    var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+    var inbox = scope.ServiceProvider.GetRequiredService<IInbox>();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.EnsureCreatedAsync();
 
-        var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
-        await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
+    await using (var transaction = await dbContext.Database.BeginTransactionAsync())
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            var groupKey = (i % 3).ToString();
+            var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"group {groupKey}: {i}"), groupKey);
+            await outbox.AddMessageAsync(dbContext, message, CancellationToken.None);
+
+            var inboxMessage = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage($"inbox message: {i}"));
+            await inbox.AddMessageAsync(dbContext, inboxMessage, CancellationToken.None);
+        }
+
+        var secondMessage = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage("Test Message"));
+        await outbox.AddMessageAsync(dbContext, secondMessage, CancellationToken.None);
+
+        await transaction.CommitAsync();
     }
 
-    var secondMessage = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new SecondMessage("Test Message"));
-    await outbox.AddMessageAsync(dbContext, secondMessage, CancellationToken.None);
-
-    await transaction.CommitAsync();
+    // the table is named "outbox" and is not qualified here, so it is found through the connection's
+    // search_path - the same way the library's own statements find it
+    var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM outbox").SingleAsync();
+    Console.WriteLine($"Added {count} messages to outbox.");
 }
-
-// the table is named "outbox" and is not qualified here, so it is found through the connection's
-// search_path - the same way the library's own statements find it
-var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM outbox").SingleAsync();
-Console.WriteLine($"Added {count} messages to outbox.");
 
 await host.RunAsync();
 

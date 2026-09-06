@@ -72,7 +72,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         }
 
         // Assert
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(10));
+        SpinWait.SpinUntil(() => !ExampleMessageHandler.ObjectIds.IsEmpty, TimeSpan.FromSeconds(10));
         Assert.Single(ExampleMessageHandler.ObjectIds);
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }

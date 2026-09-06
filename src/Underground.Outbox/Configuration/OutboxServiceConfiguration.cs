@@ -12,8 +12,6 @@ public class OutboxServiceConfiguration : ServiceConfiguration<OutboxMessage>
 {
     public PolicyBuilder<OutboxMessage> AddHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TH, TM>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) where TH : class, IOutboxMessageHandler<TM>
     {
-        Console.WriteLine($"Added handler for {typeof(IOutboxMessageHandler<TM>)} with {typeof(TH)} ");
-
         var registration = new HandlerRegistration<OutboxMessage>(
             typeof(TH),
             typeof(TM),

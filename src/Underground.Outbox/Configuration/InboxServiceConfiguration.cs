@@ -12,8 +12,6 @@ public class InboxServiceConfiguration : ServiceConfiguration<InboxMessage>
 {
     public PolicyBuilder<InboxMessage> AddHandler<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TH, TM>(ServiceLifetime serviceLifetime = ServiceLifetime.Transient) where TH : class, IInboxMessageHandler<TM>
     {
-        Console.WriteLine($"Added handler for {typeof(IInboxMessageHandler<TM>)} with {typeof(TH)} ");
-
         var registration = new HandlerRegistration<InboxMessage>(
             typeof(TH),
             typeof(TM),

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
 using Underground.Outbox;
@@ -7,14 +8,16 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
-    public static IList<ExampleMessage> CalledWith { get; set; } = [];
+    // the processors handle messages on background threads while a test reads these, so both have to
+    // be concurrent collections - a plain List or HashSet lets the test see a half-written collection
+    public static ConcurrentQueue<ExampleMessage> CalledWith { get; } = new();
     // monitors different ids of the handler instances
-    public static ISet<string> ObjectIds { get; set; } = new HashSet<string>(StringComparer.Ordinal);
+    public static ConcurrentDictionary<string, byte> ObjectIds { get; } = new(StringComparer.Ordinal);
 
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        CalledWith.Add(message);
-        ObjectIds.Add($"{RuntimeHelpers.GetHashCode(this)}");
+        CalledWith.Enqueue(message);
+        ObjectIds.TryAdd($"{RuntimeHelpers.GetHashCode(this)}", 0);
         return Task.CompletedTask;
     }
 }

@@ -72,7 +72,7 @@ public class ProcessorTests : DatabaseTest
 
         // Assert
         // due to a race condition with starting the BackgroundService, we need to wait for the handler to be called
-        SpinWait.SpinUntil(() => ExampleMessageHandler.CalledWith.Count > 0, TimeSpan.FromSeconds(10));
+        SpinWait.SpinUntil(() => !ExampleMessageHandler.CalledWith.IsEmpty, TimeSpan.FromSeconds(10));
         Assert.Single(ExampleMessageHandler.CalledWith);
         await StopBackgroundServiceAsync(TestContext.Current.CancellationToken);
     }

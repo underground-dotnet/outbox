@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Underground.Outbox;
 using Underground.Outbox.Data;
 
@@ -5,18 +7,18 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class MultipleMessagesHandler : IOutboxMessageHandler<MultiMessageA>, IOutboxMessageHandler<MultiMessageB>
 {
-    public static IList<MultiMessageA> CalledWithA { get; set; } = [];
-    public static IList<MultiMessageB> CalledWithB { get; set; } = [];
+    public static ConcurrentQueue<MultiMessageA> CalledWithA { get; } = new();
+    public static ConcurrentQueue<MultiMessageB> CalledWithB { get; } = new();
 
     public Task HandleAsync(MultiMessageA message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        CalledWithA.Add(message);
+        CalledWithA.Enqueue(message);
         return Task.CompletedTask;
     }
 
     public Task HandleAsync(MultiMessageB message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        CalledWithB.Add(message);
+        CalledWithB.Enqueue(message);
         return Task.CompletedTask;
     }
 }
