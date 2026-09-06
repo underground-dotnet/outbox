@@ -1,3 +1,5 @@
+using System.Threading.Channels;
+
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -16,12 +18,45 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
     private readonly ServiceConfiguration<TEntity> _config = config;
 
-    private readonly WorkSignal _workSignal = new();
+    /// <summary>
+    /// The wake-up mechanism behind the worker pool: idle workers wait on it, and anything that knows work
+    /// may have appeared writes to it. It carries no information beyond "look again", and no guarantee that
+    /// looking will find anything.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two details of it are load-bearing rather than incidental, and both read as mistakes to someone who
+    /// does not know what they are for.
+    /// </para>
+    /// <para>
+    /// <b>A notification releases every waiter, not one.</b> <see cref="WaitForWorkAsync"/> awaits
+    /// <c>WaitToReadAsync</c>, which completes for all waiters, and only then drains the token. Whichever
+    /// worker wins that race is immaterial, because they have all been released by the time it is drained.
+    /// Releasing one instead would leave a commit that arrives at an idle pool served by a single worker
+    /// handling every Group serially until the next poll.
+    /// </para>
+    /// <para>
+    /// <b>The notification is buffered, so it cannot be lost.</b> A <see cref="NotifyWork"/> that lands
+    /// between a worker finding no work and that worker starting to wait leaves the token sitting in the
+    /// channel, and the wait returns immediately. A plain pulse would drop that notification and cost a full
+    /// poll delay. The channel is bounded at one with <see cref="BoundedChannelFullMode.DropWrite"/> because
+    /// the token carries no information: a second notification arriving before the first is consumed says
+    /// nothing the first did not. Dropping it loses nothing either, because a token is only pending while
+    /// some worker's next claim has yet to start, and that claim sees whatever the dropped notification was
+    /// reporting.
+    /// </para>
+    /// </remarks>
+    private readonly Channel<byte> _workSignal = Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
+    {
+        FullMode = BoundedChannelFullMode.DropWrite,
+        SingleReader = false,
+        SingleWriter = false
+    });
 
     /// <summary>
     /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until the token is
     /// cancelled. Each worker serves itself: it repeats <see cref="ProcessNextAsync"/> for as long as that
-    /// keeps finding work, and waits on the <see cref="WorkSignal"/> once it does not.
+    /// keeps finding work, and waits on the work signal once it does not.
     /// </summary>
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -33,8 +68,9 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Reports that work may have appeared, so that idle workers stop waiting and look. Notifying while a
-    /// notification is already pending is free and does nothing.
+    /// Reports that work may have appeared, releasing every worker currently waiting. It never blocks and
+    /// never fails: a notification that arrives while one is already pending is dropped, because the two say
+    /// the same thing.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -51,7 +87,28 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     /// </remarks>
     internal void NotifyWork()
     {
-        _workSignal.Notify();
+        _workSignal.Writer.TryWrite(0);
+    }
+
+    /// <summary>
+    /// Waits until <see cref="NotifyWork"/> is called. Returns rather than throwing when
+    /// <paramref name="cancellationToken"/> is cancelled; the worker loop decides what a cancellation means.
+    /// Nothing here gives up on its own - a wait ends because somebody notified, or because the application
+    /// is shutting down.
+    /// </summary>
+    internal async Task WaitForWorkAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _workSignal.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
+
+            // take the token so that the next wait blocks again
+            _workSignal.Reader.TryRead(out _);
+        }
+        catch (OperationCanceledException)
+        {
+            // the application is shutting down, which the worker loop sees on its own token
+        }
     }
 
     /// <summary>
@@ -94,7 +151,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
             // serving itself across a failure rather than dying and leaving the pool one short
             if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadClaimed)
             {
-                await _workSignal.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
             }
         }
     }
