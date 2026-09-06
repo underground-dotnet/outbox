@@ -3,13 +3,12 @@ using Underground.Outbox.Domain;
 namespace Underground.OutboxTest.Domain;
 
 /// <summary>
-/// The wake-up mechanism on its own, without a database. Every wait here is given a timeout far longer
-/// than the assertion that surrounds it, so that a signal which fails to release its waiters fails the
-/// test rather than passing slowly on the poll delay.
+/// The wake-up mechanism on its own, without a database. Nothing here ends a wait but a notification or a
+/// cancellation, so a signal that fails to release its waiters fails the test rather than passing slowly
+/// on a timeout.
 /// </summary>
 public class WorkSignalTests
 {
-    private static readonly TimeSpan NeverInThisTest = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LongEnoughToBeConclusive = TimeSpan.FromSeconds(5);
 
     /// <summary>
@@ -32,7 +31,7 @@ public class WorkSignalTests
         // started waiting, so nothing is parked to receive it
         signal.Notify();
 
-        var wait = signal.WaitAsync(NeverInThisTest, TestContext.Current.CancellationToken);
+        var wait = signal.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.True(
             await WasReleasedAsync(wait, TestContext.Current.CancellationToken),
@@ -45,7 +44,7 @@ public class WorkSignalTests
         var signal = new WorkSignal();
 
         var waits = Enumerable.Range(0, 4)
-            .Select(_ => signal.WaitAsync(NeverInThisTest, TestContext.Current.CancellationToken))
+            .Select(_ => signal.WaitAsync(TestContext.Current.CancellationToken))
             .ToList();
 
         // there is no way to observe that a waiter has parked, and a notification that arrives before
@@ -60,24 +59,12 @@ public class WorkSignalTests
     }
 
     [Fact]
-    public async Task WaitingGivesUpAfterTheTimeoutWithoutAnyNotification()
-    {
-        var signal = new WorkSignal();
-
-        var wait = signal.WaitAsync(TimeSpan.FromMilliseconds(50), TestContext.Current.CancellationToken);
-
-        Assert.True(
-            await WasReleasedAsync(wait, TestContext.Current.CancellationToken),
-            "polling is what guarantees delivery, so a wait nobody notified must still end");
-    }
-
-    [Fact]
     public async Task CancellingAWaitReturnsRatherThanThrowing()
     {
         var signal = new WorkSignal();
         using var shutdown = new CancellationTokenSource();
 
-        var wait = signal.WaitAsync(NeverInThisTest, shutdown.Token);
+        var wait = signal.WaitAsync(shutdown.Token);
         await shutdown.CancelAsync();
 
         Assert.True(await WasReleasedAsync(wait, TestContext.Current.CancellationToken), "the wait ignored the cancellation");

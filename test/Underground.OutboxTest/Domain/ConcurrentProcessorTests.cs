@@ -228,6 +228,49 @@ public class ConcurrentProcessorTests : DatabaseTest
         Assert.Equal(fast, BlockingMessageHandler.CalledWith.Where(id => id != slow));
     }
 
+    /// <summary>
+    /// Nothing notifies the pool here: the DbContext this test writes through has no interceptor attached,
+    /// so the message can only be found by the poll. That is the delivery guarantee itself - a notification
+    /// is allowed to go missing, a poll is not - and it is the one thing a notified pool never proves.
+    /// </summary>
+    [Fact]
+    public async Task WorkNobodyNotifiedAboutIsStillHandled()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var serviceProvider = BuildServiceProvider(cfg =>
+        {
+            cfg.MaxConcurrentGroups = 1;
+            // short enough that the test does not wait on the production cadence
+            cfg.ProcessingDelayMilliseconds = 500;
+            cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
+        });
+        var context = CreateDbContext();
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+
+        // Act: start against an empty table, so the worker's first claim comes back empty and it parks
+        await RunBackgroundServiceAsync(serviceProvider, cancellationToken);
+
+        // there is no way to observe that the worker has parked, and a message inserted before it does
+        // would be found by its opening claim rather than by the poll, which is what this test is about
+        await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+
+        await using (var transaction = await context.Database.BeginTransactionAsync(cancellationToken))
+        {
+            var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new GroupedMessage(0)) { GroupKey = "A" };
+            await outbox.AddMessageAsync(context, message, cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        var handled = await WaitUntilAsync(() => GroupedMessageHandler.TotalCount == 1, cancellationToken);
+
+        await StopBackgroundServiceAsync(serviceProvider, cancellationToken);
+
+        // Assert
+        Assert.True(handled, "nothing woke the pool, so only the poll could have found the message - and nothing did");
+    }
+
     private static OutboxMessage MessageFor(int id, string groupKey) =>
         new(Guid.NewGuid(), DateTime.UtcNow, new BlockingMessage(id), groupKey: groupKey);
 }

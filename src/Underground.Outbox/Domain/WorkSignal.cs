@@ -4,14 +4,13 @@ namespace Underground.Outbox.Domain;
 
 /// <summary>
 /// The wake-up mechanism behind the worker pool: idle workers wait on it, and anything that knows work
-/// may have appeared notifies it. Polling is what actually guarantees delivery - a wait gives up after
-/// the poll delay whether or not anyone notified - so this exists only to cut the latency between a
-/// commit and the handling that follows it.
+/// may have appeared notifies it. It carries no information beyond "look again", and no guarantee that
+/// looking will find anything.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Three details of the implementation are load-bearing rather than incidental, and all three read as
-/// mistakes to someone who does not know what they are for.
+/// Two details of the implementation are load-bearing rather than incidental, and both read as mistakes
+/// to someone who does not know what they are for.
 /// </para>
 /// <para>
 /// <b>A notification releases every waiter, not one.</b> <see cref="WaitAsync"/> awaits
@@ -26,21 +25,9 @@ namespace Underground.Outbox.Domain;
 /// and the wait returns immediately. A plain pulse would drop that notification and cost a full poll
 /// delay. The channel is bounded at one with <see cref="BoundedChannelFullMode.DropWrite"/> because the
 /// token carries no information: a second notification arriving before the first is consumed says
-/// nothing the first did not.
-/// </para>
-/// <para>
-/// <b>The timeout is a linked <see cref="CancellationTokenSource"/> rather than a raced
-/// <see cref="Task.Delay(TimeSpan, CancellationToken)"/>.</b> Racing the two with
-/// <see cref="Task.WhenAny(Task, Task)"/> would abandon the losing task on every wait, and an abandoned
-/// <c>WaitToReadAsync</c> keeps its registration on the channel forever. Cancelling the wait is what
-/// tears it down.
-/// </para>
-/// <para>
-/// Notifying is in-process only: a commit on one application instance does not wake the workers of
-/// another, which pick the work up on their next poll instead. Closing that gap means a
-/// <c>LISTEN</c>/<c>pg_notify</c> subscription per instance, which would be a third caller of
-/// <see cref="Notify"/> alongside the commit interceptor and the poll delay rather than a replacement
-/// for either.
+/// nothing the first did not. Dropping it loses nothing either, because a token is only pending while
+/// some worker's next claim has yet to start, and that claim sees whatever the dropped notification was
+/// reporting.
 /// </para>
 /// </remarks>
 internal sealed class WorkSignal
@@ -63,27 +50,23 @@ internal sealed class WorkSignal
     }
 
     /// <summary>
-    /// Waits until <see cref="Notify"/> is called, giving up after <paramref name="timeout"/> so that
-    /// work nobody notified us about is still picked up. Returns rather than throwing when
+    /// Waits until <see cref="Notify"/> is called. Returns rather than throwing when
     /// <paramref name="cancellationToken"/> is cancelled; the caller's loop decides what a cancellation
-    /// means.
+    /// means. Nothing here gives up on its own - a wait ends because somebody notified, or because the
+    /// application is shutting down.
     /// </summary>
-    internal async Task WaitAsync(TimeSpan timeout, CancellationToken cancellationToken)
+    internal async Task WaitAsync(CancellationToken cancellationToken)
     {
-        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        wait.CancelAfter(timeout);
-
         try
         {
-            await _channel.Reader.WaitToReadAsync(wait.Token).ConfigureAwait(false);
+            await _channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false);
 
             // take the token so that the next wait blocks again
             _channel.Reader.TryRead(out _);
         }
         catch (OperationCanceledException)
         {
-            // either the poll delay elapsed, which is itself a reason to look for work, or the
-            // application is shutting down, which the caller sees on its own token
+            // the application is shutting down, which the caller sees on its own token
         }
     }
 }

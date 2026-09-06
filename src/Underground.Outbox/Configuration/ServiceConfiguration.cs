@@ -16,11 +16,13 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public int MaxConcurrentGroups { get; set; } = 4;
 
     /// <summary>
-    /// How long an idle worker waits before looking for work again, in milliseconds. It applies only when
-    /// a claim came back empty: a worker that keeps finding Heads keeps claiming them and never waits at
-    /// all. A commit in this process wakes idle workers immediately, so this bounds the latency of work
-    /// nothing told us about - a message written by another application instance, or one that became
-    /// Settled only once some other transaction ended.
+    /// How often the pool is woken to look for work, in milliseconds. It is a cadence rather than a
+    /// per-worker idle timer: every worker still waiting when it elapses is released at once, and workers
+    /// that keep finding Heads keep claiming them and never wait at all. A commit in this process wakes
+    /// idle workers immediately, so this bounds the latency of work nothing told us about - a message
+    /// written by another application instance, or one that became Settled only once some other
+    /// transaction ended - and it is what makes delivery guaranteed rather than dependent on a
+    /// notification arriving.
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
@@ -100,9 +102,9 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException($"MaxConcurrentGroups ({MaxConcurrentGroups}) must be greater than 0.");
         }
 
-        if (ProcessingDelayMilliseconds < 0)
+        if (ProcessingDelayMilliseconds <= 0)
         {
-            throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) cannot be negative.");
+            throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) must be greater than 0.");
         }
 
         if (HandlerTimeout <= TimeSpan.Zero)

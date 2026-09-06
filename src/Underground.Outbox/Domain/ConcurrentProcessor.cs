@@ -19,14 +19,15 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     private readonly WorkSignal _workSignal = new();
 
     /// <summary>
-    /// Runs one worker per configured concurrent Group until the token is cancelled. Each worker serves
-    /// itself: it repeats <see cref="ProcessNextAsync"/> for as long as that keeps finding work, and waits
-    /// on the <see cref="WorkSignal"/> or the poll delay once it does not.
+    /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until the token is
+    /// cancelled. Each worker serves itself: it repeats <see cref="ProcessNextAsync"/> for as long as that
+    /// keeps finding work, and waits on the <see cref="WorkSignal"/> once it does not.
     /// </summary>
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
         var workers = Enumerable.Range(0, _config.MaxConcurrentGroups)
-            .Select(_ => RunWorkerAsync(cancellationToken));
+            .Select(_ => RunWorkerAsync(cancellationToken))
+            .Append(RunPollAsync(cancellationToken));
 
         await Task.WhenAll(workers).ConfigureAwait(false);
     }
@@ -35,6 +36,19 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     /// Reports that work may have appeared, so that idle workers stop waiting and look. Notifying while a
     /// notification is already pending is free and does nothing.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is one of three peers, none of them privileged. The commit interceptor calls it when this
+    /// process writes a message; <see cref="RunPollAsync"/> calls it on a timer; a
+    /// <c>LISTEN</c>/<c>pg_notify</c> subscription would be the third, since notifying is in-process only
+    /// and a commit on one application instance does not wake the workers of another.
+    /// </para>
+    /// <para>
+    /// Polling is what actually guarantees delivery. Every other caller is a latency optimisation and is
+    /// allowed to lose a notification: work nobody told the pool about is still picked up on the next
+    /// poll, which is what makes a lost notification cost time rather than correctness.
+    /// </para>
+    /// </remarks>
     internal void NotifyWork()
     {
         _workSignal.Notify();
@@ -80,10 +94,37 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
             // serving itself across a failure rather than dying and leaving the pool one short
             if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadClaimed)
             {
-                await _workSignal
-                    .WaitAsync(TimeSpan.FromMilliseconds(_config.ProcessingDelayMilliseconds), cancellationToken)
-                    .ConfigureAwait(false);
+                await _workSignal.WaitAsync(cancellationToken).ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Notifies on a fixed cadence for as long as the pool runs, so that a wait ends even when nothing
+    /// notified it. It ticks whether or not anyone is idle: a tick that nobody is waiting for leaves a
+    /// token in the signal and costs the next worker to go idle one empty claim, which is cheaper than the
+    /// shared idle count it would take to suppress.
+    /// </summary>
+    private async Task RunPollAsync(CancellationToken cancellationToken)
+    {
+        var delay = TimeSpan.FromMilliseconds(_config.ProcessingDelayMilliseconds);
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // delay before the first notification: a worker claims once before it ever waits, so a
+                // notification at startup would release nobody
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // shutting down, which the loop condition sees on its own; ending the same way a worker
+                // does keeps RunAsync completing successfully rather than faulting on every stop
+                return;
+            }
+
+            NotifyWork();
         }
     }
 
