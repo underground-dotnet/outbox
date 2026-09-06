@@ -13,3 +13,10 @@ Outbox delivery is **at-least-once** and outbox handlers must be idempotent: a w
 after the external effect but before completion will have the message redelivered when its lease
 expires. Inbox delivery remains exactly-once. This asymmetry is deliberate and is the reason the
 two sides cannot share a single processing loop.
+
+The inbox transaction is a *write* transaction for its whole length, so it holds
+`pg_snapshot_xmin` back and stalls head discovery for both sides while the handler runs — the
+price of exactly-once, and the reason inbox handlers must stay short. See ADR 0002.
+
+The outbox pays the opposite price and avoids that stall: its claim transaction commits in
+milliseconds, so it barely moves the watermark.
