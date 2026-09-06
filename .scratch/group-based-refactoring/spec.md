@@ -1,5 +1,10 @@
 # Group-based processing with visibility timestamps
 
+> **Vocabulary superseded.** This effort and its issues are kept as written, in the language of the
+> time. Since then: Settled → Stable, Head → Head Message, Stage → Middleware, Chain → Middleware
+> Pipeline, Attempt → Processing Attempt, handled/processed (of a message) → Completed, and the
+> `processed_at` column → `completed_at`. See `CONTEXT.md` for the current language.
+
 Status: ready-for-agent
 
 ## Problem Statement

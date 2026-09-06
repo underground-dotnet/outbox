@@ -1,6 +1,6 @@
 # Messages are handled one at a time, not in batches
 
-A worker claims a single message — the head of one group — handles it, and completes it. There is
+A worker claims a single message — the head message of one group — handles it, and completes it. There is
 no batch size and no multi-message fetch on either the inbox or the outbox.
 
 Batching was removed rather than kept because it buys little and costs a lot here. On the outbox

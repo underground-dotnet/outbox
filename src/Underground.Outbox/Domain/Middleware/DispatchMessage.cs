@@ -3,10 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.Dispatchers;
 
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// The end of the chain: hands the message to its Handler and persists whatever the Handler wrote.
+/// The end of the pipeline: hands the message to its Handler and persists whatever the Handler wrote.
 /// </summary>
 internal sealed class DispatchMessage<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
@@ -14,7 +14,7 @@ internal sealed class DispatchMessage<TEntity>(
 ) where TEntity : class, IMessage
 {
     /// <summary>
-    /// Invokes the Handler for this message. It returns only if the Handler did; the stages wrapped around
+    /// Invokes the Handler for this message. It returns only if the Handler did; the middleware wrapped around
     /// this call decide what a throw means. The save runs in the inbox's transaction, or - on the outbox,
     /// which holds none - in one of EF Core's own.
     /// </summary>

@@ -17,9 +17,9 @@ plainly that it was fighting the language.
 What it bought was uneven. Remapping a *table* answers a real operational need — an existing table
 of that name, two applications sharing a schema, a house convention for infrastructure tables.
 Remapping a *column* answers nothing but taste. And the flexibility had a sharp edge of its own: the
-partial index that serves Head lookup is declared with a raw SQL filter, which an
+partial index that serves Head Message lookup is declared with a raw SQL filter, which an
 `IEntityTypeConfiguration` cannot read the mapped name back out of, so a consumer who remapped
-`ProcessedAt` silently got an index that no longer matched their column. Fixing the names removes
+`CompletedAt` silently got an index that no longer matched their column. Fixing the names removes
 that failure mode entirely.
 
 The operational need survives without remapping. A consumer who must not collide puts their
@@ -28,6 +28,11 @@ That is why the raw SQL names the tables unqualified rather than hardcoding `pub
 the deployment's to choose, and `search_path` is how it says so.
 
 ## Consequences
+
+Fixing the names makes each one a contract with deployments rather than an internal detail, so
+renaming one is a breaking change. `processed_at` became `completed_at` when Completed replaced
+"processed" in the language: consumers pick the rename up as an EF migration, and a deployment that
+skips it fails at its first Claim with `42703 column … does not exist`.
 
 Statements are literals. Only the guard shared by every write is a `const string`; the rest name their
 table through `IMessage.TableName`, which is a `static abstract` property and so cannot appear in a
@@ -62,7 +67,7 @@ in C#, and the claim statements now have to return every mapped column. `AsNoTra
 load-bearing: a tracked claim would let an application's `SaveChanges` inside a handler write the
 message behind a `GuardedWrite`'s guard.
 
-`ClaimHead` lost its `ILogger` and the debug log that recorded the statement it was about to run. The
+`ClaimHeadMessage` lost its `ILogger` and the debug log that recorded the statement it was about to run. The
 statement is now a fixed literal per class rather than something assembled from a model, so logging it
 told an operator nothing that reading the source does not.
 

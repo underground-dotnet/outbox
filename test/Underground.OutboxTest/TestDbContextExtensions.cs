@@ -54,14 +54,14 @@ public static class TestDbContextExtensions
         }
 
         /// <summary>
-        /// Brings every unhandled message's visibility instant forward to now. All timing is decided by the
+        /// Brings every message not yet completed's visibility instant forward to now. All timing is decided by the
         /// database, so this is indistinguishable from having waited for that instant to arrive - whether it
         /// was a retry backoff, a scheduled delivery or an outbox Lease that put it into the future.
         /// </summary>
-        internal async Task MakeUnhandledMessagesVisibleAsync(CancellationToken cancellationToken)
+        internal async Task MakeIncompleteMessagesVisibleAsync(CancellationToken cancellationToken)
         {
             await context.Database.ExecuteSqlAsync(
-                $"UPDATE public.outbox SET visible_at = clock_timestamp() WHERE processed_at IS NULL",
+                $"UPDATE public.outbox SET visible_at = clock_timestamp() WHERE completed_at IS NULL",
                 cancellationToken);
         }
     }

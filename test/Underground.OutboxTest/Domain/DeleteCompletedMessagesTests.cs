@@ -8,10 +8,10 @@ using Underground.OutboxTest.TestHandler;
 namespace Underground.OutboxTest.Domain;
 
 [Collection("ExampleMessageHandler Collection")]
-public class DeleteProcessedMessagesTests(ITestOutputHelper testOutputHelper) : DatabaseTest(testOutputHelper)
+public class DeleteCompletedMessagesTests(ITestOutputHelper testOutputHelper) : DatabaseTest(testOutputHelper)
 {
     [Fact]
-    public async Task ExecuteAsync_DeletesProcessedRowsJustOutsideRetentionWindow_AndKeepsRowsInsideIt()
+    public async Task ExecuteAsync_DeletesCompletedRowsJustOutsideRetentionWindow_AndKeepsRowsInsideIt()
     {
         // Arrange
         var context = CreateDbContext();
@@ -24,11 +24,11 @@ public class DeleteProcessedMessagesTests(ITestOutputHelper testOutputHelper) : 
         context.OutboxMessages.AddRange(
             new OutboxMessage(outsideRetentionId, referenceTime.AddMinutes(-1), new ExampleMessage(1))
             {
-                ProcessedAt = referenceTime - retention - TimeSpan.FromSeconds(5)
+                CompletedAt = referenceTime - retention - TimeSpan.FromSeconds(5)
             },
             new OutboxMessage(insideRetentionId, referenceTime.AddMinutes(-1), new ExampleMessage(2))
             {
-                ProcessedAt = referenceTime - retention + TimeSpan.FromSeconds(5)
+                CompletedAt = referenceTime - retention + TimeSpan.FromSeconds(5)
             },
             new OutboxMessage(unprocessedId, referenceTime.AddMinutes(-1), new ExampleMessage(3))
         );
@@ -37,9 +37,9 @@ public class DeleteProcessedMessagesTests(ITestOutputHelper testOutputHelper) : 
         // Act
         var configuration = new OutboxServiceConfiguration
         {
-            ProcessedMessageRetention = retention
+            CompletedMessageRetention = retention
         };
-        var useCase = new DeleteProcessedMessages<OutboxMessage>(context, configuration);
+        var useCase = new DeleteCompletedMessages<OutboxMessage>(context, configuration);
         var deletedCount = await useCase.ExecuteAsync(TestContext.Current.CancellationToken);
 
         // Assert
@@ -51,7 +51,7 @@ public class DeleteProcessedMessagesTests(ITestOutputHelper testOutputHelper) : 
         Assert.Equal(1, deletedCount);
         Assert.Equal(2, remainingMessages.Count);
         Assert.DoesNotContain(remainingMessages, message => message.EventId == outsideRetentionId);
-        Assert.Contains(remainingMessages, message => message.EventId == insideRetentionId && message.ProcessedAt != null);
-        Assert.Contains(remainingMessages, message => message.EventId == unprocessedId && message.ProcessedAt == null);
+        Assert.Contains(remainingMessages, message => message.EventId == insideRetentionId && message.CompletedAt != null);
+        Assert.Contains(remainingMessages, message => message.EventId == unprocessedId && message.CompletedAt == null);
     }
 }

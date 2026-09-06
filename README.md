@@ -6,9 +6,9 @@ It stores messages in the same database transaction as your business changes, th
 
 ## How it works
 
-Every message belongs to a **group**, identified by its `GroupKey`. A group offers only its **head** — its oldest **settled** message that has not yet been handled, where settled means no still-running transaction could yet insert an earlier one into that group (see [Ordering](#ordering)). A group whose head is not yet visible — because it is scheduled for later, because it is backing off after a failure, or because another worker currently holds it — offers nothing at all, rather than offering the message behind it.
+Every message belongs to a **group**, identified by its `GroupKey`. A group offers only its **head message** — its oldest **stable** message that has not yet been completed, where stable means no still-running transaction could yet insert an earlier one into that group (see [Ordering](#ordering)). A group whose head message is not yet visible — because it is scheduled for later, because it is backing off after a failure, or because another worker currently holds it — offers nothing at all, rather than offering the message behind it.
 
-Each worker runs one query that considers every group's head at once and claims the oldest of them it can lock with `FOR UPDATE ... SKIP LOCKED`. A head another worker already holds is skipped rather than waited for, so the claim falls through to the next group's head. The worker then handles that one message and claims again.
+Each worker runs one query that considers every group's head message at once and claims the oldest of them it can lock with `FOR UPDATE ... SKIP LOCKED`. A head message another worker already holds is skipped rather than waited for, so the claim falls through to the next group's head message. The worker then handles that one message and claims again.
 
 Nothing hands groups out to workers; the database distributes them. Messages of one group are therefore handled one at a time, in order, and different groups proceed concurrently.
 
@@ -33,11 +33,11 @@ A lease is time-bounded, which is what stops an instance that dies mid-delivery 
 
 Messages within a group are handled strictly in order — but that order is **the order in which the writing transactions started**, not the order in which the rows were appended.
 
-An identity value is assigned when a row is inserted, not when its transaction commits, so ordering by `id` alone lets a transaction that started later but committed first have its message handled first. Every message therefore carries a `TransactionId`, messages are ordered by `(TransactionId, Id)`, and a message is offered only once it is **settled** — once no still-running transaction could yet insert an earlier message into its group. See [ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md).
+An identity value is assigned when a row is inserted, not when its transaction commits, so ordering by `id` alone lets a transaction that started later but committed first have its message handled first. Every message therefore carries a `TransactionId`, messages are ordered by `(TransactionId, Id)`, and a message is offered only once it is **stable** — once no still-running transaction could yet insert an earlier message into its group. See [ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md).
 
 Two consequences are worth knowing before you rely on this:
 
-- **A long-running write transaction anywhere in the database delays delivery.** The settled test is against the snapshot minimum, which an open write transaction holds back, so a long writer stalls *all* message delivery until it commits — not just delivery of its own group. Read-only transactions are unaffected, as they are assigned no transaction id. This is the same coupling logical replication and CDC have, and it needs monitoring.
+- **A long-running write transaction anywhere in the database delays delivery.** The stability test is against the snapshot minimum, which an open write transaction holds back, so a long writer stalls *all* message delivery until it commits — not just delivery of its own group. Read-only transactions are unaffected, as they are assigned no transaction id. This is the same coupling logical replication and CDC have, and it needs monitoring.
 - Messages appended within one transaction keep their relative order.
 
 ## Two behaviours that look like defects
@@ -46,7 +46,7 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 
 **A permanently failing message stalls its own group, forever.** It is retried with an exponential backoff up to a ten-minute ceiling and never given up on, and every message behind it in that group waits. Other groups are unaffected. Under strict per-group ordering the alternative — skipping past it — silently drops a message out of an ordered stream, which is worse for a consumer that depends on the order. Detection is external: a group that stops draining shows up as unbounded growth in unhandled messages. See [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md). Until a dead-letter mechanism exists, `Discard()` exception policies are the way to drop a known-bad message.
 
-**A scheduled or backing-off message holds back everything behind it in its group.** A group offers only its head, so nothing written after a message scheduled for tomorrow is handled until that message has been. Give a message its own group key if the delay is meant to apply to it alone.
+**A scheduled or backing-off message holds back everything behind it in its group.** A group offers only its head message, so nothing written after a message scheduled for tomorrow is handled until that message has been. Give a message its own group key if the delay is meant to apply to it alone.
 
 ## Features
 
@@ -60,7 +60,7 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 - **Scheduled delivery**: a message can be given the instant from which it may be handled.
 - **Retry backoff**: failed messages are retried with an exponential, jittered delay computed by the database.
 - **Bounded handler runtime**: every handler is cancelled once `HandlerTimeout` elapses, so a hung external call cannot occupy a worker for good.
-- **Retention cleanup**: processed messages are deleted automatically after a configurable retention period.
+- **Retention cleanup**: completed messages are deleted automatically after a configurable retention period.
 - **Source generation**: avoids runtime reflection for handler dispatch and DI wiring.
 
 ## Requirements
@@ -167,7 +167,7 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `Data` | Serialized message payload. |
 | `RetryCount` | Number of failed processing attempts. |
 | `VisibleAt` | The instant from which the message may be handled. Defaulted by the database to the present, pushed into the future by the retry backoff, and — on the outbox — set to the lease expiry while a worker holds the message. |
-| `ProcessedAt` | Null until the message is completed successfully. |
+| `CompletedAt` | Null until the message is completed successfully. |
 
 Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
 
@@ -225,7 +225,7 @@ The default group key is `"default"`. Leaving it there puts every message in one
 
 The library can run on multiple servers against the same database, with no global distributed lock and no coordination between instances.
 
-The claim query is what keeps two workers apart: one worker locks the head it claims, another worker or server running the same query finds that row locked and skips it rather than waiting, and so ends up on a different group.
+The claim query is what keeps two workers apart: one worker locks the head message it claims, another worker or server running the same query finds that row locked and skips it rather than waiting, and so ends up on a different group.
 
 How long that separation lasts differs by side:
 
@@ -266,16 +266,16 @@ If no matching exception policy exists, the failed message stays in the table wi
 
 ## Cleanup and retention
 
-Processed inbox and outbox messages are not kept forever.
+Completed inbox and outbox messages are not kept forever.
 
-- `ProcessedMessageRetention` controls how long successfully processed messages are retained.
+- `CompletedMessageRetention` controls how long completed messages are retained.
 - `CleanupDelaySeconds` controls how often the cleanup hosted service runs.
 
-Cleanup deletes rows where `ProcessedAt` is older than the configured retention cutoff.
+Cleanup deletes rows where `CompletedAt` is older than the configured retention cutoff.
 
-**On the inbox, `ProcessedMessageRetention` is your duplicate-suppression window.** A redelivered event is rejected because its `EventId` already exists in the inbox table — and that only works while the row is still there. Once cleanup has deleted it, the same event is accepted again and handled a second time. Set the retention to at least the longest window over which the systems that send you events might redeliver one; shortening it does not fail loudly, it silently starts accepting duplicates.
+**On the inbox, `CompletedMessageRetention` is your duplicate-suppression window.** A redelivered event is rejected because its `EventId` already exists in the inbox table — and that only works while the row is still there. Once cleanup has deleted it, the same event is accepted again and handled a second time. Set the retention to at least the longest window over which the systems that send you events might redeliver one; shortening it does not fail loudly, it silently starts accepting duplicates.
 
-The same setting on the outbox is only about table size: nothing else reads a processed outbox row.
+The same setting on the outbox is only about table size: nothing else reads a completed outbox row.
 
 ## Configuration reference
 
@@ -287,7 +287,7 @@ The same setting on the outbox is only about table size: nothing else reads a pr
 | `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. Jitter is applied afterwards, so an actual delay may exceed this by the jitter proportion. |
 | `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |
 | `ProcessingDelayMilliseconds` | `4000` | Delay between scheduled processing cycles. |
-| `ProcessedMessageRetention` | `7 days` | How long processed rows are kept before cleanup. On the inbox this is also the duplicate-suppression window. |
+| `CompletedMessageRetention` | `7 days` | How long completed rows are kept before cleanup. On the inbox this is also the duplicate-suppression window. |
 | `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
 
 ## Example

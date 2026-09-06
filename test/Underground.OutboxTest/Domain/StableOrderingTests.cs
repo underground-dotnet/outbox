@@ -16,11 +16,11 @@ namespace Underground.OutboxTest.Domain;
 /// order to disagree - which is the only arrangement that can tell the two sort keys apart.
 /// </summary>
 [Collection("ExampleMessageHandler Collection")]
-public class SettledOrderingTests : DatabaseTest
+public class StableOrderingTests : DatabaseTest
 {
     private readonly IServiceProvider _serviceProvider;
 
-    public SettledOrderingTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
+    public StableOrderingTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
         // clear the static lists to avoid interference between tests
         ExampleMessageHandler.CalledWith.Clear();

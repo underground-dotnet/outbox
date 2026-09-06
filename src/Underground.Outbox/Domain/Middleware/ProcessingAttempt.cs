@@ -1,16 +1,16 @@
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// What became of one run of the Chain against one Head, passed back out through the Stages. A summary of
+/// What became of one run of the MiddlewarePipeline against one HeadMessage, passed back out through the middleware. A summary of
 /// what has already been recorded, not the means of recording it.
 /// </summary>
 /// <remarks>
 /// The constructor is private because two of the four field combinations are nonsense; the factories
 /// below are the only shapes that exist.
 /// </remarks>
-internal sealed record Attempt
+internal sealed record ProcessingAttempt
 {
-    private Attempt(AttemptStatus status, Exception? failure)
+    private ProcessingAttempt(ProcessingStatus status, Exception? failure)
     {
         Status = status;
         Failure = failure;
@@ -19,23 +19,23 @@ internal sealed record Attempt
     /// <summary>
     /// What became of the message.
     /// </summary>
-    public AttemptStatus Status { get; }
+    public ProcessingStatus Status { get; }
 
     /// <summary>
-    /// What the Handler threw, if it threw. Null on <see cref="AttemptStatus.Handled"/>, and on a
-    /// <see cref="AttemptStatus.LeaseLost"/> that happened at completion rather than after a failure.
+    /// What the Handler threw, if it threw. Null on <see cref="ProcessingStatus.Succeeded"/>, and on a
+    /// <see cref="ProcessingStatus.LeaseLost"/> that happened at completion rather than after a failure.
     /// </summary>
     public Exception? Failure { get; }
 
     /// <summary>
-    /// The Handler returned and the message was marked handled.
+    /// The Handler returned and the message was marked completed.
     /// </summary>
-    public static Attempt Handled { get; } = new(AttemptStatus.Handled, failure: null);
+    public static ProcessingAttempt Succeeded { get; } = new(ProcessingStatus.Succeeded, failure: null);
 
     /// <summary>
     /// The Handler threw and the attempt was recorded against the message.
     /// </summary>
-    public static Attempt Failed(Exception failure) => new(AttemptStatus.FailureRecorded, failure);
+    public static ProcessingAttempt Failed(Exception failure) => new(ProcessingStatus.FailureRecorded, failure);
 
     /// <summary>
     /// This worker no longer holds the message, so nothing it did was recorded.
@@ -44,5 +44,5 @@ internal sealed record Attempt
     /// What the Handler threw, if it threw. No failure means the Handler succeeded and the completion write
     /// came too late, so the effect has been carried out twice.
     /// </param>
-    public static Attempt LeaseLost(Exception? failure) => new(AttemptStatus.LeaseLost, failure);
+    public static ProcessingAttempt LeaseLost(Exception? failure) => new(ProcessingStatus.LeaseLost, failure);
 }

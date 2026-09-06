@@ -31,7 +31,7 @@ public class OutboxLeaseTests : DatabaseTest
 
     /// <summary>
     /// A worker that claimed a message and then died leaves nothing behind but the Lease. Until it
-    /// expires the Group offers nothing - the message is its Head and the Head is out of sight - and once
+    /// expires the Group offers nothing - the message is its HeadMessage and the HeadMessage is out of sight - and once
     /// it does, the message is handled by whoever asks next.
     /// </summary>
     [Fact]
@@ -55,12 +55,12 @@ public class OutboxLeaseTests : DatabaseTest
         Assert.Empty(BlockingMessageHandler.CalledWith);
 
         // the Lease expiring is the only thing that changes, and it is enough
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         Assert.Equal([1], BlockingMessageHandler.CalledWith);
         var message = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
-        Assert.NotNull(message.ProcessedAt);
+        Assert.NotNull(message.CompletedAt);
     }
 
     /// <summary>
@@ -70,7 +70,7 @@ public class OutboxLeaseTests : DatabaseTest
     /// the message out to a third worker.
     /// </summary>
     [Fact]
-    public async Task WorkerThatLostItsLeaseNeitherOverwritesTheNewClaimNorMarksTheMessageHandled()
+    public async Task WorkerThatLostItsLeaseNeitherOverwritesTheNewClaimNorMarksTheMessageCompleted()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -95,7 +95,7 @@ public class OutboxLeaseTests : DatabaseTest
 
         // its Lease runs out while it is in there - the database decides all timing, so moving the column
         // is indistinguishable from having waited
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
 
         // a second worker takes the message, which is now free for anyone to claim
         var secondClaim = await ClaimAndAbandonAsync(serviceProvider, cancellationToken);
@@ -110,8 +110,8 @@ public class OutboxLeaseTests : DatabaseTest
         var message = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
 
         // the first worker's completion write matched no row, so the message is still the second
-        // worker's to finish rather than being marked handled behind its back
-        Assert.Null(message.ProcessedAt);
+        // worker's to finish rather than being marked completed behind its back
+        Assert.Null(message.CompletedAt);
         Assert.Equal(secondLease, await context.VisibleAtAsync(message.Id, cancellationToken));
 
         // reported rather than swallowed or thrown: an operator wants the rate of it, and the worker
@@ -158,7 +158,7 @@ public class OutboxLeaseTests : DatabaseTest
     }
 
     /// <summary>
-    /// Claims one Head in its own committed transaction and does nothing else with it - the claim half of
+    /// Claims one HeadMessage in its own committed transaction and does nothing else with it - the claim half of
     /// a worker, without the dispatch. That is both a worker that dies immediately after claiming and a
     /// second worker taking over an expired Lease, which is why the two tests share it.
     /// </summary>
@@ -166,12 +166,12 @@ public class OutboxLeaseTests : DatabaseTest
     {
         using var scope = serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
-        var claimHead = scope.ServiceProvider.GetRequiredService<ClaimHead<OutboxMessage>>();
+        var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>();
 
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await using (transaction.ConfigureAwait(false))
         {
-            var message = await claimHead.ExecuteAsync(cancellationToken);
+            var message = await claimHeadMessage.ExecuteAsync(cancellationToken);
 
             // committing is what turns the row lock into a Lease; without it the Group would stay blocked
             // rather than merely leased

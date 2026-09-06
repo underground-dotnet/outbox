@@ -60,7 +60,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         var beforeTheInstant = ExampleMessageHandler.CalledWith.Count;
 
         // simulate the scheduled instant arriving instead of waiting ten minutes for it
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         // Assert

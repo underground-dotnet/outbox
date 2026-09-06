@@ -1,6 +1,6 @@
 # A permanently failing message blocks its group, on purpose
 
-A group offers only its Head for handling. A message that fails every attempt is retried with
+A group offers only its Head Message for handling. A message that fails every attempt is retried with
 exponential backoff up to a ten-minute ceiling, forever, and every message behind it in that group
 waits. Other groups are unaffected.
 

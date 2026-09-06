@@ -62,7 +62,7 @@ public class ProcessorErrorTests : DatabaseTest
     }
 
     [Fact]
-    public async Task MarkSuccessfulMessagesAsProcessed()
+    public async Task MarkSuccessfulMessagesAsCompleted()
     {
         // Arrange
         var serviceCollection = new ServiceCollection();
@@ -92,7 +92,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         // Assert
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed_at IS NOT NULL")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(2, completed);
     }
@@ -130,13 +130,13 @@ public class ProcessorErrorTests : DatabaseTest
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NOT NULL AND retry_count = 0 AND id = {msg.Id}")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed_at IS NOT NULL AND retry_count = 0 AND id = {msg.Id}")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(1, completed);
 
         // second message failed and retry count is incremented
         var notCompleted = await context.Database
-        .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NULL AND retry_count > 0 AND id = {msg2.Id}")
+        .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed_at IS NULL AND retry_count > 0 AND id = {msg2.Id}")
         .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(1, notCompleted);
     }
@@ -368,11 +368,11 @@ public class ProcessorErrorTests : DatabaseTest
 
             // message handler policy should prevent deletion
             cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
-                .OnException<DataException>().MarkAsProcessed();
+                .OnException<DataException>().MarkAsCompleted();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
-        serviceCollection.AddSingleton<MarkAsProcessedExceptionHandler<OutboxMessage>>();
+        serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
@@ -399,14 +399,14 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.Policies.OnException<DataException>().MarkAsProcessed();
+            cfg.Policies.OnException<DataException>().MarkAsCompleted();
 
             cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
-                .OnException<DataException>().MarkAsProcessed();
+                .OnException<DataException>().MarkAsCompleted();
         });
 
         serviceCollection.AddBaseServices(Container, _testOutputHelper);
-        serviceCollection.AddSingleton<MarkAsProcessedExceptionHandler<OutboxMessage>>();
+        serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
         var serviceProvider = serviceCollection.BuildServiceProvider();
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
@@ -422,7 +422,7 @@ public class ProcessorErrorTests : DatabaseTest
         await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsProcessedExceptionHandler<OutboxMessage>>().CallCount);
+        Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsCompletedExceptionHandler<OutboxMessage>>().CallCount);
     }
 
     [Fact]
@@ -452,7 +452,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await processor.ProcessHeadAsync(serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
+        await processor.TryProcessHeadMessageAsync(serviceProvider.CreateScope(), TestContext.Current.CancellationToken);
 
         // Assert
         var failedMessage = await context.OutboxMessages

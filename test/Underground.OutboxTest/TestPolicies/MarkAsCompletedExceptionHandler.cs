@@ -4,7 +4,7 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.OutboxTest.TestPolicies;
 
-public class MarkAsProcessedExceptionHandler<TEntity>() : IMessageExceptionHandler<TEntity> where TEntity : class, IMessage
+public class MarkAsCompletedExceptionHandler<TEntity>() : IMessageExceptionHandler<TEntity> where TEntity : class, IMessage
 {
 #pragma warning disable CA1051 // Do not declare visible instance fields
     public int CallCount = 0;
@@ -13,7 +13,7 @@ public class MarkAsProcessedExceptionHandler<TEntity>() : IMessageExceptionHandl
     public async Task HandleAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken)
     {
         CallCount++;
-        message.ProcessedAt = DateTime.UtcNow;
+        message.CompletedAt = DateTime.UtcNow;
         dbContext.Set<TEntity>().Update(message);
         await dbContext.SaveChangesAsync(cancellationToken);
     }

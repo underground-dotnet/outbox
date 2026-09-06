@@ -50,10 +50,10 @@ public class InboxMessage : IMessage
     [Column("visible_at")]
     public DateTime VisibleAt { get; init; }
 
-    [Column("processed_at")]
-    public DateTime? ProcessedAt { get; set; }
+    [Column("completed_at")]
+    public DateTime? CompletedAt { get; set; }
 
-    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? processedAt)
+    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
         Id = id;
         EventId = eventId;
@@ -64,7 +64,7 @@ public class InboxMessage : IMessage
         Data = data;
         RetryCount = retryCount;
         VisibleAt = visibleAt;
-        ProcessedAt = processedAt;
+        CompletedAt = completedAt;
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public class InboxMessage : IMessage
     /// </param>
     /// <param name="visibleAt">
     /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
-    /// soon as it is Settled. Scheduling a message also delays every message added to its Group after it,
+    /// soon as it is Stable. Scheduling a message also delays every message added to its Group after it,
     /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
     /// </param>
     public InboxMessage(Guid eventId, DateTime createdAt, string type, string data, string groupKey = "default", DateTime? visibleAt = null)
@@ -104,7 +104,7 @@ public class InboxMessage : IMessage
     /// </param>
     /// <param name="visibleAt">
     /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
-    /// soon as it is Settled. Scheduling a message also delays every message added to its Group after it,
+    /// soon as it is Stable. Scheduling a message also delays every message added to its Group after it,
     /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
     /// </param>
     public InboxMessage(Guid eventId, DateTime createdAt, object data, string groupKey = "default", DateTime? visibleAt = null)

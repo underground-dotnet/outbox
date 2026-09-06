@@ -68,7 +68,7 @@ public class VisibleAtTests : DatabaseTest
         var whileInBackoff = FailedMessageHandler.CalledWith.Count;
 
         // simulate the backoff elapsing instead of waiting ten minutes for it
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         // Assert
@@ -102,7 +102,7 @@ public class VisibleAtTests : DatabaseTest
         {
             await processor.ProcessUntilIdleAsync(cancellationToken);
             actualDelays.Add(await context.SecondsUntilVisibleAsync(message.Id, cancellationToken));
-            await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+            await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         }
 
         // Assert

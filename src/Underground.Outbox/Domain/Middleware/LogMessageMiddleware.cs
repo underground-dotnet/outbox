@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Data;
 
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
 /// Announces the claimed message before anything is done to it, so a Handler that never returns is still
@@ -13,26 +13,26 @@ namespace Underground.Outbox.Domain.Chain;
 /// Outermost, so an inbound line with no outbound line is a signal in its own right: the application went
 /// down mid-attempt and nothing about that message was recorded.
 /// </remarks>
-internal sealed partial class LogMessageStage<TEntity>(
-    ILogger<LogMessageStage<TEntity>> logger
-) : IMessageStage<TEntity> where TEntity : class, IMessage
+internal sealed partial class LogMessageMiddleware<TEntity>(
+    ILogger<LogMessageMiddleware<TEntity>> logger
+) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    private readonly ILogger<LogMessageStage<TEntity>> _logger = logger;
+    private readonly ILogger<LogMessageMiddleware<TEntity>> _logger = logger;
 
-    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         LogProcessingMessage(message.Id, typeof(TEntity).ToString(), message.GroupKey);
 
         var attempt = await next(cancellationToken).ConfigureAwait(false);
 
-        if (attempt.Status == AttemptStatus.Handled)
+        if (attempt.Status == ProcessingStatus.Succeeded)
         {
-            LogMessageHandled(message.Id);
+            LogMessageCompleted(message.Id);
         }
         else
         {
             // attached rather than formatted in, so both failure kinds read the same way
-            LogMessageNotHandled(message.Id, attempt.Status.ToString(), attempt.Failure);
+            LogMessageNotCompleted(message.Id, attempt.Status.ToString(), attempt.Failure);
         }
 
         return attempt;
@@ -47,12 +47,12 @@ internal sealed partial class LogMessageStage<TEntity>(
     [LoggerMessage(
         EventId = 2,
         Level = LogLevel.Information,
-        Message = "Handled message {MessageId}")]
-    private partial void LogMessageHandled(long messageId);
+        Message = "Completed message {MessageId}")]
+    private partial void LogMessageCompleted(long messageId);
 
     [LoggerMessage(
         EventId = 3,
         Level = LogLevel.Error,
         Message = "Message {MessageId} was not handled: {Status}")]
-    private partial void LogMessageNotHandled(long messageId, string status, Exception? exception);
+    private partial void LogMessageNotCompleted(long messageId, string status, Exception? exception);
 }

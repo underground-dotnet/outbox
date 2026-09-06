@@ -79,7 +79,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Handles at most one unit of work: the Head of whichever Group offers the oldest one. The
+    /// Handles at most one unit of work: the HeadMessage of whichever Group offers the oldest one. The
     /// skip-locked claim is what keeps two workers off the same Group.
     /// </summary>
     /// <returns>
@@ -94,7 +94,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
             using var scope = _scopeFactory.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
 
-            return await processor.ProcessHeadAsync(scope, cancellationToken).ConfigureAwait(false);
+            return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -111,7 +111,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker
             // survives a failure rather than leaving the pool one short
-            if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadClaimed)
+            if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadMessageClaimed)
             {
                 await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
             }
@@ -146,6 +146,6 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Error,
-        Message = "Error claiming or handling the next Head")]
+        Message = "Error claiming or handling the next HeadMessage")]
     private partial void LogProcessingError(Exception exception);
 }

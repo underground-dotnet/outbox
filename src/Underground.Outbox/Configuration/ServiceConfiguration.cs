@@ -62,7 +62,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// <summary>
     /// Retention period for processed messages before they are eligible for cleanup.
     /// </summary>
-    public TimeSpan ProcessedMessageRetention { get; set; } = TimeSpan.FromDays(7);
+    public TimeSpan CompletedMessageRetention { get; set; } = TimeSpan.FromDays(7);
 
     /// <summary>
     ///  Delay in seconds between cleanup cycles for processed messages.
@@ -112,9 +112,9 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException($"BackoffJitter ({BackoffJitter}) must be at least 0 and less than 1.");
         }
 
-        if (ProcessedMessageRetention < TimeSpan.Zero)
+        if (CompletedMessageRetention < TimeSpan.Zero)
         {
-            throw new ArgumentOutOfRangeException($"ProcessedMessageRetention ({ProcessedMessageRetention}) cannot be negative.");
+            throw new ArgumentOutOfRangeException($"CompletedMessageRetention ({CompletedMessageRetention}) cannot be negative.");
         }
 
         if (CleanupDelaySeconds <= 0)

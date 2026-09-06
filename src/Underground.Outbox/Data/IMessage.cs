@@ -31,5 +31,5 @@ public interface IMessage
     /// </summary>
     public DateTime VisibleAt { get; }
 
-    public DateTime? ProcessedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
 }

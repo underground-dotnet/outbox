@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain.Chain;
+using Underground.Outbox.Domain.Middleware;
 
 namespace Underground.Outbox.Domain;
 
@@ -17,18 +17,18 @@ namespace Underground.Outbox.Domain;
 /// </remarks>
 internal sealed class OutboxProcessor(
     IDbContext dbContext,
-    ClaimHead<OutboxMessage> claimHead,
-    MessageChain<OutboxMessage> chain
+    ClaimHeadMessage<OutboxMessage> claimHeadMessage,
+    MessagePipeline<OutboxMessage> pipeline
 ) : IProcessor<OutboxMessage>
 {
-    public async Task<ClaimResult> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         OutboxMessage? message;
 
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using (transaction.ConfigureAwait(false))
         {
-            message = await claimHead.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+            message = await claimHeadMessage.ExecuteAsync(cancellationToken).ConfigureAwait(false);
             if (message is null)
             {
                 return ClaimResult.NothingOffered;
@@ -40,10 +40,10 @@ internal sealed class OutboxProcessor(
 
         dbContext.ChangeTracker.Clear();
 
-        await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
+        await pipeline.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
 
         dbContext.ChangeTracker.Clear();
 
-        return ClaimResult.HeadClaimed;
+        return ClaimResult.HeadMessageClaimed;
     }
 }

@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
-using Underground.Outbox.Domain.Chain;
+using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.Outbox.Configuration;
@@ -25,10 +25,10 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToOutbox>();
         services.AddScoped<IOutbox, OutboxImpl>();
-        services.AddScoped<ClaimHead<OutboxMessage>, ClaimOutboxHead>();
+        services.AddScoped<ClaimHeadMessage<OutboxMessage>, ClaimOutboxHeadMessage>();
 
         // no transaction open during dispatch: no savepoint, and the three-transaction outer loop
-        services.AddScoped(MessageChainFactory.CreateOutbox);
+        services.AddScoped(MessagePipelineFactory.CreateOutbox);
         services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
 
         AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
@@ -47,11 +47,11 @@ public static class SetupServices
         services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
         services.AddScoped<AddMessagesToInbox>();
         services.AddScoped<IInbox, InboxImpl>();
-        services.AddScoped<ClaimHead<InboxMessage>, ClaimInboxHead>();
+        services.AddScoped<ClaimHeadMessage<InboxMessage>, ClaimInboxHeadMessage>();
 
         // one transaction spans claim, Handler and outcome, so the inbox keeps the savepoint
-        services.AddScoped<SavepointStage<InboxMessage>>();
-        services.AddScoped(MessageChainFactory.CreateInbox);
+        services.AddScoped<SavepointMiddleware<InboxMessage>>();
+        services.AddScoped(MessagePipelineFactory.CreateInbox);
         services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
 
         AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
@@ -72,17 +72,17 @@ public static class SetupServices
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
         services.AddScoped<ScheduleRetry<TEntity>>();
-        services.AddScoped<MarkHandled<TEntity>>();
+        services.AddScoped<MarkCompleted<TEntity>>();
 
-        // per-message stages, registered individually but only ever composed by the factory, which owns
+        // per-message middleware, registered individually but only ever composed by the factory, which owns
         // the order between them
-        services.AddScoped<LogMessageStage<TEntity>>();
-        services.AddScoped<RecordSuccessStage<TEntity>>();
-        services.AddScoped<RecordFailureStage<TEntity>>();
-        services.AddScoped<TimeoutStage<TEntity>>();
+        services.AddScoped<LogMessageMiddleware<TEntity>>();
+        services.AddScoped<RecordSuccessMiddleware<TEntity>>();
+        services.AddScoped<RecordFailureMiddleware<TEntity>>();
+        services.AddScoped<TimeoutMiddleware<TEntity>>();
         services.AddScoped<DispatchMessage<TEntity>>();
 
-        services.AddScoped<DeleteProcessedMessages<TEntity>>();
+        services.AddScoped<DeleteCompletedMessages<TEntity>>();
         services.AddHostedService<BackgroundService<TEntity>>();
         services.AddHostedService<CleanupBackgroundService<TEntity>>();
         services.TryAddScoped<ProcessMessagesOnSaveChangesInterceptor>();

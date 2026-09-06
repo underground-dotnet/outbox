@@ -4,22 +4,22 @@ using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// Bounds how long a Handler may run by narrowing the token the rest of the chain sees, so a Handler that
+/// Bounds how long a Handler may run by narrowing the token the rest of the pipeline sees, so a Handler that
 /// never returns gives back its worker and any transaction it held. On the outbox it is also what keeps a
 /// worker inside its Lease, which is this budget plus a margin.
 /// </summary>
 /// <remarks>
 /// The cancellation becomes a <see cref="HandlerTimeoutException"/> rather than staying an
-/// <see cref="OperationCanceledException"/>, which <see cref="SavepointStage{TEntity}"/> and
-/// <see cref="RecordFailureStage{TEntity}"/> both step aside for. Here the message is an ordinary failed
-/// attempt. Where this stage sits is on <see cref="MessageChainFactory"/> with the rest of the order.
+/// <see cref="OperationCanceledException"/>, which <see cref="SavepointMiddleware{TEntity}"/> and
+/// <see cref="RecordFailureMiddleware{TEntity}"/> both step aside for. Here the message is an ordinary failed
+/// attempt. Where this middleware sits is on <see cref="MessagePipelineFactory"/> with the rest of the order.
 /// </remarks>
-internal sealed class TimeoutStage<TEntity>(ServiceConfiguration<TEntity> config) : IMessageStage<TEntity> where TEntity : class, IMessage
+internal sealed class TimeoutMiddleware<TEntity>(ServiceConfiguration<TEntity> config) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(config.HandlerTimeout);

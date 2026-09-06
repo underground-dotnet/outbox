@@ -108,7 +108,7 @@ public class ProcessorScopeTests : DatabaseTest
 
         // Assert
         var completed = await context.Database
-            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE processed_at IS NULL")
+            .SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox WHERE completed_at IS NULL")
             .SingleAsync(cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(0, completed);
     }

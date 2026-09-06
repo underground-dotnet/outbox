@@ -3,19 +3,19 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
 
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
 /// Isolates a failed Handler's writes from the attempt bookkeeping that follows, so that the retry count
 /// and the new visibility instant still commit together with the rollback.
 /// </summary>
 /// <remarks>
-/// Only ever assembled into a chain that runs inside a transaction - today the inbox alone - which is why
+/// Only ever assembled into a pipeline that runs inside a transaction - today the inbox alone - which is why
 /// <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction"/> is read without a null check.
 /// </remarks>
-internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageStage<TEntity> where TEntity : class, IMessage
+internal sealed class SavepointMiddleware<TEntity>(IDbContext dbContext) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var transaction = dbContext.Database.CurrentTransaction!;
 

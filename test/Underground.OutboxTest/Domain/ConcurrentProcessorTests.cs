@@ -11,7 +11,7 @@ using Underground.OutboxTest.TestHandler;
 namespace Underground.OutboxTest.Domain;
 
 /// <summary>
-/// Workers serve themselves: each one claims a Head, handles it, and claims again, and nothing hands
+/// Workers serve themselves: each one claims a HeadMessage, handles it, and claims again, and nothing hands
 /// Groups out to them. These tests are about that topology - that distinct Groups really do end up on
 /// different workers, and that one Group holding a worker leaves the others alone.
 /// </summary>
@@ -218,7 +218,7 @@ public class ConcurrentProcessorTests : DatabaseTest
         // Assert: the whole of the fast Group was handled while the slow Group was still inside its handler
         var slowMessageStillUnhandled = await context.OutboxMessages
             .AsNoTracking()
-            .AnyAsync(m => m.GroupKey == "slow" && m.ProcessedAt == null, cancellationToken);
+            .AnyAsync(m => m.GroupKey == "slow" && m.CompletedAt == null, cancellationToken);
 
         BlockingMessageHandler.Release.TrySetResult();
         await StopBackgroundServiceAsync(serviceProvider, cancellationToken);

@@ -73,15 +73,15 @@ public class ServiceConfigurationTests
     }
 
     [Fact]
-    public void Validate_ThrowsArgumentOutOfRangeException_WhenProcessedMessageRetentionIsNegative()
+    public void Validate_ThrowsArgumentOutOfRangeException_WhenCompletedMessageRetentionIsNegative()
     {
         var configuration = new InboxServiceConfiguration
         {
-            ProcessedMessageRetention = TimeSpan.FromSeconds(-1)
+            CompletedMessageRetention = TimeSpan.FromSeconds(-1)
         };
 
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
 
-        Assert.Contains("ProcessedMessageRetention", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("CompletedMessageRetention", exception.Message, StringComparison.Ordinal);
     }
 }

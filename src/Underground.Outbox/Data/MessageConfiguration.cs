@@ -6,7 +6,7 @@ namespace Underground.Outbox.Data;
 /// <summary>
 /// Model configuration shared by both message tables: the database-assigned
 /// <see cref="IMessage.TransactionId"/> and <see cref="IMessage.VisibleAt"/>, and the partial index that
-/// serves Head lookup. Applied automatically through <see cref="EntityTypeConfigurationAttribute"/>.
+/// serves HeadMessage lookup. Applied automatically through <see cref="EntityTypeConfigurationAttribute"/>.
 /// </summary>
 /// <typeparam name="TEntity">The message entity being configured.</typeparam>
 internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration<TEntity>
@@ -30,11 +30,11 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
             .HasDefaultValueSql("clock_timestamp()")
             .ValueGeneratedOnAdd();
 
-        // Serves Head lookup already ordered, so no sort is needed. Partial so its cost is proportional
+        // Serves HeadMessage lookup already ordered, so no sort is needed. Partial so its cost is proportional
         // to the unprocessed rows rather than the processed ones kept for the retention period.
         // The filter names the column literally because an IEntityTypeConfiguration runs before the
         // mapping annotations are applied; safe only because the names are fixed (ADR 0005).
         builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
-            .HasFilter("\"processed_at\" IS NULL");
+            .HasFilter("\"completed_at\" IS NULL");
     }
 }

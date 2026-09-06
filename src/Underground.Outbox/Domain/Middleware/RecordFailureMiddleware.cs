@@ -4,7 +4,7 @@ using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
 using Underground.Outbox.Exceptions;
 
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
 /// Turns a Handler that threw into a recorded attempt: pushes the message out of sight for its backoff
@@ -14,15 +14,15 @@ namespace Underground.Outbox.Domain.Chain;
 /// <remarks>
 /// The retry is written before the policies run because it is the guarded write, and a lost Lease has to
 /// be discovered before consumer code - which writes by id and cannot be guarded - touches the message.
-/// The exception goes onto the <see cref="Attempt"/> rather than being logged here, so
-/// <see cref="LogMessageStage{TEntity}"/> reports it in its one outcome line.
+/// The exception goes onto the <see cref="ProcessingAttempt"/> rather than being logged here, so
+/// <see cref="LogMessageMiddleware{TEntity}"/> reports it in its one outcome line.
 /// </remarks>
-internal sealed class RecordFailureStage<TEntity>(
+internal sealed class RecordFailureMiddleware<TEntity>(
     IDbContext dbContext,
     ScheduleRetry<TEntity> scheduleRetry
-) : IMessageStage<TEntity> where TEntity : class, IMessage
+) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         Exception failure;
 
@@ -42,7 +42,7 @@ internal sealed class RecordFailureStage<TEntity>(
 
         if (!stillOurs)
         {
-            return Attempt.LeaseLost(failure);
+            return ProcessingAttempt.LeaseLost(failure);
         }
 
         // only an exception the Handler itself raised has a policy to consult
@@ -54,6 +54,6 @@ internal sealed class RecordFailureStage<TEntity>(
             await processHandlerException.ExecuteAsync(handlerException, message, dbContext, cancellationToken).ConfigureAwait(false);
         }
 
-        return Attempt.Failed(failure);
+        return ProcessingAttempt.Failed(failure);
     }
 }

@@ -8,27 +8,27 @@ using Underground.OutboxTest.TestHandler;
 namespace Underground.OutboxTest.Domain;
 
 /// <summary>
-/// A Group offers only its Head - its oldest settled unhandled message - and it offers nothing at all
-/// while that Head is not yet visible. These tests are the ones that tell the correct two-stage lookup
+/// A Group offers only its HeadMessage - its oldest Stable message not yet completed - and it offers nothing at all
+/// while that HeadMessage is not yet visible. These tests are the ones that tell the correct two-step lookup
 /// apart from the naive one that filters by visibility first: the naive query passes every test that
-/// does not put a Head out of sight and then look at what happens to the messages behind it.
+/// does not put a HeadMessage out of sight and then look at what happens to the messages behind it.
 ///
 /// As elsewhere, the instant arriving is simulated by moving the stored value into the past rather than
 /// by waiting.
 /// </summary>
 [Collection("ExampleMessageHandler Collection")]
-public class HeadDiscoveryTests : DatabaseTest
+public class HeadMessageDiscoveryTests : DatabaseTest
 {
     private static readonly TimeSpan ScheduledAhead = TimeSpan.FromMinutes(10);
 
-    private const int Head = 1;
-    private const int BehindTheHead = 2;
+    private const int HeadMessage = 1;
+    private const int BehindTheHeadMessage = 2;
     private const int OtherGroupFirst = 3;
     private const int OtherGroupSecond = 4;
 
     private readonly ITestOutputHelper _testOutputHelper;
 
-    public HeadDiscoveryTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
+    public HeadMessageDiscoveryTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
         _testOutputHelper = testOutputHelper;
 
@@ -37,45 +37,45 @@ public class HeadDiscoveryTests : DatabaseTest
     }
 
     [Fact]
-    public async Task MessagesBehindAHeadInBackoffAreNotHandledEvenThoughTheyAreVisible()
+    public async Task MessagesBehindAHeadMessageInBackoffAreNotHandledEvenThoughTheyAreVisible()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
-        RecoveringMessageHandler.FailingIds.Add(Head);
-        await context.AddMessagesAsync(serviceProvider, [MessageFor(Head), MessageFor(BehindTheHead)], cancellationToken);
+        RecoveringMessageHandler.FailingIds.Add(HeadMessage);
+        await context.AddMessagesAsync(serviceProvider, [MessageFor(HeadMessage), MessageFor(BehindTheHeadMessage)], cancellationToken);
 
-        // Act: the Head fails and goes into backoff, and every further run finds it still invisible
+        // Act: the HeadMessage fails and goes into backoff, and every further run finds it still invisible
         await processor.ProcessUntilIdleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
-        // Assert: the message behind the Head has been visible throughout and was still never offered
-        Assert.Equal([Head], RecoveringMessageHandler.CalledWith);
+        // Assert: the message behind the HeadMessage has been visible throughout and was still never offered
+        Assert.Equal([HeadMessage], RecoveringMessageHandler.CalledWith);
     }
 
     [Fact]
-    public async Task OtherGroupsAreHandledWhileOneGroupsHeadIsInBackoff()
+    public async Task OtherGroupsAreHandledWhileOneGroupsHeadMessageIsInBackoff()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
-        RecoveringMessageHandler.FailingIds.Add(Head);
+        RecoveringMessageHandler.FailingIds.Add(HeadMessage);
         await context.AddMessagesAsync(
             serviceProvider,
             [
-                MessageFor(Head, "stalled"),
-                MessageFor(BehindTheHead, "stalled"),
+                MessageFor(HeadMessage, "stalled"),
+                MessageFor(BehindTheHeadMessage, "stalled"),
                 MessageFor(OtherGroupFirst, "healthy"),
                 MessageFor(OtherGroupSecond, "healthy"),
             ],
             cancellationToken);
 
-        // Act: the second run finds the stalled Group's Head still invisible and the healthy one empty
+        // Act: the second run finds the stalled Group's HeadMessage still invisible and the healthy one empty
         await processor.ProcessUntilIdleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
@@ -83,60 +83,60 @@ public class HeadDiscoveryTests : DatabaseTest
         Assert.Equal(
             [OtherGroupFirst, OtherGroupSecond],
             RecoveringMessageHandler.CalledWith.Where(id => id is OtherGroupFirst or OtherGroupSecond));
-        // ... while the stalled Group offered its Head once and never the message behind it
+        // ... while the stalled Group offered its HeadMessage once and never the message behind it
         Assert.Equal(
-            [Head],
-            RecoveringMessageHandler.CalledWith.Where(id => id is Head or BehindTheHead));
+            [HeadMessage],
+            RecoveringMessageHandler.CalledWith.Where(id => id is HeadMessage or BehindTheHeadMessage));
     }
 
     [Fact]
-    public async Task HeadIsHandledBeforeTheMessagesBehindItOnceItsBackoffHasElapsed()
+    public async Task HeadMessageIsHandledBeforeTheMessagesBehindItOnceItsBackoffHasElapsed()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
-        RecoveringMessageHandler.FailingIds.Add(Head);
-        await context.AddMessagesAsync(serviceProvider, [MessageFor(Head), MessageFor(BehindTheHead)], cancellationToken);
+        RecoveringMessageHandler.FailingIds.Add(HeadMessage);
+        await context.AddMessagesAsync(serviceProvider, [MessageFor(HeadMessage), MessageFor(BehindTheHeadMessage)], cancellationToken);
 
         await processor.ProcessUntilIdleAsync(cancellationToken);
-        // a further run while the Head is in backoff must not reach the message behind it either
+        // a further run while the HeadMessage is in backoff must not reach the message behind it either
         await processor.ProcessUntilIdleAsync(cancellationToken);
         var whileInBackoff = RecoveringMessageHandler.CalledWith.ToList();
 
         // Act: the partner system recovers and the backoff elapses
         RecoveringMessageHandler.FailingIds.Clear();
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         // Assert
-        Assert.Equal([Head], whileInBackoff);
-        Assert.Equal([Head, Head, BehindTheHead], RecoveringMessageHandler.CalledWith);
+        Assert.Equal([HeadMessage], whileInBackoff);
+        Assert.Equal([HeadMessage, HeadMessage, BehindTheHeadMessage], RecoveringMessageHandler.CalledWith);
     }
 
     [Fact]
-    public async Task MessagesBehindAScheduledHeadAreNotHandledUntilThatHeadHasBeen()
+    public async Task MessagesBehindAScheduledHeadMessageAreNotHandledUntilThatHeadMessageHasBeen()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
-        var scheduledHead = MessageFor(Head, visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
-        await context.AddMessagesAsync(serviceProvider, [scheduledHead, MessageFor(BehindTheHead)], cancellationToken);
+        var scheduledHeadMessage = MessageFor(HeadMessage, visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
+        await context.AddMessagesAsync(serviceProvider, [scheduledHeadMessage, MessageFor(BehindTheHeadMessage)], cancellationToken);
 
         // Act
         await processor.ProcessUntilIdleAsync(cancellationToken);
         var beforeTheInstant = RecoveringMessageHandler.CalledWith.ToList();
 
         // simulate the scheduled instant arriving instead of waiting ten minutes for it
-        await context.MakeUnhandledMessagesVisibleAsync(cancellationToken);
+        await context.MakeIncompleteMessagesVisibleAsync(cancellationToken);
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
-        // Assert: scheduling the Head delayed the whole Group, and it went first once its instant arrived
+        // Assert: scheduling the HeadMessage delayed the whole Group, and it went first once its instant arrived
         Assert.Empty(beforeTheInstant);
-        Assert.Equal([Head, BehindTheHead], RecoveringMessageHandler.CalledWith);
+        Assert.Equal([HeadMessage, BehindTheHeadMessage], RecoveringMessageHandler.CalledWith);
     }
 
     private ServiceProvider BuildServiceProvider()
@@ -145,7 +145,7 @@ public class HeadDiscoveryTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             cfg.AddHandler<RecoveringMessageHandler, RecoveringMessage>();
-            // long enough that a Head which failed stays out of sight for the rest of the test
+            // long enough that a HeadMessage which failed stays out of sight for the rest of the test
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;
         });

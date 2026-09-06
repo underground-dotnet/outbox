@@ -6,10 +6,10 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 
 namespace Underground.OutboxTest.TestPolicies;
 
-public record MarkAsProcessedExceptionPolicy<TEntity>(Type ExceptionType) : ExceptionPolicy<TEntity>(ExceptionType) where TEntity : class, IMessage
+public record MarkAsCompletedExceptionPolicy<TEntity>(Type ExceptionType) : ExceptionPolicy<TEntity>(ExceptionType) where TEntity : class, IMessage
 {
     public override IMessageExceptionHandler<TEntity> GetExceptionHandler(IServiceProvider serviceProvider)
     {
-        return serviceProvider.GetRequiredService<MarkAsProcessedExceptionHandler<TEntity>>();
+        return serviceProvider.GetRequiredService<MarkAsCompletedExceptionHandler<TEntity>>();
     }
 }

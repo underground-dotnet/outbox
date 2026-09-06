@@ -4,7 +4,7 @@ namespace Underground.Outbox.Exceptions;
 /// Raised when a Handler was still running once the time it was given ran out.
 /// </summary>
 /// <remarks>
-/// Deliberately not an <see cref="OperationCanceledException"/>, which the stages step aside for because
+/// Deliberately not an <see cref="OperationCanceledException"/>, which the middleware step aside for because
 /// it means the transaction is about to be discarded whole. Here the transaction lives on, so the
 /// Handler's writes are rolled back and the attempt recorded like any other failure.
 /// </remarks>

@@ -8,22 +8,22 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox.Domain;
 
 /// <summary>
-/// Records that a message was handled. This is the write that ends a message's life; on the outbox it is
+/// Records that a message was completed. This is the write that ends a message's life; on the outbox it is
 /// also the release of the Lease.
 /// </summary>
 /// <remarks>
 /// Guarded on the Lease instant the claim granted, so a worker that overran cannot mark a message some
 /// other worker now owns. Matching no row is reported and not thrown - the effect already happened - but
 /// it is still the one case in which an effect has certainly been carried out twice, so
-/// <see cref="Chain.RecordSuccessStage{TEntity}"/> puts it on the Attempt for the outcome log.
+/// <see cref="Middleware.RecordSuccessMiddleware{TEntity}"/> puts it on the ProcessingAttempt for the outcome log.
 /// On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
-internal sealed partial class MarkHandled<TEntity>(
+internal sealed partial class MarkCompleted<TEntity>(
     IDbContext dbContext,
-    ILogger<MarkHandled<TEntity>> logger
+    ILogger<MarkCompleted<TEntity>> logger
 ) where TEntity : class, IMessage
 {
-    private readonly ILogger<MarkHandled<TEntity>> _logger = logger;
+    private readonly ILogger<MarkCompleted<TEntity>> _logger = logger;
 
     /// <summary>
     /// Marks the message handled, if this worker still holds it.
@@ -37,7 +37,7 @@ internal sealed partial class MarkHandled<TEntity>(
         // clock_timestamp(), so this column is on the same clock as every other instant in the table
         var sql = $"""
             UPDATE {TEntity.TableName}
-            SET processed_at = clock_timestamp()
+            SET completed_at = clock_timestamp()
             WHERE id = @id
             AND visible_at = @lease
             """;
@@ -69,6 +69,6 @@ internal sealed partial class MarkHandled<TEntity>(
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
-        Message = "Lost the Lease on message {MessageId}: it expired before this worker finished, so another worker owns the message and it was not marked handled here")]
+        Message = "Lost the Lease on message {MessageId}: it expired before this worker finished, so another worker owns the message and it was not marked completed here")]
     private partial void LogLeaseLost(long messageId);
 }

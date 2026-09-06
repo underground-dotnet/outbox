@@ -66,7 +66,7 @@ public class HandlerTimeoutTests : DatabaseTest
         // the configured timeout, and elapsing raises something other than a cancellation
         Assert.True(BlockingMessageHandler.WasCancelled, "the handler was never cancelled");
 
-        Assert.Null(hungMessage.ProcessedAt);
+        Assert.Null(hungMessage.CompletedAt);
         Assert.Equal(1, hungMessage.RetryCount);
 
         // pushed out of sight by the backoff, exactly as a Handler that threw would have been
@@ -75,11 +75,11 @@ public class HandlerTimeoutTests : DatabaseTest
 
         // the worker went on to the other Group instead of staying inside the hung Handler
         Assert.Contains(other, BlockingMessageHandler.CalledWith);
-        Assert.NotNull(otherMessage.ProcessedAt);
+        Assert.NotNull(otherMessage.CompletedAt);
     }
 
     /// <summary>
-    /// The other direction, so that the stage is pinned against cancelling too eagerly as well as too
+    /// The other direction, so that the middleware is pinned against cancelling too eagerly as well as too
     /// late: a Handler that takes its time but returns inside its budget is handled, and the token it was
     /// given is never cancelled.
     /// </summary>
@@ -111,7 +111,7 @@ public class HandlerTimeoutTests : DatabaseTest
         Assert.False(BlockingMessageHandler.WasCancelled, "the handler was cancelled inside its budget");
 
         var message = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
-        Assert.NotNull(message.ProcessedAt);
+        Assert.NotNull(message.CompletedAt);
         Assert.Equal(0, message.RetryCount);
     }
 

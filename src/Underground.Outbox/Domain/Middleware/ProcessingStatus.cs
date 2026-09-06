@@ -1,16 +1,16 @@
-namespace Underground.Outbox.Domain.Chain;
+namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// What became of one run of the Chain against one Head. Every completed run ends in exactly one of these.
+/// What became of one run of the MiddlewarePipeline against one HeadMessage. Every completed run ends in exactly one of these.
 /// A run cut short by shutdown produces none: the <see cref="OperationCanceledException"/> travels out
-/// past every Stage and nothing was recorded.
+/// past every middleware and nothing was recorded.
 /// </summary>
-internal enum AttemptStatus
+internal enum ProcessingStatus
 {
     /// <summary>
-    /// The Handler returned and the message was marked handled.
+    /// The Handler returned and the message was marked completed.
     /// </summary>
-    Handled,
+    Succeeded,
 
     /// <summary>
     /// The Handler threw: the retry count is up and the message is out of sight for its backoff delay.
@@ -19,7 +19,7 @@ internal enum AttemptStatus
 
     /// <summary>
     /// The guarded write matched no row, so this worker no longer holds the message and nothing it did was
-    /// recorded. <see cref="Attempt.Failure"/> says which of the two ways that happened.
+    /// recorded. <see cref="ProcessingAttempt.Failure"/> says which of the two ways that happened.
     /// </summary>
     LeaseLost,
 }
