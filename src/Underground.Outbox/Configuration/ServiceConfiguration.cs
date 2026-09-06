@@ -8,50 +8,37 @@ namespace Underground.Outbox.Configuration;
 public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
-    /// Maximum number of Groups that can be handled concurrently. It is the number of workers that run:
-    /// each one claims a Head for itself and the database keeps two of them off the same Group, so this
-    /// caps how many Groups are ever in flight at once. A value of one means strictly serial handling
-    /// across all Groups - one message anywhere in the system at a time - not one message per Group.
+    /// Maximum number of Groups handled concurrently, and the number of workers that run. A value of one
+    /// means strictly serial handling across all Groups, not one message per Group.
     /// </summary>
     public int MaxConcurrentGroups { get; set; } = 4;
 
     /// <summary>
-    /// How often the pool is woken to look for work, in milliseconds. It is a cadence rather than a
-    /// per-worker idle timer: every worker still waiting when it elapses is released at once, and workers
-    /// that keep finding Heads keep claiming them and never wait at all. A commit in this process wakes
-    /// idle workers immediately, so this bounds the latency of work nothing told us about - a message
-    /// written by another application instance, or one that became Settled only once some other
-    /// transaction ended - and it is what makes delivery guaranteed rather than dependent on a
-    /// notification arriving.
+    /// How often the pool is woken to look for work, in milliseconds. A cadence rather than a per-worker
+    /// idle timer: every waiting worker is released at once. A commit in this process wakes workers
+    /// immediately, so this bounds the latency of work nothing told us about - and is what makes delivery
+    /// guaranteed rather than dependent on a notification arriving.
     /// </summary>
     public int ProcessingDelayMilliseconds { get; set; } = 4000;
 
     /// <summary>
-    /// The time a Handler is given to complete. When it elapses, the cancellation token the Handler was
-    /// passed is cancelled and the message is recorded as a failed attempt, so a hung external call costs
-    /// its own Group a backoff rather than occupying a worker - and, on the inbox, rather than holding a
-    /// transaction open behind it. There is no way to switch it off: an unbounded Handler is what this
-    /// exists to prevent.
+    /// The time a Handler is given to complete. When it elapses the Handler's token is cancelled and the
+    /// message is recorded as a failed attempt, so a hung call costs its own Group a backoff rather than
+    /// occupying a worker. There is no way to switch it off.
     /// </summary>
     public TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromSeconds(45);
 
     /// <summary>
-    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write
-    /// after the Handler's own budget is up. It is a constant rather than a setting because the only thing
-    /// a second knob could express is a Lease shorter than the timeout, which guarantees double delivery on
-    /// every slow message.
+    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write.
+    /// A constant, because a configurable Lease shorter than the timeout guarantees double delivery.
     /// </summary>
     private const int LeaseMarginSeconds = 15;
 
     /// <summary>
-    /// How long an outbox worker's Lease on a claimed message runs for, measured from the claim. It is
-    /// derived from <see cref="HandlerTimeout"/> rather than configured, so the Handler's cancellation
-    /// always fires with the margin still to spare and a message can never be taken from a live worker.
+    /// How long an outbox worker's Lease runs for, measured from the claim. Derived from
+    /// <see cref="HandlerTimeout"/> so the Handler's cancellation always fires with the margin to spare
+    /// and a message can never be taken from a live worker. The inbox has nothing to expire.
     /// </summary>
-    /// <remarks>
-    /// Read only by the outbox. The inbox holds a row lock for the length of its transaction and has
-    /// nothing to expire.
-    /// </remarks>
     internal TimeSpan LeaseDuration => HandlerTimeout + TimeSpan.FromSeconds(LeaseMarginSeconds);
 
     /// <summary>
@@ -61,17 +48,14 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public TimeSpan BackoffBase { get; set; } = TimeSpan.FromSeconds(1);
 
     /// <summary>
-    /// Ceiling the doubling stops at, so that a message which recovers after a long outage is still
-    /// picked up within a predictable time rather than after an ever-growing wait. It bounds the
-    /// doubling rather than the delay itself: <see cref="BackoffJitter"/> is applied afterwards, so an
-    /// actual delay may exceed this by the jitter proportion.
+    /// Ceiling the doubling stops at. It bounds the doubling rather than the delay itself:
+    /// <see cref="BackoffJitter"/> is applied afterwards, so an actual delay may exceed this.
     /// </summary>
     public TimeSpan MaxBackoff { get; set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
-    /// Proportion by which each retry delay is randomly varied, either way: 0.2 means plus or minus
-    /// 20%. It keeps Groups that all failed against one shared dependency from retrying in lockstep.
-    /// Set to 0 for exact delays.
+    /// Proportion by which each retry delay is randomly varied, either way: 0.2 means plus or minus 20%.
+    /// Keeps Groups that failed against one shared dependency from retrying in lockstep. 0 for exact delays.
     /// </summary>
     public double BackoffJitter { get; set; } = 0.2;
 
@@ -122,7 +106,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException($"MaxBackoff ({MaxBackoff}) cannot be shorter than BackoffBase ({BackoffBase}).");
         }
 
-        // a jitter of 1 or more could produce a delay of zero or a negative one, which would retry immediately
+        // a jitter of 1 or more could produce a zero or negative delay, which would retry immediately
         if (BackoffJitter is < 0 or >= 1)
         {
             throw new ArgumentOutOfRangeException($"BackoffJitter ({BackoffJitter}) must be at least 0 and less than 1.");

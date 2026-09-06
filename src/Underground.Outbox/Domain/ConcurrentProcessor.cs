@@ -19,32 +19,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     private readonly ServiceConfiguration<TEntity> _config = config;
 
     /// <summary>
-    /// The wake-up mechanism behind the worker pool: idle workers wait on it, and anything that knows work
-    /// may have appeared writes to it. It carries no information beyond "look again", and no guarantee that
-    /// looking will find anything.
+    /// Wake-up signal for idle workers. Carries no information beyond "look again".
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Two details of it are load-bearing rather than incidental, and both read as mistakes to someone who
-    /// does not know what they are for.
-    /// </para>
-    /// <para>
-    /// <b>A notification releases every waiter, not one.</b> <see cref="WaitForWorkAsync"/> awaits
-    /// <c>WaitToReadAsync</c>, which completes for all waiters, and only then drains the token. Whichever
-    /// worker wins that race is immaterial, because they have all been released by the time it is drained.
-    /// Releasing one instead would leave a commit that arrives at an idle pool served by a single worker
-    /// handling every Group serially until the next poll.
-    /// </para>
-    /// <para>
-    /// <b>The notification is buffered, so it cannot be lost.</b> A <see cref="NotifyWork"/> that lands
-    /// between a worker finding no work and that worker starting to wait leaves the token sitting in the
-    /// channel, and the wait returns immediately. A plain pulse would drop that notification and cost a full
-    /// poll delay. The channel is bounded at one with <see cref="BoundedChannelFullMode.DropWrite"/> because
-    /// the token carries no information: a second notification arriving before the first is consumed says
-    /// nothing the first did not. Dropping it loses nothing either, because a token is only pending while
-    /// some worker's next claim has yet to start, and that claim sees whatever the dropped notification was
-    /// reporting.
-    /// </para>
+    /// Two properties are load-bearing: a notification releases every waiter (<c>WaitToReadAsync</c>
+    /// completes for all of them before the token is drained), and it is buffered, so one that lands
+    /// just before a worker starts waiting is not lost. Bounded at one with
+    /// <see cref="BoundedChannelFullMode.DropWrite"/>: a second token says nothing the first did not.
     /// </remarks>
     private readonly Channel<byte> _workSignal = Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
     {
@@ -54,9 +35,8 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     });
 
     /// <summary>
-    /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until the token is
-    /// cancelled. Each worker serves itself: it repeats <see cref="ProcessNextAsync"/> for as long as that
-    /// keeps finding work, and waits on the work signal once it does not.
+    /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until cancelled.
+    /// Each worker claims for itself and waits on the work signal once nothing is offered.
     /// </summary>
     internal async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -68,22 +48,11 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Reports that work may have appeared, releasing every worker currently waiting. It never blocks and
-    /// never fails: a notification that arrives while one is already pending is dropped, because the two say
-    /// the same thing.
+    /// Reports that work may have appeared, releasing every waiting worker. Never blocks, never fails.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This is one of three peers, none of them privileged. The commit interceptor calls it when this
-    /// process writes a message; <see cref="RunPollAsync"/> calls it on a timer; a
-    /// <c>LISTEN</c>/<c>pg_notify</c> subscription would be the third, since notifying is in-process only
-    /// and a commit on one application instance does not wake the workers of another.
-    /// </para>
-    /// <para>
-    /// Polling is what actually guarantees delivery. Every other caller is a latency optimisation and is
-    /// allowed to lose a notification: work nobody told the pool about is still picked up on the next
-    /// poll, which is what makes a lost notification cost time rather than correctness.
-    /// </para>
+    /// Polling is what guarantees delivery; the commit interceptor calling this is only a latency
+    /// optimisation, and a lost notification therefore costs time rather than correctness.
     /// </remarks>
     internal void NotifyWork()
     {
@@ -91,10 +60,8 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Waits until <see cref="NotifyWork"/> is called. Returns rather than throwing when
-    /// <paramref name="cancellationToken"/> is cancelled; the worker loop decides what a cancellation means.
-    /// Nothing here gives up on its own - a wait ends because somebody notified, or because the application
-    /// is shutting down.
+    /// Waits until <see cref="NotifyWork"/> is called. Returns rather than throwing on cancellation; the
+    /// worker loop decides what that means.
     /// </summary>
     internal async Task WaitForWorkAsync(CancellationToken cancellationToken)
     {
@@ -112,16 +79,12 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Handles at most one unit of work: the Head of whichever Group currently offers the oldest one.
-    /// Nothing hands Groups to a worker - it claims one for itself, and the skip-locked semantics of that
-    /// claim are what keep two workers off the same Group.
+    /// Handles at most one unit of work: the Head of whichever Group offers the oldest one. The
+    /// skip-locked claim is what keeps two workers off the same Group.
     /// </summary>
     /// <returns>
-    /// Whether a message was claimed, and with it whether it is worth calling again right away. It is
-    /// <see cref="ClaimResult.NothingOffered"/> when no Group offered anything - because nothing is
-    /// unhandled, because every candidate Head is not yet visible, or because other workers hold the ones
-    /// that are - and also when the claim itself failed, which is logged rather than thrown so that a worker
-    /// survives it.
+    /// Whether a message was claimed, and with it whether it is worth calling again right away. A failed
+    /// claim is logged and reported as <see cref="ClaimResult.NothingOffered"/> so a worker survives it.
     /// </returns>
     internal async Task<ClaimResult> ProcessNextAsync(CancellationToken cancellationToken)
     {
@@ -137,8 +100,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             LogProcessingError(ex);
 
-            // treat a failed claim as no work rather than as a reason to try again immediately, so that a
-            // database that is refusing connections is not hammered in a tight loop
+            // no work rather than an immediate retry, so a database refusing connections is not hammered
             return ClaimResult.NothingOffered;
         }
     }
@@ -147,8 +109,8 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker keeps
-            // serving itself across a failure rather than dying and leaving the pool one short
+            // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker
+            // survives a failure rather than leaving the pool one short
             if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadClaimed)
             {
                 await WaitForWorkAsync(cancellationToken).ConfigureAwait(false);
@@ -157,10 +119,8 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     }
 
     /// <summary>
-    /// Notifies on a fixed cadence for as long as the pool runs, so that a wait ends even when nothing
-    /// notified it. It ticks whether or not anyone is idle: a tick that nobody is waiting for leaves a
-    /// token in the signal and costs the next worker to go idle one empty claim, which is cheaper than the
-    /// shared idle count it would take to suppress.
+    /// Notifies on a fixed cadence, so a wait ends even when nothing notified it. It ticks whether or not
+    /// anyone is idle; suppressing that would cost a shared idle count for the sake of one empty claim.
     /// </summary>
     private async Task RunPollAsync(CancellationToken cancellationToken)
     {
@@ -170,14 +130,12 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             try
             {
-                // delay before the first notification: a worker claims once before it ever waits, so a
-                // notification at startup would release nobody
+                // delay first: a worker claims before it ever waits, so a startup tick releases nobody
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // shutting down, which the loop condition sees on its own; ending the same way a worker
-                // does keeps RunAsync completing successfully rather than faulting on every stop
+                // shutting down; returning rather than throwing keeps RunAsync from faulting on every stop
                 return;
             }
 

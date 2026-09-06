@@ -10,8 +10,8 @@ namespace Underground.Outbox.Data;
 /// An externally-originated event to be applied to this database.
 /// </summary>
 /// <remarks>
-/// The table and column names are fixed and may not be remapped: the statements that claim and complete
-/// a message name them literally. See <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
+/// The table and column names are fixed and may not be remapped; see
+/// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
 /// </remarks>
 [Table("inbox")]
 [Index(nameof(EventId), IsUnique = true)]
@@ -78,15 +78,9 @@ public class InboxMessage : IMessage
     /// The Group this message belongs to. Messages of one Group are handled one at a time, in order.
     /// </param>
     /// <param name="visibleAt">
-    /// The earliest instant, in UTC, at which this message may be handled. Omitted, or
-    /// <see langword="null"/>, means as soon as possible: the database records the present, and the
-    /// message is handled once it is Settled.
-    /// <para>
-    /// Scheduling a message also delays every message added to its Group after it. A Group offers only
-    /// its Head - its oldest Settled message not yet handled - so nothing written behind a scheduled
-    /// message is handled until the scheduled message has been. Give a message its own
-    /// <paramref name="groupKey"/> if the delay is meant to apply to it alone.
-    /// </para>
+    /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
+    /// soon as it is Settled. Scheduling a message also delays every message added to its Group after it,
+    /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
     /// </param>
     public InboxMessage(Guid eventId, DateTime createdAt, string type, string data, string groupKey = "default", DateTime? visibleAt = null)
     {
@@ -109,15 +103,9 @@ public class InboxMessage : IMessage
     /// The Group this message belongs to. Messages of one Group are handled one at a time, in order.
     /// </param>
     /// <param name="visibleAt">
-    /// The earliest instant, in UTC, at which this message may be handled. Omitted, or
-    /// <see langword="null"/>, means as soon as possible: the database records the present, and the
-    /// message is handled once it is Settled.
-    /// <para>
-    /// Scheduling a message also delays every message added to its Group after it. A Group offers only
-    /// its Head - its oldest Settled message not yet handled - so nothing written behind a scheduled
-    /// message is handled until the scheduled message has been. Give a message its own
-    /// <paramref name="groupKey"/> if the delay is meant to apply to it alone.
-    /// </para>
+    /// The earliest instant, in UTC, at which this message may be handled; <see langword="null"/> means as
+    /// soon as it is Settled. Scheduling a message also delays every message added to its Group after it,
+    /// so give it its own <paramref name="groupKey"/> if the delay should apply to it alone.
     /// </param>
     public InboxMessage(Guid eventId, DateTime createdAt, object data, string groupKey = "default", DateTime? visibleAt = null)
     {

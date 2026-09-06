@@ -6,14 +6,11 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox.Domain;
 
 /// <summary>
-/// Claims a Head for the outbox by granting itself a Lease on it: the claim moves
+/// Claims a Head for the outbox by granting itself a Lease: the claim moves
 /// <see cref="IMessage.VisibleAt"/> to the Lease expiry, so the message is out of sight for as long as
-/// this worker has to finish, and comes back on its own if the worker never does.
+/// this worker has to finish and comes back on its own if the worker never does. Every later write is
+/// guarded on the granted instant, which is what tells an expired worker the message is no longer its own.
 /// </summary>
-/// <remarks>
-/// The granted instant is returned rather than computed here, and every later write to the message is
-/// guarded on it. That is what tells a worker whose Lease expired that the message is no longer its own.
-/// </remarks>
 internal sealed class ClaimOutboxHead(
     IDbContext dbContext,
     ServiceConfiguration<OutboxMessage> config
@@ -30,8 +27,7 @@ internal sealed class ClaimOutboxHead(
 
     protected override string Sql => ClaimSql;
 
-    // an interval rather than an instant, so that the expiry is computed by the database: an instance with
-    // a skewed clock cannot expire its own Lease early and cause systematic duplicates
+    // an interval rather than an instant, so a skewed application clock cannot expire a Lease early
     protected override void AddParameters(List<NpgsqlParameter> parameters)
     {
         ArgumentNullException.ThrowIfNull(parameters);

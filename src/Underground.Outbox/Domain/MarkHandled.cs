@@ -12,14 +12,11 @@ namespace Underground.Outbox.Domain;
 /// also the release of the Lease.
 /// </summary>
 /// <remarks>
-/// The write is guarded on the Lease instant the claim granted, so a worker that overran cannot mark a
-/// message some other worker now owns. Matching no row is reported and not thrown: the effect has already
-/// happened and there is nothing for a caller to recover. The answer is still worth returning, because it
-/// is the one case in which an effect has certainly been carried out twice, and
-/// <see cref="Chain.RecordSuccessStage{TEntity}"/> puts it on the Attempt for the outcome log to report.
-/// On the inbox the guard is trivially satisfied - the row is locked for the whole transaction, so nothing
-/// can have moved its visibility instant - and a predicate that is always true is cheaper than giving each
-/// side its own write path.
+/// Guarded on the Lease instant the claim granted, so a worker that overran cannot mark a message some
+/// other worker now owns. Matching no row is reported and not thrown - the effect already happened - but
+/// it is still the one case in which an effect has certainly been carried out twice, so
+/// <see cref="Chain.RecordSuccessStage{TEntity}"/> puts it on the Attempt for the outcome log.
+/// On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
 internal sealed partial class MarkHandled<TEntity>(
     IDbContext dbContext,
@@ -37,8 +34,7 @@ internal sealed partial class MarkHandled<TEntity>(
     /// </returns>
     internal async Task<bool> ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
-        // clock_timestamp() rather than an instant from here, so that the one column an operator reads to
-        // reconstruct what happened is on the same clock as every other instant in the table
+        // clock_timestamp(), so this column is on the same clock as every other instant in the table
         var sql = $"""
             UPDATE {TEntity.TableName}
             SET processed_at = clock_timestamp()
@@ -52,9 +48,7 @@ internal sealed partial class MarkHandled<TEntity>(
             new("lease", message.VisibleAt),
         ];
 
-        // S2077: the only value interpolated into the statement is TEntity.TableName, a compile-time
-        // constant on the entity type rather than anything a caller supplies (see ADR 0005). Every runtime
-        // value below is a parameter.
+        // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
 #pragma warning disable S2077 // Formatting SQL queries is security-sensitive
         var rows = await dbContext.Database
             .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
@@ -70,10 +64,8 @@ internal sealed partial class MarkHandled<TEntity>(
         return false;
     }
 
-    // A warning rather than an exception: the Lease expired, another worker has since claimed the message,
-    // and this worker's completion is simply discarded. Nothing is wrong with the system - it is how
-    // at-least-once delivery is bounded - but it means an effect was carried out twice, which an operator
-    // wants to see the rate of.
+    // A warning rather than an exception: nothing is wrong with the system, but the effect was carried
+    // out twice, which an operator wants to see the rate of.
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,

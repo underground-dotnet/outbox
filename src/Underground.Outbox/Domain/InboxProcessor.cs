@@ -32,11 +32,8 @@ internal sealed class InboxProcessor(
 
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
 
-            // remove tracked entities to avoid memory leaks
             dbContext.ChangeTracker.Clear();
 
-            // a failed message has been pushed out of sight by the backoff, so reporting the claim rather
-            // than the outcome cannot spin: the next claim looks past it, at some other Group's Head
             return ClaimResult.HeadClaimed;
         }
     }

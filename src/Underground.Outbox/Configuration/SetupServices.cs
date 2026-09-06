@@ -27,8 +27,7 @@ public static class SetupServices
         services.AddScoped<IOutbox, OutboxImpl>();
         services.AddScoped<ClaimHead<OutboxMessage>, ClaimOutboxHead>();
 
-        // the outbox dispatches with no transaction open, so its chain leaves the savepoint out and its
-        // outer loop is the three-transaction one
+        // no transaction open during dispatch: no savepoint, and the three-transaction outer loop
         services.AddScoped(MessageChainFactory.CreateOutbox);
         services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
 
@@ -50,7 +49,7 @@ public static class SetupServices
         services.AddScoped<IInbox, InboxImpl>();
         services.AddScoped<ClaimHead<InboxMessage>, ClaimInboxHead>();
 
-        // one transaction spans the claim, the Handler and the outcome, so the inbox keeps the savepoint
+        // one transaction spans claim, Handler and outcome, so the inbox keeps the savepoint
         services.AddScoped<SavepointStage<InboxMessage>>();
         services.AddScoped(MessageChainFactory.CreateInbox);
         services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
@@ -66,7 +65,6 @@ public static class SetupServices
     {
         services.AddSingleton(serviceConfig);
 
-        // register all assigned handlers
         services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
 
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
@@ -76,9 +74,8 @@ public static class SetupServices
         services.AddScoped<ScheduleRetry<TEntity>>();
         services.AddScoped<MarkHandled<TEntity>>();
 
-        // the per-message stages, shared by the inbox and the outbox. They are registered individually
-        // but only ever composed by the factory, which owns the order between them - and which side gets
-        // which of them.
+        // per-message stages, registered individually but only ever composed by the factory, which owns
+        // the order between them
         services.AddScoped<LogMessageStage<TEntity>>();
         services.AddScoped<RecordSuccessStage<TEntity>>();
         services.AddScoped<RecordFailureStage<TEntity>>();

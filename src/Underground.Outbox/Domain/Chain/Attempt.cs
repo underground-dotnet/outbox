@@ -1,14 +1,12 @@
 namespace Underground.Outbox.Domain.Chain;
 
 /// <summary>
-/// What became of one run of the Chain against one Head, passed back out through the Stages. It is a
-/// summary of what has already been recorded rather than the means of recording it: a Handler that fails
-/// still fails by throwing, and by the time any Stage reads an Attempt the exception has been dealt with.
+/// What became of one run of the Chain against one Head, passed back out through the Stages. A summary of
+/// what has already been recorded, not the means of recording it.
 /// </summary>
 /// <remarks>
-/// The constructor is private because two of the four field combinations are nonsense - a
-/// <see cref="AttemptStatus.Handled"/> attempt with a failure, a <see cref="AttemptStatus.FailureRecorded"/>
-/// one without. The factories below are the only shapes that exist.
+/// The constructor is private because two of the four field combinations are nonsense; the factories
+/// below are the only shapes that exist.
 /// </remarks>
 internal sealed record Attempt
 {
@@ -24,7 +22,7 @@ internal sealed record Attempt
     public AttemptStatus Status { get; }
 
     /// <summary>
-    /// What the Handler threw, where it threw at all. Null on <see cref="AttemptStatus.Handled"/>, and on a
+    /// What the Handler threw, if it threw. Null on <see cref="AttemptStatus.Handled"/>, and on a
     /// <see cref="AttemptStatus.LeaseLost"/> that happened at completion rather than after a failure.
     /// </summary>
     public Exception? Failure { get; }
@@ -43,9 +41,8 @@ internal sealed record Attempt
     /// This worker no longer holds the message, so nothing it did was recorded.
     /// </summary>
     /// <param name="failure">
-    /// What the Handler threw, if it threw. A failure here means an attempt was discarded; no failure means
-    /// the Handler succeeded and the completion write was the one that came too late, and so that the
-    /// effect has been carried out twice.
+    /// What the Handler threw, if it threw. No failure means the Handler succeeded and the completion write
+    /// came too late, so the effect has been carried out twice.
     /// </param>
     public static Attempt LeaseLost(Exception? failure) => new(AttemptStatus.LeaseLost, failure);
 }
