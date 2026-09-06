@@ -46,12 +46,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     /// claim are what keep two workers off the same Group.
     /// </summary>
     /// <returns>
-    /// A boolean indicating whether a message was claimed, and with it whether it is worth calling again
-    /// right away. It is <c>false</c> when no Group offered anything - because nothing is unhandled, because
-    /// every candidate Head is not yet visible, or because other workers hold the ones that are - and also
-    /// when the claim itself failed, which is logged rather than thrown so that a worker survives it.
+    /// Whether a message was claimed, and with it whether it is worth calling again right away. It is
+    /// <see cref="ClaimResult.NothingOffered"/> when no Group offered anything - because nothing is
+    /// unhandled, because every candidate Head is not yet visible, or because other workers hold the ones
+    /// that are - and also when the claim itself failed, which is logged rather than thrown so that a worker
+    /// survives it.
     /// </returns>
-    internal async Task<bool> ProcessNextAsync(CancellationToken cancellationToken)
+    internal async Task<ClaimResult> ProcessNextAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -67,7 +68,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
 
             // treat a failed claim as no work rather than as a reason to try again immediately, so that a
             // database that is refusing connections is not hammered in a tight loop
-            return false;
+            return ClaimResult.NothingOffered;
         }
     }
 
@@ -77,7 +78,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             // ProcessNextAsync reports anything short of a cancellation as "no work", so a worker keeps
             // serving itself across a failure rather than dying and leaving the pool one short
-            if (!await ProcessNextAsync(cancellationToken).ConfigureAwait(false))
+            if (await ProcessNextAsync(cancellationToken).ConfigureAwait(false) != ClaimResult.HeadClaimed)
             {
                 await _workSignal
                     .WaitAsync(TimeSpan.FromMilliseconds(_config.ProcessingDelayMilliseconds), cancellationToken)

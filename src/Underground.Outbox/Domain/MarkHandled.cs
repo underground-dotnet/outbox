@@ -14,7 +14,9 @@ namespace Underground.Outbox.Domain;
 /// <remarks>
 /// The write is guarded on the Lease instant the claim granted, so a worker that overran cannot mark a
 /// message some other worker now owns. Matching no row is reported and not thrown: the effect has already
-/// happened and there is nothing for a caller to recover, which is why this write reports nothing back.
+/// happened and there is nothing for a caller to recover. The answer is still worth returning, because it
+/// is the one case in which an effect has certainly been carried out twice, and
+/// <see cref="Chain.RecordSuccessStage{TEntity}"/> puts it on the Attempt for the outcome log to report.
 /// On the inbox the guard is trivially satisfied - the row is locked for the whole transaction, so nothing
 /// can have moved its visibility instant - and a predicate that is always true is cheaper than giving each
 /// side its own write path.
@@ -29,7 +31,11 @@ internal sealed partial class MarkHandled<TEntity>(
     /// <summary>
     /// Marks the message handled, if this worker still holds it.
     /// </summary>
-    internal async Task ExecuteAsync(TEntity message, CancellationToken cancellationToken)
+    /// <returns>
+    /// Whether the write landed. <c>false</c> means the Lease was lost - the message is now some other
+    /// worker's, which will dispatch it again - and the loss has been logged.
+    /// </returns>
+    internal async Task<bool> ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
         // clock_timestamp() rather than an instant from here, so that the one column an operator reads to
         // reconstruct what happened is on the same clock as every other instant in the table
@@ -55,10 +61,13 @@ internal sealed partial class MarkHandled<TEntity>(
             .ConfigureAwait(false);
 #pragma warning restore S2077
 
-        if (rows == 0)
+        if (rows != 0)
         {
-            LogLeaseLost(message.Id);
+            return true;
         }
+
+        LogLeaseLost(message.Id);
+        return false;
     }
 
     // A warning rather than an exception: the Lease expired, another worker has since claimed the message,

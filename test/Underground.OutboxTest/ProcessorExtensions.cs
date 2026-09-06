@@ -31,7 +31,7 @@ public static class ProcessorExtensions
         /// </summary>
         internal async Task ProcessUntilIdleAsync(CancellationToken cancellationToken)
         {
-            while (await processor.ProcessNextAsync(cancellationToken))
+            while (await processor.ProcessNextAsync(cancellationToken) == ClaimResult.HeadClaimed)
             {
                 // keep going until nothing is left to claim
             }

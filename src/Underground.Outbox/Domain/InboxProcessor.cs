@@ -17,7 +17,7 @@ internal sealed class InboxProcessor(
     MessageChain<InboxMessage> chain
 ) : IProcessor<InboxMessage>
 {
-    public async Task<bool> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<ClaimResult> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using (transaction.ConfigureAwait(false))
@@ -25,7 +25,7 @@ internal sealed class InboxProcessor(
             var message = await claimHead.ExecuteAsync(cancellationToken).ConfigureAwait(false);
             if (message is null)
             {
-                return false;
+                return ClaimResult.NothingOffered;
             }
 
             await chain.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
@@ -37,7 +37,7 @@ internal sealed class InboxProcessor(
 
             // a failed message has been pushed out of sight by the backoff, so reporting the claim rather
             // than the outcome cannot spin: the next claim looks past it, at some other Group's Head
-            return true;
+            return ClaimResult.HeadClaimed;
         }
     }
 }

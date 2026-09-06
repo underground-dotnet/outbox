@@ -21,7 +21,7 @@ namespace Underground.Outbox.Domain.Chain;
 /// </remarks>
 internal sealed class TimeoutStage<TEntity>(ServiceConfiguration<TEntity> config) : IMessageStage<TEntity> where TEntity : class, IMessage
 {
-    public async Task<bool> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(config.HandlerTimeout);

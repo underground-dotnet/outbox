@@ -17,7 +17,7 @@ namespace Underground.Outbox.Domain.Chain;
 /// </remarks>
 internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageStage<TEntity> where TEntity : class, IMessage
 {
-    public async Task<bool> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
     {
         // the factory only places this stage on a side that holds a transaction across the dispatch
         var transaction = dbContext.Database.CurrentTransaction!;
@@ -27,10 +27,10 @@ internal sealed class SavepointStage<TEntity>(IDbContext dbContext) : IMessageSt
 
         try
         {
-            var handled = await next(cancellationToken).ConfigureAwait(false);
+            var attempt = await next(cancellationToken).ConfigureAwait(false);
             await transaction.ReleaseSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
 
-            return handled;
+            return attempt;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

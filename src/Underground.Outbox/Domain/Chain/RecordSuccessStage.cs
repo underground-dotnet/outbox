@@ -11,22 +11,27 @@ namespace Underground.Outbox.Domain.Chain;
 /// </summary>
 /// <remarks>
 /// Where this stage sits, and why, is on <see cref="MessageChainFactory"/> with the rest of the order. It
-/// consumes the <c>bool</c> the stages pass back out, which is the only thing that reads it - which is why
-/// <see cref="MessageChain{TEntity}"/> reports nothing to its caller.
+/// stands aside for any <see cref="Attempt"/> other than <see cref="AttemptStatus.Handled"/>, because a
+/// stage below has already recorded that outcome - which is why <see cref="MessageChain{TEntity}"/> reports
+/// nothing to its caller.
 /// </remarks>
 internal sealed class RecordSuccessStage<TEntity>(MarkHandled<TEntity> markHandled) : IMessageStage<TEntity> where TEntity : class, IMessage
 {
-    public async Task<bool> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
+    public async Task<Attempt> ExecuteAsync(TEntity message, IServiceScope scope, HandleMessageStep next, CancellationToken cancellationToken)
     {
-        var handled = await next(cancellationToken).ConfigureAwait(false);
+        var attempt = await next(cancellationToken).ConfigureAwait(false);
 
-        if (handled)
+        if (attempt.Status != AttemptStatus.Handled)
         {
-            // a lost Lease here is a warning rather than a failure: the effect really did happen, and the
-            // message is simply no longer ours to mark
-            await markHandled.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
+            return attempt;
         }
 
-        return handled;
+        var stillOurs = await markHandled.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
+
+        // a lost Lease here is not a failure: the effect really did happen, and the message is simply no
+        // longer ours to mark. It is reported rather than swallowed because it is the one case in which an
+        // effect has certainly been carried out twice - some other worker owns the message and will dispatch
+        // it again - and that is what an operator wants to see the rate of.
+        return stillOurs ? attempt : Attempt.LeaseLost(failure: null);
     }
 }

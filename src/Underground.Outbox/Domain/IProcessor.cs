@@ -31,8 +31,8 @@ internal interface IProcessor<TEntity> where TEntity : class, IMessage
     /// </summary>
     /// <returns>
     /// Whether a message was claimed, and with it whether it is worth calling again right away. A message
-    /// that was claimed and then failed still counts as claimed; it is <c>false</c> only when no Group
-    /// offered anything.
+    /// that was claimed and then failed still counts as claimed; it is
+    /// <see cref="ClaimResult.NothingOffered"/> only when no Group offered anything.
     /// </returns>
-    Task<bool> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken);
+    Task<ClaimResult> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken);
 }

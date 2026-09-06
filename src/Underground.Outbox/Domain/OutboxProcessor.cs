@@ -25,7 +25,7 @@ internal sealed class OutboxProcessor(
     MessageChain<OutboxMessage> chain
 ) : IProcessor<OutboxMessage>
 {
-    public async Task<bool> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<ClaimResult> ProcessHeadAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
         OutboxMessage? message;
 
@@ -35,7 +35,7 @@ internal sealed class OutboxProcessor(
             message = await claimHead.ExecuteAsync(cancellationToken).ConfigureAwait(false);
             if (message is null)
             {
-                return false;
+                return ClaimResult.NothingOffered;
             }
 
             // the Lease only exists once this commits: until then the row is merely locked, and a worker
@@ -52,6 +52,6 @@ internal sealed class OutboxProcessor(
 
         // a failed message has been pushed out of sight by the backoff, so reporting the claim rather
         // than the outcome cannot spin: the next claim looks past it, at some other Group's Head
-        return true;
+        return ClaimResult.HeadClaimed;
     }
 }

@@ -52,6 +52,12 @@ Application-supplied code that carries out the effect of one message. Never invo
 for two messages of the same group.
 _Avoid_: Consumer, subscriber, listener
 
+**Attempt**:
+One run of the work done to a single claimed Head, and what became of it: handled, a failure recorded
+against the message, or the discovery that the Lease was lost and nothing this worker did counted. A
+message accumulates one Attempt per time it is offered, which is what `RetryCount` counts.
+_Avoid_: Context, envelope, result, outcome
+
 **Partition**:
 Reserved for PostgreSQL declarative table partitioning only. Never used for the logical grouping
 that governs ordering and concurrency — that is a Group.
