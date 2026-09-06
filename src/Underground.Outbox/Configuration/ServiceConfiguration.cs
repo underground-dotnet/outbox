@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Configuration.HandlerRegistrations;
 using Underground.Outbox.Configuration.Policies;
@@ -79,47 +81,51 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
         Policies = new PolicyBuilder<TEntity>(GlobalPolicies);
     }
 
+    // the "argument" here is a configuration property of this instance rather than a parameter of
+    // Validate, so both analyzers see a paramName they cannot match against a parameter list
+    [SuppressMessage("Meziantou.Analyzer", "MA0015:Specify the parameter name in ArgumentException", Justification = "paramName names the offending configuration property")]
+    [SuppressMessage("Major Code Smell", "S3928:Parameter names used into ArgumentException constructors should match an existing one ", Justification = "paramName names the offending configuration property")]
     internal void Validate()
     {
         if (MaxConcurrentGroups <= 0)
         {
-            throw new ArgumentOutOfRangeException($"MaxConcurrentGroups ({MaxConcurrentGroups}) must be greater than 0.");
+            throw new ArgumentOutOfRangeException(nameof(MaxConcurrentGroups), MaxConcurrentGroups, "Must be greater than 0.");
         }
 
         if (ProcessingDelayMilliseconds <= 0)
         {
-            throw new ArgumentOutOfRangeException($"ProcessingDelayMilliseconds ({ProcessingDelayMilliseconds}) must be greater than 0.");
+            throw new ArgumentOutOfRangeException(nameof(ProcessingDelayMilliseconds), ProcessingDelayMilliseconds, "Must be greater than 0.");
         }
 
         if (HandlerTimeout <= TimeSpan.Zero)
         {
-            throw new ArgumentOutOfRangeException($"HandlerTimeout ({HandlerTimeout}) must be greater than zero.");
+            throw new ArgumentOutOfRangeException(nameof(HandlerTimeout), HandlerTimeout, "Must be greater than zero.");
         }
 
         if (BackoffBase <= TimeSpan.Zero)
         {
-            throw new ArgumentOutOfRangeException($"BackoffBase ({BackoffBase}) must be greater than zero.");
+            throw new ArgumentOutOfRangeException(nameof(BackoffBase), BackoffBase, "Must be greater than zero.");
         }
 
         if (MaxBackoff < BackoffBase)
         {
-            throw new ArgumentOutOfRangeException($"MaxBackoff ({MaxBackoff}) cannot be shorter than BackoffBase ({BackoffBase}).");
+            throw new ArgumentOutOfRangeException(nameof(MaxBackoff), MaxBackoff, $"Cannot be shorter than BackoffBase ({BackoffBase}).");
         }
 
         // a jitter of 1 or more could produce a zero or negative delay, which would retry immediately
         if (BackoffJitter is < 0 or >= 1)
         {
-            throw new ArgumentOutOfRangeException($"BackoffJitter ({BackoffJitter}) must be at least 0 and less than 1.");
+            throw new ArgumentOutOfRangeException(nameof(BackoffJitter), BackoffJitter, "Must be at least 0 and less than 1.");
         }
 
         if (CompletedMessageRetention < TimeSpan.Zero)
         {
-            throw new ArgumentOutOfRangeException($"CompletedMessageRetention ({CompletedMessageRetention}) cannot be negative.");
+            throw new ArgumentOutOfRangeException(nameof(CompletedMessageRetention), CompletedMessageRetention, "Cannot be negative.");
         }
 
         if (CleanupDelaySeconds <= 0)
         {
-            throw new ArgumentOutOfRangeException($"CleanupDelaySeconds ({CleanupDelaySeconds}) must be greater than 0.");
+            throw new ArgumentOutOfRangeException(nameof(CleanupDelaySeconds), CleanupDelaySeconds, "Must be greater than 0.");
         }
     }
 }

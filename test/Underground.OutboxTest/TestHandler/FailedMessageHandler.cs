@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Data;
 
 using Underground.Outbox;
@@ -7,11 +8,11 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class FailedMessageHandler : IOutboxMessageHandler<FailedMessage>
 {
-    public static IList<FailedMessage> CalledWith { get; set; } = [];
+    public static ConcurrentQueue<FailedMessage> CalledWith { get; } = new();
 
     public Task HandleAsync(FailedMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        CalledWith.Add(message);
+        CalledWith.Enqueue(message);
         throw new DataException("Failed to handle message");
     }
 }
