@@ -4,6 +4,11 @@ using Underground.Outbox;
 
 [assembly: CaptureConsole]
 
+// Every test shares one Postgres instance and pg_snapshot_xmin is cluster-wide, so an open write
+// transaction in one test withholds messages from every other test (ADR 0002). Stated here rather than
+// only in xunit.runner.json, where a typo silently costs the whole file and with it this guarantee.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace Underground.OutboxTest;
 
 /// <summary>Gives every test its own database on the assembly's shared Postgres instance.</summary>
