@@ -11,8 +11,10 @@ namespace Underground.Outbox.Domain.Middleware;
 /// <remarks>
 /// <para>The order, outermost first, and why:</para>
 /// <list type="bullet">
-/// <item><see cref="LogMessageMiddleware{TEntity}"/> outermost, so the message is announced whatever becomes
-/// of it.</item>
+/// <item><see cref="TraceMessageMiddleware{TEntity}"/> outermost, so the log lines and the database spans
+/// the rest of the pipeline emits fall inside the span.</item>
+/// <item><see cref="LogMessageMiddleware{TEntity}"/> next, so the message is announced whatever becomes
+/// of it, on a line carrying the trace id.</item>
 /// <item><see cref="RecordSuccessMiddleware{TEntity}"/> outside <see cref="RecordFailureMiddleware{TEntity}"/>, so
 /// it stands aside for a recorded failure instead of having its own completion write turned into a
 /// retry.</item>
@@ -33,6 +35,7 @@ internal static class MessagePipelineFactory
     internal static MessagePipeline<InboxMessage> CreateInbox(IServiceProvider services)
         => new(
             [
+                services.GetRequiredService<TraceMessageMiddleware<InboxMessage>>(),
                 services.GetRequiredService<LogMessageMiddleware<InboxMessage>>(),
                 services.GetRequiredService<RecordSuccessMiddleware<InboxMessage>>(),
                 services.GetRequiredService<RecordFailureMiddleware<InboxMessage>>(),
@@ -48,6 +51,7 @@ internal static class MessagePipelineFactory
     internal static MessagePipeline<OutboxMessage> CreateOutbox(IServiceProvider services)
         => new(
             [
+                services.GetRequiredService<TraceMessageMiddleware<OutboxMessage>>(),
                 services.GetRequiredService<LogMessageMiddleware<OutboxMessage>>(),
                 services.GetRequiredService<RecordSuccessMiddleware<OutboxMessage>>(),
                 services.GetRequiredService<RecordFailureMiddleware<OutboxMessage>>(),

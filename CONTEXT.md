@@ -86,7 +86,18 @@ _Avoid_: Attempt *(alone — an attempt at what?)*, context, envelope, result, o
 
 **Partition**:
 Reserved for PostgreSQL declarative table partitioning only. Never used for the logical grouping
-that governs ordering and concurrency — that is a Group.
+that governs ordering and concurrency — that is a Group. The prohibition is on our own prose and
+code; the one exception is at the wire, where a Group is emitted as OpenTelemetry's
+`messaging.destination.partition.id`, because that is the attribute the semantic conventions define
+for it. Deliberate, not an oversight.
+
+**Creation Context**:
+The trace context of the transaction that wrote a message, carried on the row so the worker that later
+handles it continues the same trace instead of starting a new one. Written when the message is added and
+never afterwards; a message written while nothing was tracing has none, and is handled under a trace of
+its own.
+_Avoid_: traceparent *(that is its encoding, and the column it lives in)*, correlation id, span context,
+trace id *(only one half of it)*
 
 **Middleware**:
 One concern in the Processing of a single message — logging it, recording a failed attempt,

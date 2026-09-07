@@ -10,8 +10,9 @@ namespace Underground.Outbox.Domain.Middleware;
 /// attributable, and reports what became of it on the way back out.
 /// </summary>
 /// <remarks>
-/// Outermost, so an inbound line with no outbound line is a signal in its own right: the application went
-/// down mid-attempt and nothing about that message was recorded.
+/// Inside <see cref="TraceMessageMiddleware{TEntity}"/> and outside everything else, so an inbound line with
+/// no outbound line is a signal in its own right: the application went down mid-attempt and nothing about
+/// that message was recorded.
 /// </remarks>
 internal sealed partial class LogMessageMiddleware<TEntity>(
     ILogger<LogMessageMiddleware<TEntity>> logger

@@ -32,4 +32,10 @@ public interface IMessage
     public DateTime VisibleAt { get; }
 
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>
+    /// The W3C <c>traceparent</c> of the transaction that wrote this message, so the worker that later
+    /// handles it continues the same trace. Null when nothing was tracing at the time.
+    /// </summary>
+    public string? TraceParent { get; }
 }

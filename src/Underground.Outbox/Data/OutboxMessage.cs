@@ -53,6 +53,14 @@ public class OutboxMessage : IMessage
     [Column("completed_at")]
     public DateTime? CompletedAt { get; set; }
 
+    /// <summary>
+    /// The W3C <c>traceparent</c> of the transaction that wrote this message. Set by
+    /// <see cref="IOutbox.AddMessageAsync"/> and its siblings from the ambient <see cref="System.Diagnostics.Activity"/>;
+    /// null when nothing was tracing.
+    /// </summary>
+    [Column("traceparent")]
+    public string? TraceParent { get; internal set; }
+
     internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
         Id = id;

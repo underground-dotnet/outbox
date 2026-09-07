@@ -62,6 +62,7 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 - **Retry backoff**: failed messages are retried with an exponential, jittered delay computed by the database.
 - **Bounded handler runtime**: every handler is cancelled once `HandlerTimeout` elapses, so a hung external call cannot occupy a worker for good.
 - **Retention cleanup**: completed messages are deleted automatically after a configurable retention period.
+- **Distributed tracing**: each message is handled inside an OpenTelemetry `process` span that continues the trace of the transaction that wrote it.
 - **Source generation**: avoids runtime reflection for handler dispatch and DI wiring.
 
 ## Requirements
@@ -143,6 +144,8 @@ await outbox.AddMessageAsync(
 await transaction.CommitAsync();
 ```
 
+Use `AddMessageAsync` / `AddMessagesAsync` rather than tracking the entity yourself. Adding an `OutboxMessage` straight to the `DbSet` still works and is still processed, but it skips the trace-context capture below, so the message is handled in a trace of its own.
+
 To schedule a message instead of delivering it as soon as possible, pass `visibleAt`:
 
 ```csharp
@@ -169,6 +172,7 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `RetryCount` | Number of failed processing attempts. |
 | `VisibleAt` | The instant from which the message may be handled. Defaulted by the database to the present, pushed into the future by the retry backoff, and — on the outbox — set to the lease expiry while a worker holds the message. |
 | `CompletedAt` | Null until the message is completed successfully. |
+| `TraceParent` | The W3C trace context of the transaction that wrote the message, so handling it continues the same trace. Null when nothing was tracing. |
 
 Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
 
@@ -211,6 +215,51 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 ```
 
 With that registration in place, a successful `transaction.CommitAsync()` call will trigger `IOutbox.ProcessMessages()` and/or `IInbox.ProcessMessages()` when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work.
+
+## Tracing
+
+Handling a message emits one OpenTelemetry span per attempt. Subscribe to it by name:
+
+```csharp
+builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
+    .AddSource(OutboxTelemetry.ActivitySourceName)   // "Underground.Outbox"
+    .AddNpgsql());                                   // the statements underneath, if you want them
+```
+
+Nothing is emitted until something subscribes: the library uses `System.Diagnostics.ActivitySource` and takes no dependency on the OpenTelemetry packages.
+
+`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0006](docs/adr/0006-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
+
+The span is named `process outbox` / `process inbox`, is a `Consumer` span, and carries:
+
+| Attribute | Value |
+|-----------|-------|
+| `messaging.system` | `underground_outbox` |
+| `messaging.operation.name`, `messaging.operation.type` | `process` |
+| `messaging.destination.name` | `outbox` or `inbox` |
+| `messaging.destination.partition.id` | The message's `GroupKey` |
+| `messaging.message.id` | The message's `EventId` |
+| `underground.outbox.message.type` | The message's `Type` |
+| `underground.outbox.retry_count` | The attempt number |
+| `error.type` | Only on failure — see below |
+
+A successful attempt leaves the span's status unset. A failed one sets `Error` and records the exception, with `error.type` naming the exception type. Two failures are the library's own rather than a handler's:
+
+- `lease_lost` — the handler threw, and by the time the failure was written the lease had expired, so nothing was recorded and another worker already has the message.
+- `duplicate_delivery` — the handler *succeeded* and the completion write came too late. The effect has been carried out and will be carried out again. This is the one span worth alerting on.
+
+Shutdown mid-attempt is not an error: the span closes with its status unset.
+
+### Migration
+
+`traceparent` is a new nullable column on both tables, so upgrading needs an EF migration:
+
+```bash
+dotnet ef migrations add AddTraceParentToInboxAndOutbox
+dotnet ef database update
+```
+
+Existing rows keep a null and are handled exactly as before.
 
 ## Choosing group keys
 
