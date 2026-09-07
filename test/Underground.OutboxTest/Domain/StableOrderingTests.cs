@@ -30,7 +30,7 @@ public class StableOrderingTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
 
-        serviceCollection.AddBaseServices(Container, testOutputHelper);
+        serviceCollection.AddBaseServices(Database, testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 

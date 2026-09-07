@@ -34,7 +34,7 @@ public class ProcessorTests : DatabaseTest
             cfg.AddHandler<MultipleMessagesHandler, MultiMessageB>();
         });
 
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
 

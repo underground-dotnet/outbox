@@ -15,11 +15,9 @@ public class AddMessageToOutboxTests : DatabaseTest
 
     public AddMessageToOutboxTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, testOutputHelper);
+        serviceCollection.AddBaseServices(Database, testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg => { });
 

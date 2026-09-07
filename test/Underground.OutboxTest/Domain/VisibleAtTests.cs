@@ -152,7 +152,7 @@ public class VisibleAtTests : DatabaseTest
     {
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddOutboxServices<TestDbContext>(configure);
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();
     }

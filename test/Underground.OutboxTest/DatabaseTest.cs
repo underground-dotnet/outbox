@@ -1,28 +1,38 @@
 using Microsoft.Extensions.Logging;
 
-using Testcontainers.PostgreSql;
-using Testcontainers.Xunit;
-
 using Underground.Outbox;
 
 [assembly: CaptureConsole]
 
 namespace Underground.OutboxTest;
 
-public partial class DatabaseTest(ITestOutputHelper testOutputHelper) : ContainerTest<PostgreSqlBuilder, PostgreSqlContainer>(testOutputHelper)
+/// <summary>Gives every test its own database on the assembly's shared Postgres instance.</summary>
+public partial class DatabaseTest : IAsyncDisposable
 {
-    private readonly ILoggerFactory _loggerFactory = LoggerFactory.Create(builder => builder.ConfigureTestLogger(testOutputHelper));
+    private readonly ILoggerFactory _loggerFactory;
 
-    protected override PostgreSqlBuilder Configure()
+    /// <summary>Creates the test's database.</summary>
+    public DatabaseTest(ITestOutputHelper testOutputHelper)
     {
-        return new PostgreSqlBuilder("postgres:18.1").WithLogger(_loggerFactory.CreateLogger<PostgreSqlContainer>());
+        _loggerFactory = LoggerFactory.Create(builder => builder.ConfigureTestLogger(testOutputHelper));
+
+        // Blocking, because xUnit constructs the test class before IAsyncLifetime runs and several tests build
+        // their service provider in their own constructor. Copying the template takes milliseconds.
+        Database = PostgresFixture.Current.CreateDatabaseAsync(_loggerFactory).GetAwaiter().GetResult();
     }
 
-    // used only through direct access in the tests. We could also just get it from the service provider.
-    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor? interceptor = null)
+    /// <summary>The database this test owns.</summary>
+    public TestDatabase Database { get; }
+
+    /// <summary>Opens a context on this test's database. Also resolvable from the service provider.</summary>
+    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor? interceptor = null) =>
+        Database.CreateDbContext(interceptor);
+
+    /// <summary>Drops the test's database.</summary>
+    public async ValueTask DisposeAsync()
     {
-        var dbContext = new TestDbContext(Container, _loggerFactory, interceptor);
-        dbContext.Database.EnsureCreated();
-        return dbContext;
+        await Database.DisposeAsync();
+        _loggerFactory.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

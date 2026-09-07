@@ -23,7 +23,6 @@ dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTes
   Snapshots live in `Snapshots/` as `<Class>.<Test>#<GeneratedFile>.g.verified.cs`. A diff fails the
   test and writes a `.received.cs` next to it; accept by replacing the `.verified.cs` with it.
 - `test/Underground.OutboxTest` — integration tests on Testcontainers Postgres. **Requires Docker**
-  and takes ~3 min. Use `--project` on the generator tests for a fast inner loop.
 
 ## Conventions
 

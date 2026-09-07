@@ -20,14 +20,12 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 
     public ProcessMessagesOnSaveChangesInterceptorTests(ITestOutputHelper testOutputHelper) : base(testOutputHelper)
     {
-        Container.StartAsync(CancellationToken.None).GetAwaiter().GetResult();
-
         _testOutputHelper = testOutputHelper;
         ExampleMessageHandler.CalledWith.Clear();
         ExampleMessageHandler.ObjectIds.Clear();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddBaseServices(Container, _testOutputHelper);
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
@@ -81,7 +79,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     /// A context and an interceptor wired to recorders rather than to the real processors, so a test reads
     /// the notifications a commit produced instead of waiting for a background service to act on them.
     /// </summary>
-    private async Task<(InboxOutboxDbContext Context, RecordingProcessor Outbox, RecordingProcessor Inbox)> CreateRecordingContextAsync(CancellationToken cancellationToken)
+    private (InboxOutboxDbContext Context, RecordingProcessor Outbox, RecordingProcessor Inbox) CreateRecordingContext()
     {
         var outbox = new RecordingProcessor();
         var inbox = new RecordingProcessor();
@@ -95,12 +93,11 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
             NullLogger<ProcessMessagesOnSaveChangesInterceptor>.Instance);
 
         var options = new DbContextOptionsBuilder<InboxOutboxDbContext>()
-            .UseNpgsql(Container.GetConnectionString())
+            .UseNpgsql(Database.ConnectionString)
             .AddInterceptors(interceptor)
             .Options;
 
         var context = new InboxOutboxDbContext(options);
-        await context.Database.EnsureCreatedAsync(cancellationToken);
 
         return (context, outbox, inbox);
     }
@@ -114,7 +111,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var (context, outbox, inbox) = await CreateRecordingContextAsync(cancellationToken);
+        var (context, outbox, inbox) = CreateRecordingContext();
         await using var _ = context.ConfigureAwait(false);
 
         var rolledBack = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -144,7 +141,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var (context, outbox, inbox) = await CreateRecordingContextAsync(cancellationToken);
+        var (context, outbox, inbox) = CreateRecordingContext();
         await using var _ = context.ConfigureAwait(false);
 
         // Act
@@ -170,7 +167,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var (context, outbox, inbox) = await CreateRecordingContextAsync(cancellationToken);
+        var (context, outbox, inbox) = CreateRecordingContext();
         await using var _ = context.ConfigureAwait(false);
 
         // Act
