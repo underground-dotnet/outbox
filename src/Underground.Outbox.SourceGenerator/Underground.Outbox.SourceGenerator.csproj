@@ -1,7 +1,17 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Underground.Outbox.SourceGenerator</PackageId>
+    <Title>Underground.Outbox.SourceGenerator</Title>
+    <Authors>Nils</Authors>
+    <Description>Roslyn source generator for Underground.Outbox.</Description>
+    <PackageTags>dotnet;outbox;sourcegenerator</PackageTags>
+    <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
+    <PackageReadmeFile>package.readme.md</PackageReadmeFile>
     <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- The package ships only analyzers/dotnet/cs, so there is no lib/ folder for the
+         netstandard2.0 dependency group to match: dropping the group avoids NU5128. -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <LangVersion>Latest</LangVersion>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
   </PropertyGroup>
@@ -15,5 +25,6 @@
   <ItemGroup>
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true"
         PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)package.readme.md" Pack="true" PackagePath="" />
   </ItemGroup>
 </Project>
