@@ -12,9 +12,10 @@ idempotent, because the effect cannot be rolled back with the database.
 _Avoid_: Event, publication, outgoing message
 
 **Inbox Message**:
-A record of an externally-originated event to be applied *to* this database. Its handler runs in
-the same transaction as the bookkeeping that records the message as handled, so it is applied
-**exactly once**.
+A record of an externally-originated event to be applied *to* this database. Its Handler runs in the
+same transaction as the bookkeeping that records the message as handled, so its effect on this
+database lands **exactly once**. The Handler itself may be *run* again if that transaction is
+replayed, which is why an inbox Handler's effects must not leave it.
 _Avoid_: Incoming message, consumed event
 
 **Group**:
@@ -83,6 +84,13 @@ Completed, a failure recorded against it, or the discovery that the Lease was lo
 this worker did counted. A message accumulates one Processing Attempt per time it is offered,
 which is what `RetryCount` counts.
 _Avoid_: Attempt *(alone — an attempt at what?)*, context, envelope, result, outcome
+
+**Execution Strategy**:
+The host's policy for retrying a database operation that failed transiently, configured on the
+`DbContext` and owned by the application rather than by this library. It decides what a replay
+costs: the outbox replays only its Claim, the inbox replays a whole Processing Attempt.
+_Avoid_: Retry policy *(`RetryCount` and the backoff are this library's own retry, which survives a
+process restart and is a different thing)*, resiliency
 
 **Partition**:
 Reserved for PostgreSQL declarative table partitioning only. Never used for the logical grouping

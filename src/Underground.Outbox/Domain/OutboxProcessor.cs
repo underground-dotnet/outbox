@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -23,19 +22,18 @@ internal sealed class OutboxProcessor(
 {
     public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
-        OutboxMessage? message;
+        // .net aspire compatability
+        // Only the claim is wrapped: the dispatch and the outcome write open no transaction of their own,
+        // and replaying them from here would replay the Handler with them. What happens to a failure in
+        // them is unchanged - the Lease expires and the message is offered again. See ADR 0006.
+        // The Lease only exists once that transaction commits; until then the row is merely locked.
+        var message = await dbContext
+            .ExecuteInTransactionAsync<OutboxMessage?>(claimHeadMessage.ExecuteAsync, cancellationToken)
+            .ConfigureAwait(false);
 
-        var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using (transaction.ConfigureAwait(false))
+        if (message is null)
         {
-            message = await claimHeadMessage.ExecuteAsync(cancellationToken).ConfigureAwait(false);
-            if (message is null)
-            {
-                return ClaimResult.NothingOffered;
-            }
-
-            // the Lease only exists once this commits; until then the row is merely locked
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return ClaimResult.NothingOffered;
         }
 
         dbContext.ChangeTracker.Clear();

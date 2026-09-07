@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -25,22 +24,23 @@ internal sealed class InboxProcessor(
 {
     public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
     {
-        var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using (transaction.ConfigureAwait(false))
+        // .net aspire compatability
+        // One transaction spans the whole attempt, so the attempt is also what a transient failure
+        // replays. See ADR 0006.
+        return await dbContext.ExecuteInTransactionAsync(async ct =>
         {
-            var message = await claimHeadMessage.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+            // a replayed attempt inherits what the failed one tracked, whose transaction is gone
+            dbContext.ChangeTracker.Clear();
+
+            var message = await claimHeadMessage.ExecuteAsync(ct).ConfigureAwait(false);
             if (message is null)
             {
                 return ClaimResult.NothingOffered;
             }
 
-            await pipeline.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
-
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-
-            dbContext.ChangeTracker.Clear();
+            await pipeline.ExecuteAsync(message, scope, ct).ConfigureAwait(false);
 
             return ClaimResult.HeadMessageClaimed;
-        }
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

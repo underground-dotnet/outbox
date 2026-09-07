@@ -27,7 +27,7 @@ See [ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md
 
 A lease is time-bounded, which is what stops an instance that dies mid-delivery from blocking its group forever: the lease expires on its own and the message is offered again. The price is that a worker which died — or merely overran — after the external effect but before the completion write causes that effect to happen twice. A worker that finishes after its lease expired detects the loss, logs a warning, and discards its outcome, so the message is not fanned out any further.
 
-**Inbox delivery is exactly-once.** The handler's writes and the record that the message was handled commit in the same transaction, so either both happen or neither does.
+**Inbox delivery is exactly-once.** The handler's writes and the record that the message was handled commit in the same transaction, so either both happen or neither does. That is a guarantee about the *effect on the database*: under a retrying execution strategy the handler may be run more than once, so keep its effects inside the transaction. See [Connection retries and execution strategies](#connection-retries-and-execution-strategies).
 
 ## Ordering
 
@@ -127,6 +127,31 @@ dotnet add package Underground.Outbox.SourceGenerator
 
 Adding to the outbox requires an active database transaction. That is intentional: the outbox write must commit together with your business data.
 
+`ExecuteInTransactionAsync` opens that transaction for you, through whichever execution strategy the host configured, so the same call works with and without connection retries:
+
+```csharp
+using Underground.Outbox.Data;
+
+await dbContext.ExecuteInTransactionAsync(async ct =>
+{
+    order.Status = OrderStatus.Shipped;
+    await dbContext.SaveChangesAsync(ct);
+
+    await outbox.AddMessageAsync(
+        dbContext,
+        new OutboxMessage(
+            Guid.NewGuid(),
+            DateTime.UtcNow,
+            new ExampleMessage("Hello, World!"),
+            groupKey: "customer-123"),
+        ct);
+}, cancellationToken);
+```
+
+There is a `Func<CancellationToken, Task<T>>` overload when the work returns something. A transaction that is already open is joined rather than nested, so a method using this stays callable from inside another one.
+
+Owning the transaction yourself works too, as long as no retrying execution strategy is configured:
+
 ```csharp
 await using var transaction = await dbContext.Database.BeginTransactionAsync();
 
@@ -153,6 +178,31 @@ new OutboxMessage(
     groupKey: "customer-123",
     visibleAt: DateTime.UtcNow.AddDays(1));
 ```
+
+### Connection retries and execution strategies
+
+Aspire's `EnrichNpgsqlDbContext`, and a plain `EnableRetryOnFailure()`, configure a **retrying execution strategy**. EF then refuses to run a query or `SaveChanges` inside a transaction you began yourself — which is every way of staging an outbox message:
+
+> The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions.
+
+`ExecuteInTransactionAsync` above avoids this entirely. If you own the transaction yourself, run it through the strategy:
+
+```csharp
+var strategy = dbContext.Database.CreateExecutionStrategy();
+
+await strategy.ExecuteAsync(async () =>
+{
+    await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+    await outbox.AddMessageAsync(dbContext, message, cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+});
+```
+
+Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so stage what it needs inside it rather than before the call.
+
+The library's own processing adapts to the same strategy, and one consequence reaches your code. The inbox runs claim, handler and outcome write in a single transaction ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)), so that transaction is also its retry unit: **an inbox handler may be run more than once**, even though its effect on the database still lands exactly once — either the attempt rolled back entirely, or it committed and the replay finds the message no longer offered. Keep an inbox handler's effects inside its transaction and this costs nothing; give it an effect the transaction cannot roll back and a replay will repeat that effect. Outbox handlers are unaffected: only the claim is replayed, never the dispatch. See [ADR 0006](docs/adr/0006-adapt-to-the-host-execution-strategy.md).
 
 ## Message model
 
