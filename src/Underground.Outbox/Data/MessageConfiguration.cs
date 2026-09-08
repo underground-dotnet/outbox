@@ -5,8 +5,9 @@ namespace Underground.Outbox.Data;
 
 /// <summary>
 /// Model configuration shared by both message tables: the database-assigned
-/// <see cref="IMessage.TransactionId"/> and <see cref="IMessage.VisibleAt"/>, and the partial index that
-/// serves HeadMessage lookup. Applied automatically through <see cref="EntityTypeConfigurationAttribute"/>.
+/// <see cref="IMessage.TransactionId"/> and <see cref="IMessage.VisibleAt"/>, and the partial indexes that
+/// serve HeadMessage lookup and retention cleanup. Applied automatically through
+/// <see cref="EntityTypeConfigurationAttribute"/>.
 /// </summary>
 /// <typeparam name="TEntity">The message entity being configured.</typeparam>
 internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration<TEntity>
@@ -36,5 +37,11 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         // mapping annotations are applied; safe only because the names are fixed (ADR 0005).
         builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
             .HasFilter("\"completed_at\" IS NULL");
+
+        // Serves the retention sweep, which deletes by completed_at. Complements the index above rather than
+        // widening it: the two filters are disjoint, so together they stay proportional to the whole table
+        // without either sweep paying for the other's rows.
+        builder.HasIndex(nameof(IMessage.CompletedAt))
+            .HasFilter("\"completed_at\" IS NOT NULL");
     }
 }
