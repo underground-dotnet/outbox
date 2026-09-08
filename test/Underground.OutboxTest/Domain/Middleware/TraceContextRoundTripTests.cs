@@ -3,7 +3,6 @@ using System.Diagnostics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
@@ -39,10 +38,7 @@ public class TraceContextRoundTripTests : DatabaseTest
         var context = CreateDbContext();
         var eventId = Guid.NewGuid();
 
-        var processSpans = new List<Activity>();
-        using var listener = Listen(OutboxTelemetry.ActivitySourceName, processSpans.Add);
-        using var producerListener = Listen("Test.Producer", stopped: null);
-
+        using var spans = new RecordingTracerProvider("Test.Producer");
         using var producer = new ActivitySource("Test.Producer");
 
         ActivityTraceId producerTraceId;
@@ -69,27 +65,9 @@ public class TraceContextRoundTripTests : DatabaseTest
         var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
-        var handled = Assert.Single(processSpans, a => a.GetTagItem("messaging.message.id") is Guid id && id == eventId);
+        var handled = spans.SpanFor(eventId);
 
         Assert.Equal(producerTraceId, handled.TraceId);
         Assert.Equal(producerSpanId, handled.ParentSpanId);
-    }
-
-    private static ActivityListener Listen(string sourceName, Action<Activity>? stopped)
-    {
-        var listener = new ActivityListener
-        {
-            ShouldListenTo = source => string.Equals(source.Name, sourceName, StringComparison.Ordinal),
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-        };
-
-        if (stopped is not null)
-        {
-            listener.ActivityStopped = stopped;
-        }
-
-        ActivitySource.AddActivityListener(listener);
-
-        return listener;
     }
 }

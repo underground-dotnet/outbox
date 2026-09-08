@@ -7,8 +7,7 @@ using Underground.Outbox.Domain.Middleware;
 namespace Underground.OutboxTest.Domain.Middleware;
 
 /// <summary>
-/// The span one message produces, without a database. Every assertion selects the activity by the
-/// message's EventId, so a pipeline running in a parallel test cannot be mistaken for this one's.
+/// The span one message produces, without a database.
 /// </summary>
 public class TraceMessageMiddlewareTests
 {
@@ -43,8 +42,7 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task SpanCarriesTheMessagingAttributes()
     {
-        var eventId = Guid.NewGuid();
-        var message = NewMessage(eventId, traceParent: null);
+        var message = NewMessage(traceParent: null);
 
         var (activity, _) = await ProcessAsync(message, () => Task.FromResult(ProcessingAttempt.Succeeded));
 
@@ -54,7 +52,7 @@ public class TraceMessageMiddlewareTests
         Assert.Equal("process", activity.GetTagItem("messaging.operation.name"));
         Assert.Equal("process", activity.GetTagItem("messaging.operation.type"));
         Assert.Equal("outbox", activity.GetTagItem("messaging.destination.name"));
-        Assert.Equal(eventId, activity.GetTagItem("messaging.message.id"));
+        Assert.Equal(message.EventId, activity.GetTagItem("messaging.message.id"));
         // the Group, under the name the semantic conventions give it
         Assert.Equal("orders", activity.GetTagItem("messaging.destination.partition.id"));
         Assert.Equal("Test.Message", activity.GetTagItem("underground.outbox.message.type"));
@@ -76,7 +74,7 @@ public class TraceMessageMiddlewareTests
         var failure = new InvalidOperationException("handler said no");
 
         var (activity, _) = await ProcessAsync(
-            NewMessage(Guid.NewGuid(), traceParent: null),
+            NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.Failed(failure)));
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
@@ -88,7 +86,7 @@ public class TraceMessageMiddlewareTests
     public async Task LeaseLostAfterAFailureIsReportedAsALostLease()
     {
         var (activity, _) = await ProcessAsync(
-            NewMessage(Guid.NewGuid(), traceParent: null),
+            NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.LeaseLost(new InvalidOperationException())));
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
@@ -100,7 +98,7 @@ public class TraceMessageMiddlewareTests
     {
         // the effect was carried out and the completion write came too late, so it will be carried out again
         var (activity, _) = await ProcessAsync(
-            NewMessage(Guid.NewGuid(), traceParent: null),
+            NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.LeaseLost(failure: null)));
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
@@ -110,20 +108,19 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task ShutdownMidAttemptIsNotAnError()
     {
-        var eventId = Guid.NewGuid();
-        var message = NewMessage(eventId, traceParent: null);
+        var message = NewMessage(traceParent: null);
         var middleware = new TraceMessageMiddleware<OutboxMessage>();
 
-        using var recorder = new ActivityRecorder(eventId);
+        using var spans = new RecordingTracerProvider();
 
         await Assert.ThrowsAsync<OperationCanceledException>(
             () => middleware.ExecuteAsync(message, scope: null!, _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
 
-        Assert.Equal(ActivityStatusCode.Unset, recorder.Single().Status);
+        Assert.Equal(ActivityStatusCode.Unset, spans.SpanFor(message.EventId).Status);
     }
 
-    private static async Task<(Activity Activity, ProcessingAttempt Attempt)> ProcessAsync(string? traceParent)
-        => await ProcessAsync(NewMessage(Guid.NewGuid(), traceParent), () => Task.FromResult(ProcessingAttempt.Succeeded));
+    private static Task<(Activity Activity, ProcessingAttempt Attempt)> ProcessAsync(string? traceParent)
+        => ProcessAsync(NewMessage(traceParent), () => Task.FromResult(ProcessingAttempt.Succeeded));
 
     private static async Task<(Activity Activity, ProcessingAttempt Attempt)> ProcessAsync(
         OutboxMessage message,
@@ -131,57 +128,17 @@ public class TraceMessageMiddlewareTests
     {
         var middleware = new TraceMessageMiddleware<OutboxMessage>();
 
-        using var recorder = new ActivityRecorder(message.EventId);
+        using var spans = new RecordingTracerProvider();
 
         var attempt = await middleware.ExecuteAsync(message, scope: null!, _ => next(), TestContext.Current.CancellationToken);
 
-        return (recorder.Single(), attempt);
+        return (spans.SpanFor(message.EventId), attempt);
     }
 
-    private static OutboxMessage NewMessage(Guid eventId, string? traceParent) =>
-        new(eventId, DateTime.UtcNow, "Test.Message", "{}", groupKey: "orders")
+    private static OutboxMessage NewMessage(string? traceParent) =>
+        new(Guid.NewGuid(), DateTime.UtcNow, "Test.Message", "{}", groupKey: "orders")
         {
             RetryCount = 3,
             TraceParent = traceParent,
         };
-
-    /// <summary>
-    /// Collects the spans this library emits for one message. The EventId filter is what keeps a pipeline
-    /// running in a parallel test out of the result: an ActivityListener is process-wide.
-    /// </summary>
-    private sealed class ActivityRecorder : IDisposable
-    {
-        private readonly ActivityListener _listener;
-        private readonly List<Activity> _activities = [];
-        private readonly Guid _eventId;
-
-        public ActivityRecorder(Guid eventId)
-        {
-            _eventId = eventId;
-            _listener = new ActivityListener
-            {
-                ShouldListenTo = source => string.Equals(source.Name, OutboxTelemetry.ActivitySourceName, StringComparison.Ordinal),
-                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
-                ActivityStopped = activity =>
-                {
-                    lock (_activities)
-                    {
-                        _activities.Add(activity);
-                    }
-                },
-            };
-
-            ActivitySource.AddActivityListener(_listener);
-        }
-
-        public Activity Single()
-        {
-            lock (_activities)
-            {
-                return _activities.Single(a => Equals(a.GetTagItem("messaging.message.id"), _eventId));
-            }
-        }
-
-        public void Dispose() => _listener.Dispose();
-    }
 }
