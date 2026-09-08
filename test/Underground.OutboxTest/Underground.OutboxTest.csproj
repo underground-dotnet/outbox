@@ -13,6 +13,9 @@
     <!-- https://www.nuget.org/packages/Meziantou.Extensions.Logging.Xunit.v3/ -->
     <PackageReference Include="MartinCostello.Logging.XUnit.v3" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <!-- the in-memory exporter is the OpenTelemetry SDK's own test seam; see RecordingTracerProvider -->
+    <PackageReference Include="OpenTelemetry" />
+    <PackageReference Include="OpenTelemetry.Exporter.InMemory" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="Testcontainers.XunitV3" />
     <PackageReference Include="xunit.v3" />

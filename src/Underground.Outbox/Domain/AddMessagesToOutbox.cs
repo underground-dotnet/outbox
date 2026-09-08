@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
@@ -14,7 +16,16 @@ internal sealed class AddMessagesToOutbox
             throw new NoActiveTransactionException();
         }
 
-        await context.OutboxMessages.AddRangeAsync(messages, cancellationToken).ConfigureAwait(false);
+        // materialised once: the trace context is stamped in a pass of its own, and AddRangeAsync enumerates again
+        var toAdd = messages as IReadOnlyCollection<OutboxMessage> ?? [.. messages];
+
+        var traceParent = Activity.Current?.Id;
+        foreach (var message in toAdd)
+        {
+            message.TraceParent = traceParent;
+        }
+
+        await context.OutboxMessages.AddRangeAsync(toAdd, cancellationToken).ConfigureAwait(false);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 

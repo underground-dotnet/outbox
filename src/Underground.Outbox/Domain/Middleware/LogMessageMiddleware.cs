@@ -9,10 +9,6 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Announces the claimed message before anything is done to it, so a Handler that never returns is still
 /// attributable, and reports what became of it on the way back out.
 /// </summary>
-/// <remarks>
-/// Outermost, so an inbound line with no outbound line is a signal in its own right: the application went
-/// down mid-attempt and nothing about that message was recorded.
-/// </remarks>
 internal sealed partial class LogMessageMiddleware<TEntity>(
     ILogger<LogMessageMiddleware<TEntity>> logger
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage

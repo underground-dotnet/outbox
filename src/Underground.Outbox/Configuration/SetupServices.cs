@@ -76,6 +76,7 @@ public static class SetupServices
 
         // per-message middleware, registered individually but only ever composed by the factory, which owns
         // the order between them
+        services.AddScoped<TraceMessageMiddleware<TEntity>>();
         services.AddScoped<LogMessageMiddleware<TEntity>>();
         services.AddScoped<RecordSuccessMiddleware<TEntity>>();
         services.AddScoped<RecordFailureMiddleware<TEntity>>();
