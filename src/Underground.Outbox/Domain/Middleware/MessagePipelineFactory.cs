@@ -8,24 +8,6 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Assembles the pipeline each side runs. Internal and without options on purpose: the order between middleware
 /// is a correctness property, not a preference.
 /// </summary>
-/// <remarks>
-/// <para>The order, outermost first, and why:</para>
-/// <list type="bullet">
-/// <item><see cref="TraceMessageMiddleware{TEntity}"/> outermost, so the log lines and the database spans
-/// the rest of the pipeline emits fall inside the span.</item>
-/// <item><see cref="LogMessageMiddleware{TEntity}"/> next, so the message is announced whatever becomes
-/// of it, on a line carrying the trace id.</item>
-/// <item><see cref="RecordSuccessMiddleware{TEntity}"/> outside <see cref="RecordFailureMiddleware{TEntity}"/>, so
-/// it stands aside for a recorded failure instead of having its own completion write turned into a
-/// retry.</item>
-/// <item><see cref="RecordFailureMiddleware{TEntity}"/> outside the savepoint, so its attempt bookkeeping
-/// survives the rollback.</item>
-/// <item><see cref="SavepointMiddleware{TEntity}"/> around the dispatch whose writes it isolates - absent from
-/// the outbox, which holds no transaction.</item>
-/// <item><see cref="TimeoutMiddleware{TEntity}"/> innermost, so the rollback and both outcome writes still
-/// have a live token once the Handler has spent its budget.</item>
-/// </list>
-/// </remarks>
 internal static class MessagePipelineFactory
 {
     /// <summary>
