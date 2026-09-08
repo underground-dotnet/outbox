@@ -41,7 +41,7 @@ public class InboxMessage : IMessage
     [Column("group_key")]
     public string GroupKey { get; init; }
 
-    [Column("data")]
+    [Column("data", TypeName = "jsonb")]
     public string Data { get; init; }
 
     [Column("retry_count")]
