@@ -426,6 +426,78 @@ public class ProcessorErrorTests : DatabaseTest
     }
 
     [Fact]
+    public async Task MostSpecificExceptionPolicyWins()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            // the broader policy is registered first, the handler throws a DataException
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+                .OnException<Exception>().Discard()
+                .OnException<DataException>().MarkAsCompleted();
+        });
+
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
+        serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsCompletedExceptionHandler<OutboxMessage>>().CallCount);
+        Assert.Single(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task MessageHandlerPolicyWinsOverMoreSpecificGlobalPolicy()
+    {
+        // Arrange
+        var serviceCollection = new ServiceCollection();
+
+        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        {
+            // the global policy matches the thrown exception exactly, the handler policy only through its base type
+            cfg.Policies.OnException<DataException>().Discard();
+
+            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+                .OnException<Exception>().MarkAsCompleted();
+        });
+
+        serviceCollection.AddBaseServices(Database, _testOutputHelper);
+        serviceCollection.AddSingleton<MarkAsCompletedExceptionHandler<OutboxMessage>>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = CreateDbContext();
+        var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new DiscardMessage(10));
+        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
+        {
+            await outbox.AddMessageAsync(context, msg, TestContext.Current.CancellationToken);
+            await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        }
+        await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(1, serviceProvider.GetRequiredService<MarkAsCompletedExceptionHandler<OutboxMessage>>().CallCount);
+        Assert.Single(await context.OutboxMessages.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
+    }
+
+
+    [Fact]
     public async Task ExceptionPolicyOnlyAppliesToConfiguredMessageTypeForMultiMessageHandler()
     {
         // Arrange

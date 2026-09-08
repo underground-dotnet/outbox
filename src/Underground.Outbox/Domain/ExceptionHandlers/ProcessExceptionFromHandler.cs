@@ -15,49 +15,59 @@ internal partial class ProcessExceptionFromHandler<TEntity>(
 {
     internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken = default)
     {
-        var policies = GetPoliciesForException(ex);
+        var policy = SelectPolicyForException(ex);
 
-        foreach (var policy in policies)
+        if (policy is null)
         {
-            LogExecutingExceptionPolicy(
-                policy.GetType().Name,
+            LogNoExceptionPolicyMatched(
                 ex.HandlerType.Name,
                 ex.InnerException?.GetType().Name,
                 message.Id);
-
-            var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
-            await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        LogExecutingExceptionPolicy(
+            policy.GetType().Name,
+            ex.HandlerType.Name,
+            ex.InnerException?.GetType().Name,
+            message.Id);
+
+        var exceptionHandler = policy.GetExceptionHandler(serviceProvider);
+        await exceptionHandler.HandleAsync(ex, message, dbContext, cancellationToken).ConfigureAwait(false);
     }
 
-    private List<ExceptionPolicy<TEntity>> GetPoliciesForException(MessageHandlerException ex)
+    // Exactly one policy runs. A policy on the handler registration wins over any global policy, however
+    // broad its exception type, so one AddHandler chain reads as a complete override. Within a level the
+    // nearest matching exception type wins, like a catch block.
+    private ExceptionPolicy<TEntity>? SelectPolicyForException(MessageHandlerException ex)
     {
-        // make sure every policy is executed only once, even if it matches both handler-specific and global policies
-        var dict = new Dictionary<Type, ExceptionPolicy<TEntity>>();
-
-        var policies = config.Registrations
-            // Filter filter policies for the handler and message type of the exception
-            .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
-            .SelectMany(r => r.ExceptionPolicies)
-            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException))
-            .ToList();
-
-        policies.AddRange(config.GlobalPolicies.ExceptionPolicies
-            .Where(p => p.ExceptionType.IsInstanceOfType(ex.InnerException)));
-
-        foreach (var policy in policies)
+        if (ex.InnerException is not { } thrown)
         {
-            // Get the generic base type which ignores the specific exception type, so that we can avoid adding the same policy twice.
-            var baseType = policy.GetType().BaseType?.GetGenericTypeDefinition();
-            if (baseType is null)
-            {
-                continue;
-            }
-
-            dict.TryAdd(baseType, policy);
+            return null;
         }
 
-        return dict.Values.ToList();
+        var handlerPolicies = config.Registrations
+            .Where(r => r.HandlerType == ex.HandlerType && r.MessageType == ex.MessageType)
+            .SelectMany(r => r.ExceptionPolicies)
+            .ToList();
+
+        return SelectNearestPolicy(handlerPolicies, thrown.GetType())
+            ?? SelectNearestPolicy(config.GlobalPolicies.ExceptionPolicies, thrown.GetType());
+    }
+
+    private static ExceptionPolicy<TEntity>? SelectNearestPolicy(List<ExceptionPolicy<TEntity>> policies, Type thrownType)
+    {
+        for (var candidate = thrownType; candidate is not null; candidate = candidate.BaseType)
+        {
+            // the same exception type registered twice at one level keeps the first registration
+            var match = policies.Find(p => p.ExceptionType == candidate);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     [LoggerMessage(
@@ -65,4 +75,10 @@ internal partial class ProcessExceptionFromHandler<TEntity>(
         Level = LogLevel.Information,
         Message = "Executing exception policy {PolicyType} for handler {HandlerType} and exception {ExceptionType} on message {MessageId}")]
     private partial void LogExecutingExceptionPolicy(string policyType, string handlerType, string? exceptionType, long messageId);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Debug,
+        Message = "No exception policy matched handler {HandlerType} and exception {ExceptionType} on message {MessageId}")]
+    private partial void LogNoExceptionPolicyMatched(string handlerType, string? exceptionType, long messageId);
 }
