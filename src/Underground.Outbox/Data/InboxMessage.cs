@@ -80,7 +80,10 @@ public class InboxMessage : IMessage
     /// </summary>
     /// <param name="eventId">Identifies the message. A second message with the same value is rejected.</param>
     /// <param name="createdAt">When the message was created, in UTC.</param>
-    /// <param name="type">The name of the message type, which selects the handler.</param>
+    /// <param name="type">
+    /// The message type's <see cref="System.Type.FullName"/>, which selects the handler. Supplying anything
+    /// else leaves the message undispatchable.
+    /// </param>
     /// <param name="data">The serialized message body.</param>
     /// <param name="groupKey">
     /// The Group this message belongs to. Messages of one Group are handled one at a time, in order.

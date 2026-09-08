@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 
 using VerifyXunit;
 
@@ -71,6 +71,85 @@ public class OutboxGeneratorTest
             public sealed class OutboxHandler : Underground.Outbox.IOutboxMessageHandler<OutboxMessageType>
             {
                 public Task HandleAsync(OutboxMessageType message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return VerifySubset(driver);
+    }
+
+    [Fact]
+    public Task Generates_dispatcher_for_nested_message_type()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public static class Outer
+            {
+                public sealed record Inner(string Text);
+            }
+
+            public sealed class InnerHandler : IOutboxMessageHandler<Outer.Inner>
+            {
+                public Task HandleAsync(Outer.Inner message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return VerifySubset(driver);
+    }
+
+    [Fact]
+    public Task Generates_dispatcher_for_generic_message_type()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record Payload(string Text);
+
+            public sealed record Envelope<T>(T Body);
+
+            public sealed class EnvelopeHandler : IOutboxMessageHandler<Envelope<Payload>>
+            {
+                public Task HandleAsync(Envelope<Payload> message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        return VerifySubset(driver);
+    }
+
+    [Fact]
+    public Task Reports_competing_handlers_for_the_same_message_type()
+    {
+        var driver = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(string Text);
+
+            public sealed class FirstHandler : IOutboxMessageHandler<TestMessage>
+            {
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class SecondHandler : IOutboxMessageHandler<TestMessage>
+            {
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
             """);
 

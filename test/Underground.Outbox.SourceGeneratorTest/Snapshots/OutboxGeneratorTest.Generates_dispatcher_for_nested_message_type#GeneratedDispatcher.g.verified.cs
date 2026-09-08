@@ -20,35 +20,15 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
         var serviceProvider = scope.ServiceProvider;
         if (typeof(TMessage) == typeof(InboxMessage))
         {
-            if (string.Equals(message.Type, typeof(Sample.InboxMessageType).FullName, StringComparison.Ordinal))
-            {
-                var fullEvent = JsonSerializer.Deserialize<Sample.InboxMessageType>(message.Data) ?? throw new ParsingException($"Cannot parse event body {message.Data} of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<IInboxMessageHandler<Sample.InboxMessageType>>();
-                try
-                {
-                    await handler.HandleAsync(fullEvent, metadata, cancellationToken);
-                    return;
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    throw new MessageHandlerException(
-                        handler.GetType(),
-                        typeof(Sample.InboxMessageType),
-                        $"Error processing message {message.Id} with handler {handler.GetType().Name}",
-                        ex
-                    );
-                }
-            }
-
             throw new ParsingException($"No handler configured for message type {message.Type} of message: {message.Id}");
         }
 
         if (typeof(TMessage) == typeof(OutboxMessage))
         {
-            if (string.Equals(message.Type, typeof(Sample.OutboxMessageType).FullName, StringComparison.Ordinal))
+            if (string.Equals(message.Type, typeof(Sample.Outer.Inner).FullName, StringComparison.Ordinal))
             {
-                var fullEvent = JsonSerializer.Deserialize<Sample.OutboxMessageType>(message.Data) ?? throw new ParsingException($"Cannot parse event body {message.Data} of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<IOutboxMessageHandler<Sample.OutboxMessageType>>();
+                var fullEvent = JsonSerializer.Deserialize<Sample.Outer.Inner>(message.Data) ?? throw new ParsingException($"Cannot parse event body {message.Data} of message: {message.Id}");
+                var handler = serviceProvider.GetRequiredService<IOutboxMessageHandler<Sample.Outer.Inner>>();
                 try
                 {
                     await handler.HandleAsync(fullEvent, metadata, cancellationToken);
@@ -58,7 +38,7 @@ public class GeneratedDispatcher<TMessage> : IMessageDispatcher<TMessage> where 
                 {
                     throw new MessageHandlerException(
                         handler.GetType(),
-                        typeof(Sample.OutboxMessageType),
+                        typeof(Sample.Outer.Inner),
                         $"Error processing message {message.Id} with handler {handler.GetType().Name}",
                         ex
                     );
