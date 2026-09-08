@@ -216,7 +216,7 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `EventId` | Unique event identifier. A unique index prevents duplicates for the same event id. |
 | `TransactionId` | The identifier of the transaction that inserted the message, assigned by the database. Together with `Id` it is the sort key that makes ordering within a group total. |
 | `CreatedAt` | When the message was written. |
-| `Type` | CLR type name of the serialized payload. |
+| `Type` | Runtime CLR type name of the serialized payload — `Type.FullName`. See [The `Type` column is a contract](#the-type-column-is-a-contract). |
 | `GroupKey` | Logical group used for concurrency and ordering. Defaults to `"default"`. |
 | `Data` | Serialized message payload. |
 | `RetryCount` | Number of failed processing attempts. |
@@ -225,6 +225,29 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `TraceParent` | The W3C trace context of the transaction that wrote the message, so handling it continues the same trace. Null when nothing was tracing. |
 
 Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
+
+### The `Type` column is a contract
+
+`Type` is written from the payload's runtime type (`data.GetType().FullName`) and read back by the
+generated dispatcher, which selects a handler by comparing it against `typeof(T).FullName` for each
+handler it found. Both sides evaluate the same expression, so nested types (`Outer+Inner`) and generic
+types (`` Wrapped`1[[...]] ``) match as they should.
+
+That name is persisted, and rows outlive the code that wrote them. Two consequences:
+
+- **Renaming a message class, or moving it to another namespace, orphans the rows already in the table.**
+  Nothing fails at build time; the messages simply find no handler and, per
+  [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md), block their group. Drain the table
+  before such a rename, or keep the old type around with a handler until it has drained.
+- **A generic message type's name embeds the assembly version of its type arguments**, because that is
+  what `Type.FullName` produces. Bumping the assembly version orphans rows the same way. Prefer a
+  non-generic message type unless the table is always drained across deployments.
+
+On the inbox the same name is the integration contract: a foreign producer has to write your .NET type
+name into the `type` column for the message to be dispatched.
+
+Two handlers of the same kind for one message type is a build error (`OUTBOX001`) — only one of them
+could ever run.
 
 Handlers also receive `MessageMetadata` with `EventId`, `GroupKey`, and `RetryCount`.
 

@@ -20,6 +20,12 @@ public interface IMessage
     public ulong TransactionId { get; }
 
     public DateTime CreatedAt { get; }
+
+    /// <summary>
+    /// Runtime name of the payload's CLR type, as <see cref="System.Type.FullName"/> spells it. This is
+    /// what selects the handler, so it is a contract the rows outlive: renaming or moving a message class
+    /// orphans the messages already stored under the old name.
+    /// </summary>
     public string Type { get; }
     public string GroupKey { get; }
     public string Data { get; }

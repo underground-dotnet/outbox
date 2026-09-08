@@ -11,13 +11,20 @@ internal enum HandlerKind
 internal readonly record struct HandlerClassInfo
 {
     internal string HandlerFullName { get; }
-    internal string MessageTypeFullName { get; }
+
+    /// <summary>
+    /// The message type written as C# source, e.g. <c>Sample.Outer.Inner</c>. This is a type reference for
+    /// the generated code, not the runtime <see cref="System.Type.FullName"/> the message carries in its
+    /// <c>type</c> column - for nested and generic types the two spellings differ.
+    /// </summary>
+    internal string MessageTypeDisplayName { get; }
+
     internal HandlerKind Kind { get; }
 
-    public HandlerClassInfo(string handlerFullName, string messageTypeFullName, HandlerKind kind)
+    public HandlerClassInfo(string handlerFullName, string messageTypeDisplayName, HandlerKind kind)
     {
         HandlerFullName = handlerFullName;
-        MessageTypeFullName = messageTypeFullName;
+        MessageTypeDisplayName = messageTypeDisplayName;
         Kind = kind;
     }
 }
