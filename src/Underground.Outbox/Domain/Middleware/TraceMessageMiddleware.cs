@@ -10,11 +10,6 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Opens the OpenTelemetry "process" span for one message, continuing the trace of the transaction that
 /// wrote it, and closes it with what became of the message.
 /// </summary>
-/// <remarks>
-/// Outermost, so the log lines and the database spans the rest of the pipeline emits fall inside it. The
-/// span parents to the message's Creation Context rather than linking to it; see
-/// <c>docs/adr/0006-message-trace-context-is-stored-and-parented.md</c>.
-/// </remarks>
 internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
     /// <summary>
