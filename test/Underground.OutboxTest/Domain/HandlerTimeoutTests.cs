@@ -43,7 +43,7 @@ public class HandlerTimeoutTests : DatabaseTest
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
 
         const int hung = 1;
@@ -93,7 +93,7 @@ public class HandlerTimeoutTests : DatabaseTest
             cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
             cfg.HandlerTimeout = TimeSpan.FromSeconds(30);
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
 
         const int slow = 1;
@@ -115,10 +115,10 @@ public class HandlerTimeoutTests : DatabaseTest
         Assert.Equal(0, message.RetryCount);
     }
 
-    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration> configure)
+    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration<TestDbContext>> configure)
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(configure);
+        serviceCollection.AddTestOutbox(configure);
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();

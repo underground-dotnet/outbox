@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Configuration;
@@ -13,11 +14,12 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </summary>
 /// <remarks>
 /// The cancellation becomes a <see cref="HandlerTimeoutException"/> rather than staying an
-/// <see cref="OperationCanceledException"/>, which <see cref="SavepointMiddleware{TEntity}"/> and
-/// <see cref="RecordFailureMiddleware{TEntity}"/> both step aside for. Here the message is an ordinary failed
+/// <see cref="OperationCanceledException"/>, which <see cref="SavepointMiddleware{TContext, TEntity}"/> and
+/// <see cref="RecordFailureMiddleware{TContext, TEntity}"/> both step aside for. Here the message is an ordinary failed
 /// attempt. Where this middleware sits is on <see cref="MessagePipelineFactory"/> with the rest of the order.
 /// </remarks>
-internal sealed class TimeoutMiddleware<TEntity>(ServiceConfiguration<TEntity> config) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class TimeoutMiddleware<TContext, TEntity>(ServiceConfiguration<TContext, TEntity> config) : IMessageMiddleware<TContext, TEntity> where TContext : DbContext
+    where TEntity : class, IMessage
 {
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {

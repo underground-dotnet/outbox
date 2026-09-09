@@ -24,14 +24,15 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(postgreSqlContainer.GetConnectionString());
 });
 
-builder.Services.AddOutboxServices<AppDbContext>(cfg =>
+builder.Services.AddAppDbContextOutboxServices(cfg =>
 {
+    cfg.Schema = "public";
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
 });
 
 IHost host = builder.Build();
 
-var outbox = host.Services.GetRequiredService<IOutbox>();
+var outbox = host.Services.GetRequiredService<IOutbox<AppDbContext>>();
 var dbContext = host.Services.GetRequiredService<AppDbContext>();
 await dbContext.Database.EnsureCreatedAsync();
 

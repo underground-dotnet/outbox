@@ -1,0 +1,16 @@
+﻿{
+  Diagnostics: [
+    {
+      Message: Handler 'Sample.UnboundHandler' implements IOutboxMessageHandler<T> but carries no [OutboxHandler<TContext>] attribute, so no dispatcher will ever call it,
+      Severity: Error,
+      Descriptor: {
+        Id: OUTBOX002,
+        Title: Handler is not bound to a DbContext,
+        MessageFormat: Handler '{0}' implements {1} but carries no [{2}<TContext>] attribute, so no dispatcher will ever call it,
+        Category: Underground.Outbox,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

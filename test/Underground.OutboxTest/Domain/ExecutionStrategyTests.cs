@@ -51,8 +51,8 @@ public class ExecutionStrategyTests : DatabaseTest
             }
         });
 
-        services.AddOutboxServices<InboxOutboxDbContext>(cfg => cfg.AddHandler<RetryMessageHandler, RetryMessage>());
-        services.AddInboxServices<InboxOutboxDbContext>(cfg => cfg.AddHandler<InboxRetryMessageHandler, InboxRetryMessage>());
+        services.AddInboxOutboxOutbox(cfg => cfg.AddHandler<RetryMessageHandler, RetryMessage>());
+        services.AddInboxOutboxInbox(cfg => cfg.AddHandler<InboxRetryMessageHandler, InboxRetryMessage>());
 
         return services.BuildServiceProvider();
     }
@@ -66,7 +66,7 @@ public class ExecutionStrategyTests : DatabaseTest
         await using var provider = CreateServiceProvider();
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox<InboxOutboxDbContext>>();
 
         var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await using (transaction.ConfigureAwait(false))
@@ -91,7 +91,7 @@ public class ExecutionStrategyTests : DatabaseTest
         await using var provider = CreateServiceProvider();
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox<InboxOutboxDbContext>>();
 
         // Act
         await context.ExecuteInTransactionAsync(
@@ -113,7 +113,7 @@ public class ExecutionStrategyTests : DatabaseTest
         await using var provider = CreateServiceProvider();
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox<InboxOutboxDbContext>>();
 
         // Act: the outer call owns the transaction, so the inner one must find and reuse it
         await context.ExecuteInTransactionAsync(async ct =>
@@ -141,7 +141,7 @@ public class ExecutionStrategyTests : DatabaseTest
         await using var provider = CreateServiceProvider(fault);
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
-        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox<InboxOutboxDbContext>>();
 
         await context.ExecuteInTransactionAsync(
             ct => outbox.AddMessageAsync(context, new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new RetryMessage(3)), ct),
@@ -167,7 +167,7 @@ public class ExecutionStrategyTests : DatabaseTest
         await using var provider = CreateServiceProvider(fault);
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
-        var inbox = scope.ServiceProvider.GetRequiredService<IInbox>();
+        var inbox = scope.ServiceProvider.GetRequiredService<IInbox<InboxOutboxDbContext>>();
 
         await context.ExecuteInTransactionAsync(
             ct => inbox.AddMessageAsync(context, new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new InboxRetryMessage(4)), ct),
@@ -192,7 +192,7 @@ public class ExecutionStrategyTests : DatabaseTest
     private static async Task ProcessUntilAsync<TEntity>(IServiceProvider provider, Func<bool> handled, CancellationToken cancellationToken)
         where TEntity : class, IMessage
     {
-        var processor = provider.GetRequiredService<ConcurrentProcessor<TEntity>>();
+        var processor = provider.GetRequiredService<ConcurrentProcessor<InboxOutboxDbContext, TEntity>>();
         var deadline = DateTime.UtcNow.AddSeconds(10);
 
         do

@@ -30,14 +30,21 @@ public partial class DatabaseTest : IAsyncDisposable
     public TestDatabase Database { get; }
 
     /// <summary>Opens a context on this test's database. Also resolvable from the service provider.</summary>
-    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor? interceptor = null) =>
+    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor<TestDbContext>? interceptor = null) =>
         Database.CreateDbContext(interceptor);
 
-    /// <summary>Drops the test's database.</summary>
+    /// <summary>Drops the test's database, once whatever the test built has let go of it.</summary>
     public async ValueTask DisposeAsync()
     {
+        await ReleaseOwnedResourcesAsync();
         await Database.DisposeAsync();
         _loggerFactory.Dispose();
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    /// Released before the database is dropped. A test that builds its own provider disposes it here: the
+    /// connection pool outlives the contexts, and a pooled connection left open makes the drop fail.
+    /// </summary>
+    protected virtual ValueTask ReleaseOwnedResourcesAsync() => ValueTask.CompletedTask;
 }

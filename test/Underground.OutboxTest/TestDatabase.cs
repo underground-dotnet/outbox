@@ -14,7 +14,7 @@ public sealed class TestDatabase(string name, string connectionString, PostgresF
     public string ConnectionString { get; } = connectionString;
 
     /// <summary>Opens a context on this database. The schema is already there, copied from the template.</summary>
-    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor? interceptor = null) =>
+    public TestDbContext CreateDbContext(ProcessMessagesOnSaveChangesInterceptor<TestDbContext>? interceptor = null) =>
         new(this, loggerFactory, interceptor);
 
     /// <summary>Checks the test left no transaction open, then drops the database.</summary>

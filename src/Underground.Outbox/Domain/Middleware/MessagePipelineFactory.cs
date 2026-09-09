@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -5,8 +6,8 @@ using Underground.Outbox.Data;
 namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// Assembles the pipeline each side runs. Internal and without options on purpose: the order between middleware
-/// is a correctness property, not a preference.
+/// Assembles the pipeline each side runs, once per registered inbox or outbox. Internal and without options
+/// on purpose: the order between middleware is a correctness property, not a preference.
 /// </summary>
 internal static class MessagePipelineFactory
 {
@@ -14,30 +15,32 @@ internal static class MessagePipelineFactory
     /// The inbox pipeline. It runs inside the transaction the outcome is recorded in, so a failed Handler's
     /// writes have a savepoint to be rolled back to.
     /// </summary>
-    internal static MessagePipeline<InboxMessage> CreateInbox(IServiceProvider services)
+    internal static MessagePipeline<TContext, InboxMessage> CreateInbox<TContext>(IServiceProvider services)
+        where TContext : DbContext, IInboxDbContext
         => new(
             [
-                services.GetRequiredService<TraceMessageMiddleware<InboxMessage>>(),
-                services.GetRequiredService<LogMessageMiddleware<InboxMessage>>(),
-                services.GetRequiredService<RecordSuccessMiddleware<InboxMessage>>(),
-                services.GetRequiredService<RecordFailureMiddleware<InboxMessage>>(),
-                services.GetRequiredService<SavepointMiddleware<InboxMessage>>(),
-                services.GetRequiredService<TimeoutMiddleware<InboxMessage>>(),
+                services.GetRequiredService<TraceMessageMiddleware<TContext, InboxMessage>>(),
+                services.GetRequiredService<LogMessageMiddleware<TContext, InboxMessage>>(),
+                services.GetRequiredService<RecordSuccessMiddleware<TContext, InboxMessage>>(),
+                services.GetRequiredService<RecordFailureMiddleware<TContext, InboxMessage>>(),
+                services.GetRequiredService<SavepointMiddleware<TContext, InboxMessage>>(),
+                services.GetRequiredService<TimeoutMiddleware<TContext, InboxMessage>>(),
             ],
-            services.GetRequiredService<DispatchMessage<InboxMessage>>());
+            services.GetRequiredService<DispatchMessage<TContext, InboxMessage>>());
 
     /// <summary>
     /// The outbox pipeline. No savepoint: an outbox worker dispatches with no transaction open, so a Handler
     /// that writes to this database and then fails keeps those writes.
     /// </summary>
-    internal static MessagePipeline<OutboxMessage> CreateOutbox(IServiceProvider services)
+    internal static MessagePipeline<TContext, OutboxMessage> CreateOutbox<TContext>(IServiceProvider services)
+        where TContext : DbContext, IOutboxDbContext
         => new(
             [
-                services.GetRequiredService<TraceMessageMiddleware<OutboxMessage>>(),
-                services.GetRequiredService<LogMessageMiddleware<OutboxMessage>>(),
-                services.GetRequiredService<RecordSuccessMiddleware<OutboxMessage>>(),
-                services.GetRequiredService<RecordFailureMiddleware<OutboxMessage>>(),
-                services.GetRequiredService<TimeoutMiddleware<OutboxMessage>>(),
+                services.GetRequiredService<TraceMessageMiddleware<TContext, OutboxMessage>>(),
+                services.GetRequiredService<LogMessageMiddleware<TContext, OutboxMessage>>(),
+                services.GetRequiredService<RecordSuccessMiddleware<TContext, OutboxMessage>>(),
+                services.GetRequiredService<RecordFailureMiddleware<TContext, OutboxMessage>>(),
+                services.GetRequiredService<TimeoutMiddleware<TContext, OutboxMessage>>(),
             ],
-            services.GetRequiredService<DispatchMessage<OutboxMessage>>());
+            services.GetRequiredService<DispatchMessage<TContext, OutboxMessage>>());
 }

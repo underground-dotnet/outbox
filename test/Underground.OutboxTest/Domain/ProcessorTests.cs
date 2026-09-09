@@ -27,7 +27,7 @@ public class ProcessorTests : DatabaseTest
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        serviceCollection.AddTestOutbox(cfg =>
         {
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
             cfg.AddHandler<MultipleMessagesHandler, MultiMessageA>();
@@ -62,7 +62,7 @@ public class ProcessorTests : DatabaseTest
         // Arrange
         var context = CreateDbContext();
         var msg = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act
         await using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
@@ -82,8 +82,8 @@ public class ProcessorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
@@ -113,8 +113,8 @@ public class ProcessorTests : DatabaseTest
         var context = CreateDbContext();
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageA(10));
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new MultiMessageB(20));
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {

@@ -101,18 +101,41 @@ public sealed class PostgresFixture(IMessageSink messageSink)
     {
         await ExecuteAsync($"""CREATE DATABASE "{TemplateDatabase}" """);
 
-        // InboxOutboxDbContext rather than TestDbContext: its model is a superset, so one template serves both.
-        var options = new DbContextOptionsBuilder<InboxOutboxDbContext>()
-            .UseNpgsql(ConnectionStringFor(TemplateDatabase))
-            .Options;
+        var connectionString = ConnectionStringFor(TemplateDatabase);
 
-        await using (var context = new InboxOutboxDbContext(options))
+        // InboxOutboxDbContext rather than TestDbContext: its model is a superset, so one template serves both.
+        await using (var context = new InboxOutboxDbContext(new DbContextOptionsBuilder<InboxOutboxDbContext>().UseNpgsql(connectionString).Options))
         {
             await context.Database.EnsureCreatedAsync();
         }
 
+        // The module contexts live in schemas of their own, which is what lets a test give two outboxes one
+        // connection string. EnsureCreated would do nothing here - the database already has tables - so their
+        // models go in as scripts.
+        await using (var context = new ModuleADbContext(new DbContextOptionsBuilder<ModuleADbContext>().UseNpgsql(connectionString).Options))
+        {
+            await CreateModelAsync(context, ModuleADbContext.Schema);
+        }
+
+        await using (var context = new ModuleBDbContext(new DbContextOptionsBuilder<ModuleBDbContext>().UseNpgsql(connectionString).Options))
+        {
+            await CreateModelAsync(context, ModuleBDbContext.Schema);
+        }
+
         // Postgres refuses to copy a template that still has connections, and the pool outlives the context.
         NpgsqlConnection.ClearAllPools();
+    }
+
+    // through the context's own connection, which is the one pointing at the template database
+    private static async Task CreateModelAsync(DbContext context, string schema)
+    {
+        var createSchema = $"""CREATE SCHEMA IF NOT EXISTS "{schema}" """;
+
+        // S2077/EF1002: both statements are composed from the model and a constant, never from test input
+#pragma warning disable EF1002, S2077
+        await context.Database.ExecuteSqlRawAsync(createSchema);
+        await context.Database.ExecuteSqlRawAsync(context.Database.GenerateCreateScript());
+#pragma warning restore EF1002, S2077
     }
 
     private string ConnectionStringFor(string database) =>

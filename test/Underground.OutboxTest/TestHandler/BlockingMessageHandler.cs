@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
@@ -10,6 +11,7 @@ namespace Underground.OutboxTest.TestHandler;
 /// for every other one, so a test can hold one Group open and watch what the rest of the system does
 /// meanwhile. The waiting is on a signal rather than on a duration, so nothing here sleeps.
 /// </summary>
+[OutboxHandler<TestDbContext>]
 public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>
 {
     public static ConcurrentQueue<int> CalledWith { get; set; } = new();

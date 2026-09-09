@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class MultipleMessagesHandler : IOutboxMessageHandler<MultiMessageA>, IOutboxMessageHandler<MultiMessageB>
 {
     public static ConcurrentQueue<MultiMessageA> CalledWithA { get; } = new();

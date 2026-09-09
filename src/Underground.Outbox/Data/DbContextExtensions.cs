@@ -13,7 +13,7 @@ namespace Underground.Outbox.Data;
 /// </remarks>
 public static class DbContextExtensions
 {
-    extension(IDbContext context)
+    extension(DbContext context)
     {
         /// <summary>
         /// Runs <paramref name="work"/> in a transaction and commits it.
@@ -50,7 +50,7 @@ public static class DbContextExtensions
         }
     }
 
-    private static async Task<TResult> ExecuteAsync<TResult>(IDbContext context, Func<CancellationToken, Task<TResult>> work, CancellationToken cancellationToken)
+    private static async Task<TResult> ExecuteAsync<TResult>(DbContext context, Func<CancellationToken, Task<TResult>> work, CancellationToken cancellationToken)
     {
         // a nested call cannot own a boundary someone else already owns, and an Execution Strategy applied
         // here would retry an inner slice of an outer transaction

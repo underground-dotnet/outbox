@@ -4,7 +4,8 @@ using Underground.Outbox.Data;
 
 namespace ConsoleApp;
 
-sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
+// public because the generated registration entry point names it in a public signature
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
 {
     public DbSet<OutboxMessage> OutboxMessages { get; set; }
     public DbSet<InboxMessage> InboxMessages { get; set; }

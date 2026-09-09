@@ -8,5 +8,5 @@ namespace Underground.Outbox.Domain.Middleware;
 /// The token the rest of the pipeline runs under. A parameter rather than a capture, so a middleware can narrow
 /// it for everything inside without affecting anything outside.
 /// </param>
-/// <returns>What became of the message. See <see cref="IMessageMiddleware{TEntity}"/>.</returns>
+/// <returns>What became of the message. See <see cref="IMessageMiddleware{TContext, TEntity}"/>.</returns>
 internal delegate Task<ProcessingAttempt> MessageMiddlewareDelegate(CancellationToken cancellationToken);

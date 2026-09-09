@@ -5,7 +5,7 @@ namespace Underground.Outbox.Data;
 /// <summary>
 /// Represents a database context that contains the inbox messages.
 /// </summary>
-public interface IInboxDbContext : IDbContext
+public interface IInboxDbContext
 {
     /// <summary>
     /// Gets or sets the set of inbox messages.

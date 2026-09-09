@@ -42,7 +42,7 @@ public class HeadMessageDiscoveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         RecoveringMessageHandler.FailingIds.Add(HeadMessage);
         await context.AddMessagesAsync(serviceProvider, [MessageFor(HeadMessage), MessageFor(BehindTheHeadMessage)], cancellationToken);
@@ -62,7 +62,7 @@ public class HeadMessageDiscoveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         RecoveringMessageHandler.FailingIds.Add(HeadMessage);
         await context.AddMessagesAsync(
@@ -95,7 +95,7 @@ public class HeadMessageDiscoveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         RecoveringMessageHandler.FailingIds.Add(HeadMessage);
         await context.AddMessagesAsync(serviceProvider, [MessageFor(HeadMessage), MessageFor(BehindTheHeadMessage)], cancellationToken);
@@ -121,7 +121,7 @@ public class HeadMessageDiscoveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var scheduledHeadMessage = MessageFor(HeadMessage, visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
         await context.AddMessagesAsync(serviceProvider, [scheduledHeadMessage, MessageFor(BehindTheHeadMessage)], cancellationToken);
@@ -142,7 +142,7 @@ public class HeadMessageDiscoveryTests : DatabaseTest
     private ServiceProvider BuildServiceProvider()
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        serviceCollection.AddTestOutbox(cfg =>
         {
             cfg.AddHandler<RecoveringMessageHandler, RecoveringMessage>();
             // long enough that a HeadMessage which failed stays out of sight for the rest of the test

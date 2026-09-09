@@ -3,10 +3,12 @@ using System.Data;
 using Microsoft.EntityFrameworkCore.Storage;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class FailedUserMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<FailedUserMessage>
 {
     /// <summary>

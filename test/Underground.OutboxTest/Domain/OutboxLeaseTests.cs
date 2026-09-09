@@ -40,7 +40,7 @@ public class OutboxLeaseTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg => cfg.AddHandler<BlockingMessageHandler, BlockingMessage>());
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
 
         await context.AddMessagesAsync(serviceProvider, [MessageFor(1, "group")], cancellationToken);
@@ -82,7 +82,7 @@ public class OutboxLeaseTests : DatabaseTest
             // longer than the test takes
             cfg.HandlerTimeout = TimeSpan.FromSeconds(30);
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
 
         const int held = 1;
@@ -138,7 +138,7 @@ public class OutboxLeaseTests : DatabaseTest
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
 
         const int hung = 1;
@@ -165,8 +165,8 @@ public class OutboxLeaseTests : DatabaseTest
     private static async Task<OutboxMessage?> ClaimAndAbandonAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         using var scope = serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
-        var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<TestDbContext>();
+        var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<TestDbContext, OutboxMessage>>();
 
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await using (transaction.ConfigureAwait(false))
@@ -181,10 +181,10 @@ public class OutboxLeaseTests : DatabaseTest
         }
     }
 
-    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration> configure)
+    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration<TestDbContext>> configure)
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(configure);
+        serviceCollection.AddTestOutbox(configure);
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
         serviceCollection.AddLogging(builder => builder.AddProvider(_logs));
 

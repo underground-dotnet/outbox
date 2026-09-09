@@ -39,10 +39,10 @@ public class ConcurrentProcessorTests : DatabaseTest
         });
     }
 
-    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration> configure)
+    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration<TestDbContext>> configure)
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(configure);
+        serviceCollection.AddTestOutbox(configure);
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();
@@ -92,7 +92,7 @@ public class ConcurrentProcessorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         var groups = new[] { "A", "B", "C", "D" };
         // no handler returns before all four Groups are in flight, so the test cannot pass on a serial run
@@ -144,7 +144,7 @@ public class ConcurrentProcessorTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         var groups = new[] { "A", "B" };
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -160,7 +160,7 @@ public class ConcurrentProcessorTests : DatabaseTest
         }
 
         // Act
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
         // a second run must not hand out the messages of the first one again
         await processor.ProcessUntilIdleAsync(TestContext.Current.CancellationToken);
@@ -246,7 +246,7 @@ public class ConcurrentProcessorTests : DatabaseTest
             cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
         });
         var context = CreateDbContext();
-        var outbox = serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act: start against an empty table, so the worker's first claim comes back empty and it parks
         await RunBackgroundServiceAsync(serviceProvider, cancellationToken);

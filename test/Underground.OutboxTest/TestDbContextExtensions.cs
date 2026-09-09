@@ -27,12 +27,12 @@ public static class TestDbContextExtensions
         }
 
         /// <summary>
-        /// Writes messages through <see cref="IOutbox"/> inside a caller transaction, which is the only
+        /// Writes messages through <see cref="IOutbox{TContext}"/> inside a caller transaction, which is the only
         /// way the library accepts them. Shared because every test that arranges rows needs exactly this.
         /// </summary>
         internal async Task AddMessagesAsync(IServiceProvider serviceProvider, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
         {
-            var outbox = serviceProvider.GetRequiredService<IOutbox>();
+            var outbox = serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
             var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
             await using (transaction.ConfigureAwait(false))

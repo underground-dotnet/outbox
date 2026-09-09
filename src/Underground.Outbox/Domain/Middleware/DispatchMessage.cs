@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -8,10 +9,11 @@ namespace Underground.Outbox.Domain.Middleware;
 /// <summary>
 /// The end of the pipeline: hands the message to its Handler and persists whatever the Handler wrote.
 /// </summary>
-internal sealed class DispatchMessage<TEntity>(
-    IMessageDispatcher<TEntity> dispatcher,
-    IDbContext dbContext
-) where TEntity : class, IMessage
+internal sealed class DispatchMessage<TContext, TEntity>(
+    IMessageDispatcher<TContext, TEntity> dispatcher,
+    TContext dbContext
+) where TContext : DbContext
+    where TEntity : class, IMessage
 {
     /// <summary>
     /// Invokes the Handler for this message. It returns only if the Handler did; the middleware wrapped around

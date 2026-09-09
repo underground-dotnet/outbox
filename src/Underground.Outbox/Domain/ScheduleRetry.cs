@@ -17,14 +17,26 @@ namespace Underground.Outbox.Domain;
 /// still holds the message - consumer exception policies must not run against a message some other worker
 /// now owns. On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
-internal sealed partial class ScheduleRetry<TEntity>(
-    IDbContext dbContext,
-    ServiceConfiguration<TEntity> config,
-    ILogger<ScheduleRetry<TEntity>> logger
-) where TEntity : class, IMessage
+internal sealed partial class ScheduleRetry<TContext, TEntity>(
+    TContext dbContext,
+    ServiceConfiguration<TContext, TEntity> config,
+    ILogger<ScheduleRetry<TContext, TEntity>> logger
+)
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
     private readonly RetryBackoff _backoff = new(config.BackoffBase, config.MaxBackoff, config.BackoffJitter);
-    private readonly ILogger<ScheduleRetry<TEntity>> _logger = logger;
+    private readonly ILogger<ScheduleRetry<TContext, TEntity>> _logger = logger;
+
+    // an interval and never an instant, so a skewed application clock cannot bring a message back
+    // early or late
+    private readonly string _sql = StatementCache.GetOrAdd(config.QualifiedTable, "retry", qualifiedTable => $"""
+        UPDATE {qualifiedTable}
+        SET retry_count = retry_count + 1,
+            visible_at = clock_timestamp() + @delay
+        WHERE id = @id
+        AND visible_at = @lease
+        """);
 
     /// <summary>
     /// Records the attempt, if this worker still holds the message.
@@ -35,16 +47,6 @@ internal sealed partial class ScheduleRetry<TEntity>(
     /// </returns>
     internal async Task<bool> ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
-        // an interval and never an instant, so a skewed application clock cannot bring a message back
-        // early or late
-        var sql = $"""
-            UPDATE {TEntity.TableName}
-            SET retry_count = retry_count + 1,
-                visible_at = clock_timestamp() + @delay
-            WHERE id = @id
-            AND visible_at = @lease
-            """;
-
         List<NpgsqlParameter> parameters =
         [
             new("id", message.Id),
@@ -52,10 +54,11 @@ internal sealed partial class ScheduleRetry<TEntity>(
             new("delay", _backoff.DelayFor(message.RetryCount)),
         ];
 
-        // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
+        // S2077: the statement is composed from the table name (a compile-time constant, ADR 0005) and the
+        // schema given at registration, never from anything a message carries
 #pragma warning disable S2077 // Formatting SQL queries is security-sensitive
         var rows = await dbContext.Database
-            .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
+            .ExecuteSqlRawAsync(_sql, parameters, cancellationToken)
             .ConfigureAwait(false);
 #pragma warning restore S2077
 

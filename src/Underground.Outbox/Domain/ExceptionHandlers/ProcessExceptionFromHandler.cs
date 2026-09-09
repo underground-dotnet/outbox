@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Configuration;
@@ -7,13 +8,15 @@ using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.ExceptionHandlers;
 
-internal partial class ProcessExceptionFromHandler<TEntity>(
-    ServiceConfiguration<TEntity> config,
+internal partial class ProcessExceptionFromHandler<TContext, TEntity>(
+    ServiceConfiguration<TContext, TEntity> config,
     IServiceProvider serviceProvider,
-    ILogger<ProcessExceptionFromHandler<TEntity>> logger
-) where TEntity : class, IMessage
+    ILogger<ProcessExceptionFromHandler<TContext, TEntity>> logger
+)
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
-    internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken = default)
+    internal async Task ExecuteAsync(MessageHandlerException ex, TEntity message, TContext dbContext, CancellationToken cancellationToken = default)
     {
         var policy = SelectPolicyForException(ex);
 

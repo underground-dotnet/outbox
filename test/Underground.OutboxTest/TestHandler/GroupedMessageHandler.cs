@@ -2,10 +2,12 @@
 using System.Collections.Concurrent;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class GroupedMessageHandler : IOutboxMessageHandler<GroupedMessage>
 {
     public static ConcurrentDictionary<string, List<int>> CalledWith { get; set; } = [];

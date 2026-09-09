@@ -16,7 +16,7 @@ public class TestDbContext : DbContext, IOutboxDbContext
     {
     }
 
-    public TestDbContext(TestDatabase database, ILoggerFactory loggerFactory, ProcessMessagesOnSaveChangesInterceptor? interceptor) : base(
+    public TestDbContext(TestDatabase database, ILoggerFactory loggerFactory, ProcessMessagesOnSaveChangesInterceptor<TestDbContext>? interceptor) : base(
         ConfigureDbContext(new DbContextOptionsBuilder<TestDbContext>(), database, loggerFactory, interceptor).Options
     )
     {
@@ -26,7 +26,7 @@ public class TestDbContext : DbContext, IOutboxDbContext
         DbContextOptionsBuilder options,
         TestDatabase database,
         ILoggerFactory loggerFactory,
-        ProcessMessagesOnSaveChangesInterceptor? interceptor
+        ProcessMessagesOnSaveChangesInterceptor<TestDbContext>? interceptor
     )
     {
         var builder = options

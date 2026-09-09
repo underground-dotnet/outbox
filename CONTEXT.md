@@ -67,9 +67,16 @@ why outbox delivery is at-least-once.
 _Avoid_: Lock, reservation, checkout
 
 **Handler**:
-Application-supplied code that carries out the effect of one message. Never invoked concurrently
-for two messages of the same group.
+Application-supplied code that carries out the effect of one message, bound by attribute to the
+`DbContext` whose inbox or outbox it serves. Never invoked concurrently for two messages of the same
+group, and never given a message from another context's tables.
 _Avoid_: Consumer, subscriber, listener
+
+**Schema**:
+Where one inbox's or outbox's table lives, named at registration and written into every raw statement.
+Two `DbContext`s may not claim one schema. It is stated rather than read off the model, and stated
+again in `OnModelCreating` so EF creates the tables in the same place.
+_Avoid_: search_path *(no longer load-bearing)*, namespace, prefix
 
 **Completed**:
 A message whose Handler returned and whose outcome has been recorded, stamped `CompletedAt`. This

@@ -54,7 +54,7 @@ public class VisibleAtTests : DatabaseTest
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
         await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
@@ -89,7 +89,7 @@ public class VisibleAtTests : DatabaseTest
             cfg.MaxBackoff = TimeSpan.FromSeconds(40);
             cfg.BackoffJitter = 0;
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
         await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
@@ -130,7 +130,7 @@ public class VisibleAtTests : DatabaseTest
             cfg.BackoffBase = TimeSpan.FromMilliseconds(250);
             cfg.BackoffJitter = 0;
         });
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new FailedMessage(10));
         await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
@@ -148,10 +148,10 @@ public class VisibleAtTests : DatabaseTest
         Assert.Equal(2, FailedMessageHandler.CalledWith.Count);
     }
 
-    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration> configure)
+    private ServiceProvider BuildServiceProvider(Action<OutboxServiceConfiguration<TestDbContext>> configure)
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(configure);
+        serviceCollection.AddTestOutbox(configure);
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();

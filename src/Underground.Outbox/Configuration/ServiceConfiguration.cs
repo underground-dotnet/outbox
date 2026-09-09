@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 
+using Microsoft.EntityFrameworkCore;
+
 using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Configuration.HandlerRegistrations;
 using Underground.Outbox.Configuration.Policies;
@@ -7,8 +9,23 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Configuration;
 
-public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMessage
+/// <summary>
+/// One inbox's or one outbox's settings. Bound to a <typeparamref name="TContext"/>, so a module with a slow
+/// external partner does not impose its timeouts, its retention or its concurrency on a module without one.
+/// </summary>
+/// <typeparam name="TContext">The context this inbox or outbox belongs to.</typeparam>
+/// <typeparam name="TEntity">The message entity this side stores.</typeparam>
+public abstract class ServiceConfiguration<TContext, TEntity>
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
+    /// <summary>
+    /// The PostgreSQL schema this side's table lives in. Required: every statement qualifies its table with
+    /// it, so two modules on one connection string reach two different table pairs and <c>search_path</c>
+    /// stops being load-bearing. It is not read from the model - see ADR 0007.
+    /// </summary>
+    public string? Schema { get; set; }
+
     /// <summary>
     /// Maximum number of Groups handled concurrently, and the number of workers that run. A value of one
     /// means strictly serial handling across all Groups, not one message per Group.
@@ -71,6 +88,12 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// </summary>
     public int CleanupDelaySeconds { get; set; } = 3600;
 
+    /// <summary>
+    /// This side's table, qualified by <see cref="Schema"/>, as every raw statement names it. Valid only
+    /// after <see cref="Validate"/> has accepted the schema.
+    /// </summary>
+    internal string QualifiedTable => SchemaQualifiedTable.For<TEntity>(Schema!);
+
     internal readonly List<HandlerRegistration<TEntity>> Registrations = [];
 
     internal readonly GlobalPolicyStore<TEntity> GlobalPolicies = new();
@@ -85,8 +108,16 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     // Validate, so both analyzers see a paramName they cannot match against a parameter list
     [SuppressMessage("Meziantou.Analyzer", "MA0015:Specify the parameter name in ArgumentException", Justification = "paramName names the offending configuration property")]
     [SuppressMessage("Major Code Smell", "S3928:Parameter names used into ArgumentException constructors should match an existing one ", Justification = "paramName names the offending configuration property")]
+    [SuppressMessage("Design", "MA0012:Do not raise reserved exception type", Justification = "not a reserved type")]
     internal void Validate()
     {
+        if (string.IsNullOrWhiteSpace(Schema))
+        {
+            throw new ArgumentException(
+                $"Must be set to the schema holding the {TEntity.TableName} table of {typeof(TContext).Name}.",
+                nameof(Schema));
+        }
+
         if (MaxConcurrentGroups <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(MaxConcurrentGroups), MaxConcurrentGroups, "Must be greater than 0.");

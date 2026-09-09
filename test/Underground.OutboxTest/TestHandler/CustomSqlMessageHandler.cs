@@ -3,10 +3,12 @@ using System.Data;
 using Microsoft.EntityFrameworkCore;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class CustomSqlMessageHandler(TestDbContext dbContext) : IOutboxMessageHandler<CustomSqlMessage>
 {
     public async Task HandleAsync(CustomSqlMessage message, MessageMetadata metadata, CancellationToken cancellationToken)

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -6,19 +7,22 @@ namespace Underground.Outbox.Domain;
 
 /// <summary>
 /// The outer loop around one message: the transaction boundary, the claim, and the write that records the
-/// outcome. Everything in between is <see cref="Middleware.MessagePipeline{TEntity}"/>, which both sides share.
+/// outcome. Everything in between is <see cref="Middleware.MessagePipeline{TContext, TEntity}"/>, which both sides share.
 /// </summary>
 /// <remarks>
 /// One implementation per side, because this is where they differ: the inbox spans all three in one
 /// transaction and is exactly-once, the outbox commits a Lease and dispatches with nothing open and is
 /// at-least-once. See ADR 0001.
 /// </remarks>
+/// <typeparam name="TContext">The context whose inbox or outbox this loop serves.</typeparam>
 /// <typeparam name="TEntity">
 /// The side this loop serves. It appears in no signature here; what it selects is the implementation.
 /// </typeparam>
 #pragma warning disable S2326 // Unused type parameters should be removed
-internal interface IProcessor<TEntity> where TEntity : class, IMessage
+internal interface IProcessor<TContext, TEntity>
 #pragma warning restore S2326 // Unused type parameters should be removed
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
     /// <summary>
     /// Claims and handles one HeadMessage - the oldest Stable message not yet completed of whichever Group offers the

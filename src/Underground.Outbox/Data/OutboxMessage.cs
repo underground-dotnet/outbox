@@ -55,7 +55,7 @@ public class OutboxMessage : IMessage
 
     /// <summary>
     /// The W3C <c>traceparent</c> of the transaction that wrote this message. Set by
-    /// <see cref="IOutbox.AddMessageAsync"/> and its siblings from the ambient <see cref="System.Diagnostics.Activity"/>;
+    /// <c>IOutbox&lt;TContext&gt;.AddMessageAsync</c> and its siblings from the ambient <see cref="System.Diagnostics.Activity"/>;
     /// null when nothing was tracing.
     /// </summary>
     [Column("traceparent")]

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -15,12 +16,13 @@ namespace Underground.Outbox.Domain.Middleware;
 /// The retry is written before the policies run because it is the guarded write, and a lost Lease has to
 /// be discovered before consumer code - which writes by id and cannot be guarded - touches the message.
 /// The exception goes onto the <see cref="ProcessingAttempt"/> rather than being logged here, so
-/// <see cref="LogMessageMiddleware{TEntity}"/> reports it in its one outcome line.
+/// <see cref="LogMessageMiddleware{TContext, TEntity}"/> reports it in its one outcome line.
 /// </remarks>
-internal sealed class RecordFailureMiddleware<TEntity>(
-    IDbContext dbContext,
-    ScheduleRetry<TEntity> scheduleRetry
-) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class RecordFailureMiddleware<TContext, TEntity>(
+    TContext dbContext,
+    ScheduleRetry<TContext, TEntity> scheduleRetry
+) : IMessageMiddleware<TContext, TEntity> where TContext : DbContext
+    where TEntity : class, IMessage
 {
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
@@ -49,7 +51,7 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         if (failure is MessageHandlerException handlerException)
         {
             // from the handling scope, so the exception handler sees the same services the Handler saw
-            var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
+            var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TContext, TEntity>>();
 
             await processHandlerException.ExecuteAsync(handlerException, message, dbContext, cancellationToken).ConfigureAwait(false);
         }

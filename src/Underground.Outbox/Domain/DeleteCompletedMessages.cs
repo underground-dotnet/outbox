@@ -5,10 +5,12 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class DeleteCompletedMessages<TEntity>(
-    IDbContext dbContext,
-    ServiceConfiguration<TEntity> config
-) where TEntity : class, IMessage
+internal sealed class DeleteCompletedMessages<TContext, TEntity>(
+    TContext dbContext,
+    ServiceConfiguration<TContext, TEntity> config
+)
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
     internal async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {

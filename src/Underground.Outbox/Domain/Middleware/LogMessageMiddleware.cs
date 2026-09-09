@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -9,15 +10,19 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Announces the claimed message before anything is done to it, so a Handler that never returns is still
 /// attributable, and reports what became of it on the way back out.
 /// </summary>
-internal sealed partial class LogMessageMiddleware<TEntity>(
-    ILogger<LogMessageMiddleware<TEntity>> logger
-) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed partial class LogMessageMiddleware<TContext, TEntity>(
+    ILogger<LogMessageMiddleware<TContext, TEntity>> logger
+) : IMessageMiddleware<TContext, TEntity> where TContext : DbContext
+    where TEntity : class, IMessage
 {
-    private readonly ILogger<LogMessageMiddleware<TEntity>> _logger = logger;
+    private readonly ILogger<LogMessageMiddleware<TContext, TEntity>> _logger = logger;
+
+    /// <summary>Which inbox or outbox this middleware serves, so two modules' lines can be told apart.</summary>
+    private static readonly string Side = SideName.For<TContext, TEntity>();
 
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
-        LogProcessingMessage(message.Id, typeof(TEntity).ToString(), message.GroupKey);
+        LogProcessingMessage(message.Id, Side, message.GroupKey);
 
         var attempt = await next(cancellationToken).ConfigureAwait(false);
 
@@ -37,8 +42,8 @@ internal sealed partial class LogMessageMiddleware<TEntity>(
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Information,
-        Message = "Processing message {MessageId} in {Type} for group '{GroupKey}'")]
-    private partial void LogProcessingMessage(long messageId, string type, string groupKey);
+        Message = "Processing message {MessageId} in the {Side} for group '{GroupKey}'")]
+    private partial void LogProcessingMessage(long messageId, string side, string groupKey);
 
     [LoggerMessage(
         EventId = 2,

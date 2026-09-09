@@ -19,7 +19,7 @@ public class AddMessageToOutboxTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Database, testOutputHelper);
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => { });
+        serviceCollection.AddTestOutbox(cfg => { });
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
@@ -29,7 +29,7 @@ public class AddMessageToOutboxTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
         var eventId = Guid.NewGuid();
         var msg1 = new OutboxMessage(eventId, DateTime.UtcNow, new ExampleMessage(1));
         var msg2 = new OutboxMessage(eventId, DateTime.UtcNow, new ExampleMessage(2));

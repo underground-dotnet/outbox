@@ -2,7 +2,9 @@
 
 `Underground.Outbox` is a .NET library for the transactional outbox and inbox patterns on top of EF Core and PostgreSQL.
 
-It stores messages in the same database transaction as your business changes, then processes them in the background. The library is group-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox.ProcessMessages()` — in-process only, so a commit on one instance does not wake another, which picks the work up on its next poll.
+It stores messages in the same database transaction as your business changes, then processes them in the background. The library is group-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox<TContext>.ProcessMessages()` — in-process only, so a commit on one instance does not wake another, which picks the work up on its next poll.
+
+An application may hold **several inboxes and several outboxes**, one pair per `DbContext`, each in that context's own schema. This is what makes the library usable from a modular monolith: a message a module writes is handled by that module's handler against that module's tables. There is no transport here — the library carries a message from a module to itself, never between modules. See [Several outboxes in one application](#several-outboxes-in-one-application).
 
 ## How it works
 
@@ -53,7 +55,8 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 
 - **EF Core based**: built on top of EF Core abstractions and DbContexts.
 - **Outbox and inbox support**: both sides share the claim model and the per-message chain, and diverge only where their transaction models genuinely differ.
-- **Push-triggered processing**: you can call `IOutbox.ProcessMessages()` to schedule a run immediately after commit. You can use a dbcontext interceptor to automate this.
+- **Push-triggered processing**: you can call `IOutbox<TContext>.ProcessMessages()` to schedule a run immediately after commit. You can use a dbcontext interceptor to automate this.
+- **One inbox and outbox per `DbContext`**: each with its own schema, handlers, timeouts, retention and concurrency, and none of them able to reach another's rows.
 - **Background processing**: hosted services also schedule processing runs on a configurable delay.
 - **Group-aware parallelism**: different groups are handled concurrently.
 - **Multi-instance safe**: multiple servers can process the same table without duplicating work under normal operation.
@@ -72,17 +75,27 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 
 PostgreSQL 13 is the floor because ordering depends on the 64-bit transaction identifier type `xid8` and on `pg_current_xact_id()`, `pg_current_snapshot()` and `pg_snapshot_xmin()`, all of which arrived in that release. Claiming also relies on `FOR UPDATE ... SKIP LOCKED`.
 
-### Table names and `search_path`
+### Table names and the schema
 
-The library stores its messages in two tables named `inbox` and `outbox`. The names are fixed: mapping either entity to a different table, schema or column through EF Core is not supported, and doing so breaks the library at its first claim rather than at startup.
+The library stores its messages in two tables named `inbox` and `outbox`. The names are fixed: mapping either entity to a different table or column through EF Core is not supported, and doing so breaks the library at its first claim rather than at startup.
 
-The schema is still yours to choose. Claiming and completion are hand-written SQL that names the tables **unqualified**, so both must be reachable through the connection's `search_path`. The default arrangement — tables in the default schema, `search_path` left alone — already satisfies this. If you put your `DbContext` in another schema, say so on the connection:
+The **schema** is yours to choose, and you state it at registration:
 
+```csharp
+builder.Services.AddAppDbContextOutboxServices(cfg =>
+{
+    cfg.Schema = "public";
+    // ...
+});
 ```
-Host=...;Database=...;Search Path=app
-```
 
-See [ADR 0005](docs/adr/0005-fixed-table-and-column-names.md) for why the names are fixed rather than read off the EF model.
+Every claim, completion, retry and cleanup statement qualifies its table with that schema — `"orders".outbox` — so `search_path` is not load-bearing and two contexts sharing a connection string reach two different table pairs. It is required and nothing infers it: a registration without a `Schema` throws, and a *wrong* one fails at the first claim with PostgreSQL's `42P01`.
+
+The schema is said twice, and the two must agree: once in `OnModelCreating` (or by leaving the default), which is where EF creates the tables and where it inserts, deletes and sweeps; and once at registration, which is where the raw claim, completion and retry statements look. Nothing reconciles them — registration has no model to read ([ADR 0007](docs/adr/0007-schema-is-chosen-at-registration.md)) — so a `DbContext` that registers `"orders"` while its model still maps to `public` writes to one table and claims from another, and its messages are never handled. The claim fails loudly with `42P01` in the worker's error log; the write does not.
+
+Registering two `DbContext`s against the same schema throws immediately — that is the one way two modules could silently share a table pair. It compares the strings you gave it, so a module that gives a distinct schema here and forgets `HasDefaultSchema` is not caught by that check.
+
+See [ADR 0005](docs/adr/0005-fixed-table-and-column-names.md) for why the names are fixed rather than read off the EF model, and [ADR 0007](docs/adr/0007-schema-is-chosen-at-registration.md) for why the schema is stated rather than inferred.
 
 ## Getting started
 
@@ -97,32 +110,47 @@ dotnet add package Underground.Outbox.SourceGenerator
 
 ### Configuration
 
-1. **Add Services**: Configure the outbox services in your `Program.cs` file:
+1. **Adjust DbContext**: Add interfaces and message types to your DbContext. This ensures that you can use EF migrations to add the tables to your database. The context must be `public`, because the generated registration method names it.
 
     ```csharp
-    builder.Services.AddOutboxServices<AppDbContext>(cfg =>
-    {
-        cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-        cfg.AddHandler<ExampleMessageHandler, AnotherMessage>();
-    });
-
-    builder.Services.AddInboxServices<AppDbContext>(cfg =>
-    {
-        cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
-    });
-    ```
-
-2. **Adjust DbContext**: Add interfaces and message types to your DbContext. This ensures that you can use EF migrations to add the tables to your database.
-
-    ```csharp
-    sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
+    public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
     {
         public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<InboxMessage> InboxMessages { get; set; }
     }
     ```
 
-3. **Handle Messages**: Create message handlers by implementing `IInboxMessageHandler` and `IOutboxMessageHandler`.
+2. **Handle Messages**: Implement `IOutboxMessageHandler<T>` or `IInboxMessageHandler<T>`, and name the `DbContext` the handler belongs to:
+
+    ```csharp
+    [OutboxHandler<AppDbContext>]
+    public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
+    {
+        public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+    }
+    ```
+
+    The attribute is required. A handler without one is a build error (`OUTBOX002`), because no dispatcher would ever call it.
+
+3. **Add Services**: The source generator emits one registration method per `DbContext` it found handlers for, named after that context — `AddAppDbContextOutboxServices` for an `AppDbContext`:
+
+    ```csharp
+    builder.Services.AddAppDbContextOutboxServices(cfg =>
+    {
+        cfg.Schema = "public";
+        cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
+        cfg.AddHandler<ExampleMessageHandler, AnotherMessage>();
+    });
+
+    builder.Services.AddAppDbContextInboxServices(cfg =>
+    {
+        cfg.Schema = "public";
+        cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
+    });
+    ```
+
+    Register an outbox without an inbox, or an inbox without an outbox, as your module needs.
 
 ### Add messages
 
@@ -224,7 +252,7 @@ Both `OutboxMessage` and `InboxMessage` contain:
 | `CompletedAt` | Null until the message is completed successfully. |
 | `TraceParent` | The W3C trace context of the transaction that wrote the message, so handling it continues the same trace. Null when nothing was tracing. |
 
-Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
+Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and the schema](#table-names-and-the-schema).
 
 ### The `Type` column is a contract
 
@@ -246,14 +274,17 @@ That name is persisted, and rows outlive the code that wrote them. Two consequen
 On the inbox the same name is the integration contract: a foreign producer has to write your .NET type
 name into the `type` column for the message to be dispatched.
 
-Two handlers of the same kind for one message type is a build error (`OUTBOX001`) — only one of them
-could ever run.
+Two handlers of the same kind bound to the **same** `DbContext` for one message type is a build error
+(`OUTBOX001`) — only one of them could ever run. Two modules handling the same message type is legal:
+handler registrations are keyed on the context, so each module's dispatcher can only reach its own.
 
 Handlers also receive `MessageMetadata` with `EventId`, `GroupKey`, and `RetryCount`.
 
 ```csharp
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 
+[OutboxHandler<AppDbContext>]
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
     public Task HandleAsync( ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
@@ -272,7 +303,7 @@ The `cancellationToken` a handler is passed is cancelled once `HandlerTimeout` e
 
 ## Push-based processing
 
-This library supports push-based processing through `IOutbox.ProcessMessages()`.
+This library supports push-based processing through `IOutbox<TContext>.ProcessMessages()`.
 
 That means the producer side can add messages, commit the transaction, and then trigger processing right away instead of waiting for the next scheduled cycle.
 
@@ -283,11 +314,11 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
     options
         .UseNpgsql(connectionString)
-        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
+        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor<AppDbContext>>());
 });
 ```
 
-With that registration in place, a successful `transaction.CommitAsync()` call will trigger `IOutbox.ProcessMessages()` and/or `IInbox.ProcessMessages()` when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work.
+With that registration in place, a successful `transaction.CommitAsync()` call will wake the workers of **that context's** inbox and outbox when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work. A commit in one module does not wake another module's workers; each context gets its own interceptor.
 
 ## Tracing
 
@@ -312,6 +343,7 @@ The span is named `process outbox` / `process inbox`, is a `Consumer` span, and 
 | `messaging.destination.name` | `outbox` or `inbox` |
 | `messaging.destination.partition.id` | The message's `GroupKey` |
 | `messaging.message.id` | The message's `EventId` |
+| `underground.outbox.context` | The `DbContext` this inbox or outbox belongs to |
 | `underground.outbox.message.type` | The message's `Type` |
 | `underground.outbox.retry_count` | The attempt number |
 | `error.type` | Only on failure — see below |
@@ -334,9 +366,68 @@ dotnet ef database update
 
 Existing rows keep a null and are handled exactly as before.
 
+## Several outboxes in one application
+
+An inbox and an outbox are bound to a `DbContext`. A modular monolith registers one pair per module, each in that module's schema, and nothing any module owns is reachable from another.
+
+```csharp
+builder.Services.AddOrdersContextOutboxServices(cfg =>
+{
+    cfg.Schema = "orders";
+    cfg.AddHandler<ShipOrderHandler, OrderShipped>();
+});
+
+builder.Services.AddBillingContextOutboxServices(cfg =>
+{
+    cfg.Schema = "billing";
+    cfg.MaxConcurrentGroups = 16;          // this module's setting, not everyone's
+    cfg.AddHandler<InvoiceHandler, OrderShipped>();
+});
+```
+
+Three things make that hold:
+
+- **The `DbContext` is the key.** You resolve `IOutbox<OrdersContext>`, not `IOutbox`, so the compiler says which module's outbox you are writing to. Each module's processing uses its own context, and so its own execution strategy.
+- **The schema is stated at registration.** Two modules sharing a connection string reach two different table pairs, and registering both against one schema throws. State the same schema on the module's `DbContext` too — see [Table names and the schema](#table-names-and-the-schema).
+- **A handler names its `DbContext`.** The generator emits one dispatcher per context, and handler registrations are keyed on the context type — so two modules may declare handlers for the same message type, and neither can be given the other's message.
+
+One hosted service drives every registered inbox and outbox, and one cleanup loop covers all of them, so adding a module costs workers rather than background loops.
+
+### What this is not
+
+**There is no transport.** The library carries a message from a module to itself: written in one transaction, handled by that module's worker. A module that wants to reach a neighbour calls it by whatever in-process means your application already has, and the neighbour writes to its own inbox in its own transaction. Adding several outboxes does not add a relay between them.
+
+**Wrapping a neighbour's contract type is optional.** Handlers no longer need distinct message types to stay apart, so wrapping is now a durability choice rather than a requirement. The `type` column stores the handled type's `FullName`, so an unwrapped message persists a *neighbour's* type name; when they rename or move it, rows already written stop matching any branch and — per [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md) — block their group indefinitely. Wrapping makes the persisted name yours. Nothing enforces either choice.
+
+### What it costs
+
+**A slow inbox handler in one module stalls head-message discovery in every other.** An inbox handler holds a write transaction for its whole duration, and the stability gate is instance-wide ([ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md)), so this is not a per-module cost. Keep inbox handlers short; an inbox handler's job is to write its own module's tables and return.
+
+**Workers multiply, and they share a connection pool.** The arithmetic is `outboxes × 2 × MaxConcurrentGroups` worker loops — the ×2 being the claim connection and the handler's own — plus one cleanup scope, all against whatever pool the shared connection string configures. Size the pool for that total, not for one module's.
+
+See [ADR 0008](docs/adr/0008-outboxes-are-bound-to-a-dbcontext.md).
+
+## Upgrading from a single outbox
+
+This is one breaking major version. An existing single-outbox registration translates mechanically:
+
+| Before | After |
+|--------|-------|
+| `AddOutboxServices<AppDbContext>(cfg => …)` | `AddAppDbContextOutboxServices(cfg => …)` — generated per context, named after it |
+| `AddInboxServices<AppDbContext>(cfg => …)` | `AddAppDbContextInboxServices(cfg => …)` |
+| *(nothing)* | `cfg.Schema = "public";` — required; `"public"` reproduces the default arrangement |
+| `search_path` on the connection string | `cfg.Schema = "app";`, and drop the `Search Path=` setting |
+| `IOutbox` / `IInbox` | `IOutbox<AppDbContext>` / `IInbox<AppDbContext>` |
+| `ProcessMessagesOnSaveChangesInterceptor` | `ProcessMessagesOnSaveChangesInterceptor<AppDbContext>` |
+| `public class H : IOutboxMessageHandler<M>` | `[OutboxHandler<AppDbContext>] public class H : IOutboxMessageHandler<M>` — required (`OUTBOX002`) |
+| `IMessageExceptionHandler<T>.HandleAsync(…, IDbContext, …)` | `…HandleAsync(…, DbContext, …)`; `IDbContext` is gone |
+| an internal `DbContext` | a `public` one, since the generated registration method names it |
+
+The handler interfaces themselves are unchanged, so adopting this costs an attribute rather than a rewrite. There is no compatibility shim for the non-generic `IOutbox` / `IInbox`.
+
 ## Choosing group keys
 
-Groups are the unit of both ordering and concurrency, and the only source of parallelism.
+Groups are the unit of both ordering and concurrency, and the only source of parallelism *within one inbox or outbox*. Group keys are **not comparable across them**: two modules using the same group key are not serialised against each other, because a group has no meaning outside the table it lives in.
 
 Use the group key to group messages that must stay ordered relative to each other, for example per aggregate, account, or customer. Messages that have no ordering relationship belong in different groups.
 
@@ -370,8 +461,10 @@ A handler that exceeds `HandlerTimeout` is cancelled and recorded as a failed at
 You can configure exception policies per handler registration, or globally for all inbox and outbox handlers. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `AddHandler`:
 
 ```csharp
-builder.Services.AddOutboxServices<AppDbContext>(cfg =>
+builder.Services.AddAppDbContextOutboxServices(cfg =>
 {
+    cfg.Schema = "public";
+
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
 
     cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
@@ -404,8 +497,11 @@ The same setting on the outbox is only about table size: nothing else reads a co
 
 ## Configuration reference
 
+Every setting below is per inbox and per outbox: a module with a slow external partner does not impose its timeouts on a module without one, and there is no concurrency budget shared across outboxes.
+
 | Setting | Default | Description |
 |---------|---------|-------------|
+| `Schema` | *(required)* | The PostgreSQL schema this side's table lives in. Registration throws when it is unset, and two `DbContext`s naming one schema is refused. |
 | `MaxConcurrentGroups` | `4` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
 | `HandlerTimeout` | `45 seconds` | Time a handler is given before its cancellation token fires and the attempt is recorded as failed. The outbox lease is derived from this plus a margin for the completion write, and is deliberately not configurable on its own: a lease shorter than the timeout would guarantee double delivery on every slow message. |
 | `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |

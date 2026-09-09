@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 
 using Npgsql;
 
+using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
@@ -15,15 +16,26 @@ namespace Underground.Outbox.Domain;
 /// Guarded on the Lease instant the claim granted, so a worker that overran cannot mark a message some
 /// other worker now owns. Matching no row is reported and not thrown - the effect already happened - but
 /// it is still the one case in which an effect has certainly been carried out twice, so
-/// <see cref="Middleware.RecordSuccessMiddleware{TEntity}"/> puts it on the ProcessingAttempt for the outcome log.
+/// <see cref="Middleware.RecordSuccessMiddleware{TContext, TEntity}"/> puts it on the ProcessingAttempt for the outcome log.
 /// On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
-internal sealed partial class MarkCompleted<TEntity>(
-    IDbContext dbContext,
-    ILogger<MarkCompleted<TEntity>> logger
-) where TEntity : class, IMessage
+internal sealed partial class MarkCompleted<TContext, TEntity>(
+    TContext dbContext,
+    ServiceConfiguration<TContext, TEntity> config,
+    ILogger<MarkCompleted<TContext, TEntity>> logger
+)
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
-    private readonly ILogger<MarkCompleted<TEntity>> _logger = logger;
+    private readonly ILogger<MarkCompleted<TContext, TEntity>> _logger = logger;
+
+    // clock_timestamp(), so this column is on the same clock as every other instant in the table
+    private readonly string _sql = StatementCache.GetOrAdd(config.QualifiedTable, "complete", qualifiedTable => $"""
+        UPDATE {qualifiedTable}
+        SET completed_at = clock_timestamp()
+        WHERE id = @id
+        AND visible_at = @lease
+        """);
 
     /// <summary>
     /// Marks the message handled, if this worker still holds it.
@@ -34,24 +46,17 @@ internal sealed partial class MarkCompleted<TEntity>(
     /// </returns>
     internal async Task<bool> ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
-        // clock_timestamp(), so this column is on the same clock as every other instant in the table
-        var sql = $"""
-            UPDATE {TEntity.TableName}
-            SET completed_at = clock_timestamp()
-            WHERE id = @id
-            AND visible_at = @lease
-            """;
-
         List<NpgsqlParameter> parameters =
         [
             new("id", message.Id),
             new("lease", message.VisibleAt),
         ];
 
-        // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
+        // S2077: the statement is composed from the table name (a compile-time constant, ADR 0005) and the
+        // schema given at registration, never from anything a message carries
 #pragma warning disable S2077 // Formatting SQL queries is security-sensitive
         var rows = await dbContext.Database
-            .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
+            .ExecuteSqlRawAsync(_sql, parameters, cancellationToken)
             .ConfigureAwait(false);
 #pragma warning restore S2077
 

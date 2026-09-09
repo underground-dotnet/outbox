@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest;
@@ -27,7 +28,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        serviceCollection.AddTestOutbox(cfg =>
         {
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
         });
@@ -57,8 +58,8 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     public async Task SaveChanges_TriggersOutboxProcessing_WhenNewOutboxMessagesWereAdded()
     {
         // Arrange
-        var context = CreateDbContext(_serviceProvider.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var context = CreateDbContext(_serviceProvider.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor<TestDbContext>>());
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
         await RunBackgroundServiceAsync(TestContext.Current.CancellationToken);
 
@@ -79,18 +80,18 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     /// A context and an interceptor wired to recorders rather than to the real processors, so a test reads
     /// the notifications a commit produced instead of waiting for a background service to act on them.
     /// </summary>
-    private (InboxOutboxDbContext Context, RecordingProcessor Outbox, RecordingProcessor Inbox) CreateRecordingContext()
+    private (InboxOutboxDbContext Context, RecordingSignal Outbox, RecordingSignal Inbox) CreateRecordingContext()
     {
-        var outbox = new RecordingProcessor();
-        var inbox = new RecordingProcessor();
+        var outbox = new RecordingSignal();
+        var inbox = new RecordingSignal();
 
         var services = new ServiceCollection();
-        services.AddSingleton<IOutbox>(outbox);
-        services.AddSingleton<IInbox>(inbox);
+        services.AddSingleton<IWorkSignal<InboxOutboxDbContext, OutboxMessage>>(outbox);
+        services.AddSingleton<IWorkSignal<InboxOutboxDbContext, InboxMessage>>(inbox);
 
-        var interceptor = new ProcessMessagesOnSaveChangesInterceptor(
+        var interceptor = new ProcessMessagesOnSaveChangesInterceptor<InboxOutboxDbContext>(
             services.BuildServiceProvider(),
-            NullLogger<ProcessMessagesOnSaveChangesInterceptor>.Instance);
+            NullLogger<ProcessMessagesOnSaveChangesInterceptor<InboxOutboxDbContext>>.Instance);
 
         var options = new DbContextOptionsBuilder<InboxOutboxDbContext>()
             .UseNpgsql(Database.ConnectionString)
@@ -188,22 +189,11 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         Assert.Equal(0, inbox.ProcessMessagesCalls);
     }
 
-    /// <summary>
-    /// Counts the notifications the interceptor sends. Adding is not reachable through it, so it is refused
-    /// rather than left as a silent no-op.
-    /// </summary>
-    private sealed class RecordingProcessor : IOutbox, IInbox
+    /// <summary>Counts the notifications the interceptor sends to one side of one context.</summary>
+    private sealed class RecordingSignal : IWorkSignal<InboxOutboxDbContext, OutboxMessage>, IWorkSignal<InboxOutboxDbContext, InboxMessage>
     {
         public int ProcessMessagesCalls { get; private set; }
 
         public void ProcessMessages() => ProcessMessagesCalls++;
-
-        public Task AddMessageAsync(IOutboxDbContext context, OutboxMessage message, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task AddMessagesAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken) => throw new NotSupportedException();
-
-        public Task AddMessagesAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

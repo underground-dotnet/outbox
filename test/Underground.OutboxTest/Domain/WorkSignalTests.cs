@@ -21,14 +21,14 @@ public class WorkSignalTests
     /// anything on the configuration, but both are real rather than null so that a change which starts
     /// reaching for them fails as a test rather than as a null reference.
     /// </summary>
-    private static ConcurrentProcessor<OutboxMessage> CreateProcessor()
+    private static ConcurrentProcessor<TestDbContext, OutboxMessage> CreateProcessor()
     {
         var scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
 
-        return new ConcurrentProcessor<OutboxMessage>(
-            NullLogger<ConcurrentProcessor<OutboxMessage>>.Instance,
+        return new ConcurrentProcessor<TestDbContext, OutboxMessage>(
+            NullLogger<ConcurrentProcessor<TestDbContext, OutboxMessage>>.Instance,
             scopeFactory,
-            new OutboxServiceConfiguration());
+            new OutboxServiceConfiguration<TestDbContext>());
     }
 
     /// <summary>

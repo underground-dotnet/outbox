@@ -21,18 +21,20 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) =>
 {
     options
         .UseNpgsql(postgreSqlContainer.GetConnectionString())
-        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
+        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor<AppDbContext>>());
 });
 
-builder.Services.AddOutboxServices<AppDbContext>(cfg =>
+builder.Services.AddAppDbContextOutboxServices(cfg =>
 {
+    cfg.Schema = "public";
     cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
     cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
         .OnException<InvalidOperationException>().Discard()
         .OnException<TimeoutException>().Discard();
 });
-builder.Services.AddInboxServices<AppDbContext>(cfg =>
+builder.Services.AddAppDbContextInboxServices(cfg =>
 {
+    cfg.Schema = "public";
     cfg.Policies.OnException<FileNotFoundException>().Discard();
 
     cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
@@ -43,8 +45,8 @@ IHost host = builder.Build();
 // IOutbox, IInbox and the DbContext are scoped, so seeding needs its own scope rather than the root provider
 await using (var scope = host.Services.CreateAsyncScope())
 {
-    var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
-    var inbox = scope.ServiceProvider.GetRequiredService<IInbox>();
+    var outbox = scope.ServiceProvider.GetRequiredService<IOutbox<AppDbContext>>();
+    var inbox = scope.ServiceProvider.GetRequiredService<IInbox<AppDbContext>>();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await dbContext.Database.EnsureCreatedAsync();
 
@@ -66,9 +68,9 @@ await using (var scope = host.Services.CreateAsyncScope())
         await transaction.CommitAsync();
     }
 
-    // the table is named "outbox" and is not qualified here, so it is found through the connection's
-    // search_path - the same way the library's own statements find it
-    var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM outbox").SingleAsync();
+    // qualified by the same schema the registration named, which is where the library's own statements
+    // look for it
+    var count = await dbContext.Database.SqlQuery<int>($"SELECT COUNT(id) AS \"Value\" FROM public.outbox").SingleAsync();
     Console.WriteLine($"Added {count} messages to outbox.");
 }
 

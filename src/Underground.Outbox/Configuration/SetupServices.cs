@@ -1,102 +1,116 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
-using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
-using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Domain.ExceptionHandlers;
+using Underground.Outbox.Domain.Middleware;
 
 namespace Underground.Outbox.Configuration;
 
+/// <summary>
+/// Registers everything one inbox or one outbox needs. Called by the generated per-context entry points,
+/// which also register that context's dispatcher.
+/// </summary>
 public static class SetupServices
 {
+    /// <summary>
+    /// Registers the outbox belonging to <typeparamref name="TContext"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The configuration names no schema.</exception>
+    /// <exception cref="InvalidOperationException">Another context already claimed that schema.</exception>
     public static void SetupInternalOutboxServices<TContext>(
         IServiceCollection services,
-        Action<OutboxServiceConfiguration> configuration
+        Action<OutboxServiceConfiguration<TContext>> configuration
     ) where TContext : DbContext, IOutboxDbContext
     {
-        var serviceConfig = new OutboxServiceConfiguration();
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var serviceConfig = new OutboxServiceConfiguration<TContext>();
         configuration.Invoke(serviceConfig);
         serviceConfig.Validate();
+        SchemaRegistry.For(services).Claim(serviceConfig.Schema!, typeof(TContext));
 
-        services.AddScoped<IOutboxDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<AddMessagesToOutbox>();
-        services.AddScoped<IOutbox, OutboxImpl>();
-        services.AddScoped<ClaimHeadMessage<OutboxMessage>, ClaimOutboxHeadMessage>();
+        services.AddScoped<AddMessagesToOutbox<TContext>>();
+        services.AddScoped<IOutbox<TContext>, OutboxImpl<TContext>>();
+        services.AddScoped<ClaimHeadMessage<TContext, OutboxMessage>, ClaimOutboxHeadMessage<TContext>>();
 
         // no transaction open during dispatch: no savepoint, and the three-transaction outer loop
-        services.AddScoped(MessagePipelineFactory.CreateOutbox);
-        services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
+        services.AddScoped(MessagePipelineFactory.CreateOutbox<TContext>);
+        services.AddScoped<IProcessor<TContext, OutboxMessage>, OutboxProcessor<TContext>>();
 
-        AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
+        AddGenericServices<TContext, OutboxMessage>(services, serviceConfig);
     }
 
+    /// <summary>
+    /// Registers the inbox belonging to <typeparamref name="TContext"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The configuration names no schema.</exception>
+    /// <exception cref="InvalidOperationException">Another context already claimed that schema.</exception>
     public static void SetupInternalInboxServices<TContext>(
         IServiceCollection services,
-        Action<InboxServiceConfiguration> configuration
+        Action<InboxServiceConfiguration<TContext>> configuration
     ) where TContext : DbContext, IInboxDbContext
     {
-        var serviceConfig = new InboxServiceConfiguration();
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var serviceConfig = new InboxServiceConfiguration<TContext>();
         configuration.Invoke(serviceConfig);
         serviceConfig.Validate();
+        SchemaRegistry.For(services).Claim(serviceConfig.Schema!, typeof(TContext));
 
-        services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<IDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped<AddMessagesToInbox>();
-        services.AddScoped<IInbox, InboxImpl>();
-        services.AddScoped<ClaimHeadMessage<InboxMessage>, ClaimInboxHeadMessage>();
+        services.AddScoped<AddMessagesToInbox<TContext>>();
+        services.AddScoped<IInbox<TContext>, InboxImpl<TContext>>();
+        services.AddScoped<ClaimHeadMessage<TContext, InboxMessage>, ClaimInboxHeadMessage<TContext>>();
 
         // one transaction spans claim, Handler and outcome, so the inbox keeps the savepoint
-        services.AddScoped<SavepointMiddleware<InboxMessage>>();
-        services.AddScoped(MessagePipelineFactory.CreateInbox);
-        services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
+        services.AddScoped<SavepointMiddleware<TContext, InboxMessage>>();
+        services.AddScoped(MessagePipelineFactory.CreateInbox<TContext>);
+        services.AddScoped<IProcessor<TContext, InboxMessage>, InboxProcessor<TContext>>();
 
-        AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
+        AddGenericServices<TContext, InboxMessage>(services, serviceConfig);
     }
 
-#pragma warning disable S2326 // Unused type parameters should be removed
-    private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration<TEntity> serviceConfig)
-#pragma warning restore S2326 // Unused type parameters should be removed
-    where TEntity : class, IMessage
-    where TContext : IDbContext
+    private static void AddGenericServices<TContext, TEntity>(IServiceCollection services, ServiceConfiguration<TContext, TEntity> serviceConfig)
+        where TContext : DbContext
+        where TEntity : class, IMessage
     {
         services.AddSingleton(serviceConfig);
 
-        services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
+        foreach (var registration in serviceConfig.Registrations)
+        {
+            services.TryAdd(registration.ServiceDescriptor);
+        }
 
-        services.AddSingleton<ConcurrentProcessor<TEntity>>();
-        // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
-        services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
-        services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddScoped<ScheduleRetry<TEntity>>();
-        services.AddScoped<MarkCompleted<TEntity>>();
+        services.AddSingleton<ConcurrentProcessor<TContext, TEntity>>();
+        services.AddSingleton<IWorkerSet>(sp => sp.GetRequiredService<ConcurrentProcessor<TContext, TEntity>>());
+        services.AddSingleton<IWorkSignal<TContext, TEntity>>(sp => sp.GetRequiredService<ConcurrentProcessor<TContext, TEntity>>());
+        services.AddSingleton<IRetentionSweep, RetentionSweep<TContext, TEntity>>();
+
+        services.TryAddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
+        services.AddScoped<ProcessExceptionFromHandler<TContext, TEntity>>();
+        services.AddScoped<ScheduleRetry<TContext, TEntity>>();
+        services.AddScoped<MarkCompleted<TContext, TEntity>>();
 
         // per-message middleware, registered individually but only ever composed by the factory, which owns
         // the order between them
-        services.AddScoped<TraceMessageMiddleware<TEntity>>();
-        services.AddScoped<LogMessageMiddleware<TEntity>>();
-        services.AddScoped<RecordSuccessMiddleware<TEntity>>();
-        services.AddScoped<RecordFailureMiddleware<TEntity>>();
-        services.AddScoped<TimeoutMiddleware<TEntity>>();
-        services.AddScoped<DispatchMessage<TEntity>>();
+        services.AddScoped<TraceMessageMiddleware<TContext, TEntity>>();
+        services.AddScoped<LogMessageMiddleware<TContext, TEntity>>();
+        services.AddScoped<RecordSuccessMiddleware<TContext, TEntity>>();
+        services.AddScoped<RecordFailureMiddleware<TContext, TEntity>>();
+        services.AddScoped<TimeoutMiddleware<TContext, TEntity>>();
+        services.AddScoped<DispatchMessage<TContext, TEntity>>();
 
-        services.AddScoped<DeleteCompletedMessages<TEntity>>();
-        services.AddHostedService<BackgroundService<TEntity>>();
-        services.AddHostedService<CleanupBackgroundService<TEntity>>();
-        services.TryAddScoped<ProcessMessagesOnSaveChangesInterceptor>();
+        services.AddScoped<DeleteCompletedMessages<TContext, TEntity>>();
+        services.TryAddScoped<ProcessMessagesOnSaveChangesInterceptor<TContext>>();
 
-        // services.AddSingleton<IDistributedLockProvider>(sp =>
-        // {
-        //     var dbContext = sp.GetRequiredService<TContext>();
-        //     var connectionString = dbContext.Database.GetConnectionString();
-        //     if (string.IsNullOrEmpty(connectionString))
-        //     {
-        //         throw new ArgumentException("Database connection string is not set. Please ensure the DbContext is properly configured.");
-        //     }
-        //     return new PostgresDistributedSynchronizationProvider(connectionString);
-        // });
+        // one hosted service for every registered inbox and outbox, and one retention loop covering all of
+        // them: TryAddEnumerable dedupes on implementation type, so the second registration adds nothing
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, MessageProcessingBackgroundService>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, CleanupBackgroundService>());
     }
 }

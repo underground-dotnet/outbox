@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
@@ -15,8 +17,8 @@ public interface IMessageExceptionHandler<in TEntity> where TEntity : class, IMe
     /// </summary>
     /// <param name="ex">The exception thrown from the message handler.</param>
     /// <param name="message">The message being processed when the exception occurred.</param>
-    /// <param name="dbContext">The database context for performing data operations.</param>
+    /// <param name="dbContext">The context this message's inbox or outbox belongs to.</param>
     /// <param name="cancellationToken">Cancellation token to abort the operation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    public Task HandleAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken);
+    public Task HandleAsync(MessageHandlerException ex, TEntity message, DbContext dbContext, CancellationToken cancellationToken);
 }

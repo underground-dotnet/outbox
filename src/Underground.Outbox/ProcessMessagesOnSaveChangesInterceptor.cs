@@ -6,67 +6,85 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 
 namespace Underground.Outbox;
 
 /// <summary>
-/// Triggers push-based inbox/outbox processing after a successful commit when new inbox or outbox messages were added.
+/// Triggers push-based processing after a successful commit on <typeparamref name="TContext"/>, when that
+/// commit added inbox or outbox messages.
 /// </summary>
 /// <remarks>
-/// What is pending belongs to the transaction that staged it, which is why the transaction is recorded
-/// alongside: a save under a different one discards what an abandoned predecessor left, so a transaction that
-/// never committed cannot make a later one notify. Plain fields suffice: the interceptor is scoped alongside
-/// its <see cref="DbContext"/>, which forbids concurrent use.
+/// Bound to one context, so a commit in one module wakes that module's workers and no one else's. What is
+/// pending belongs to the transaction that staged it, which is why the transaction is recorded alongside: a
+/// save under a different one discards what an abandoned predecessor left, so a transaction that never
+/// committed cannot make a later one notify. Plain fields suffice: the interceptor is scoped alongside its
+/// <see cref="DbContext"/>, which forbids concurrent use.
 /// </remarks>
-public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProvider serviceProvider, ILogger<ProcessMessagesOnSaveChangesInterceptor> logger) : DbTransactionInterceptor, ISaveChangesInterceptor
+/// <typeparam name="TContext">The context this interceptor is registered on.</typeparam>
+public sealed partial class ProcessMessagesOnSaveChangesInterceptor<TContext>(
+    IServiceProvider serviceProvider,
+    ILogger<ProcessMessagesOnSaveChangesInterceptor<TContext>> logger
+) : DbTransactionInterceptor, ISaveChangesInterceptor where TContext : DbContext
 {
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private bool _hasOutboxChanges;
     private bool _hasInboxChanges;
     private Guid? _stagingTransactionId;
-    private readonly ILogger<ProcessMessagesOnSaveChangesInterceptor> _logger = logger;
+    private readonly ILogger<ProcessMessagesOnSaveChangesInterceptor<TContext>> _logger = logger;
 
+    /// <inheritdoc />
     public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData)
     {
         TriggerProcessing();
     }
 
+    /// <inheritdoc />
     public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
     {
         TriggerProcessing();
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override void TransactionRolledBack(DbTransaction transaction, TransactionEndEventData eventData)
     {
         ClearPendingChanges();
     }
 
+    /// <inheritdoc />
     public override Task TransactionRolledBackAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
     {
         ClearPendingChanges();
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
+        ArgumentNullException.ThrowIfNull(eventData);
+
         CheckForNewInboxOutboxEntities(eventData.Context);
         return result;
     }
 
+    /// <inheritdoc />
     public ValueTask<InterceptionResult<int>> SavingChangesAsync(
         DbContextEventData eventData,
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default
     )
     {
+        ArgumentNullException.ThrowIfNull(eventData);
+
         CheckForNewInboxOutboxEntities(eventData.Context);
         return ValueTask.FromResult(result);
     }
 
     private void CheckForNewInboxOutboxEntities(DbContext? context)
     {
-        if (context is null)
+        // a context of another type is another module's, whose own interceptor answers for it
+        if (context is not TContext)
         {
             return;
         }
@@ -90,16 +108,17 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
         var processInbox = _hasInboxChanges;
         ClearPendingChanges();
 
-        if (processOutbox)
+        // GetService rather than GetRequiredService: a module may register only one of the two sides
+        if (processOutbox && _serviceProvider.GetService<IWorkSignal<TContext, OutboxMessage>>() is { } outbox)
         {
             LogNewMessagesDetected("outbox");
-            _serviceProvider.GetRequiredService<IOutbox>().ProcessMessages();
+            outbox.ProcessMessages();
         }
 
-        if (processInbox)
+        if (processInbox && _serviceProvider.GetService<IWorkSignal<TContext, InboxMessage>>() is { } inbox)
         {
             LogNewMessagesDetected("inbox");
-            _serviceProvider.GetRequiredService<IInbox>().ProcessMessages();
+            inbox.ProcessMessages();
         }
     }
 

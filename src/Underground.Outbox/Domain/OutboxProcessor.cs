@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -14,11 +15,11 @@ namespace Underground.Outbox.Domain;
 /// The cost is at-least-once delivery, so outbox Handlers must be idempotent. Every write after the claim
 /// is guarded on the granted Lease, which stops a worker that overran from overwriting a newer claim.
 /// </remarks>
-internal sealed class OutboxProcessor(
-    IDbContext dbContext,
-    ClaimHeadMessage<OutboxMessage> claimHeadMessage,
-    MessagePipeline<OutboxMessage> pipeline
-) : IProcessor<OutboxMessage>
+internal sealed class OutboxProcessor<TContext>(
+    TContext dbContext,
+    ClaimHeadMessage<TContext, OutboxMessage> claimHeadMessage,
+    MessagePipeline<TContext, OutboxMessage> pipeline
+) : IProcessor<TContext, OutboxMessage> where TContext : DbContext, IOutboxDbContext
 {
     public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
     {

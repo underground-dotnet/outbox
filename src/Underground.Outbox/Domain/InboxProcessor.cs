@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -13,14 +14,14 @@ namespace Underground.Outbox.Domain;
 /// <remarks>
 /// The cost is that this transaction is a writer from the claim onwards, so it pins
 /// <c>pg_snapshot_xmin</c> - the watermark HeadMessage discovery gates on - and stalls discovery for
-/// both sides and every Group while the Handler runs. Inbox Handlers must therefore stay short. See
-/// ADR 0002.
+/// every registered inbox and outbox in the process, not just this one. Inbox Handlers must therefore stay
+/// short. See ADR 0002 and ADR 0008.
 /// </remarks>
-internal sealed class InboxProcessor(
-    IDbContext dbContext,
-    ClaimHeadMessage<InboxMessage> claimHeadMessage,
-    MessagePipeline<InboxMessage> pipeline
-) : IProcessor<InboxMessage>
+internal sealed class InboxProcessor<TContext>(
+    TContext dbContext,
+    ClaimHeadMessage<TContext, InboxMessage> claimHeadMessage,
+    MessagePipeline<TContext, InboxMessage> pipeline
+) : IProcessor<TContext, InboxMessage> where TContext : DbContext, IInboxDbContext
 {
     public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
     {

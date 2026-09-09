@@ -1,17 +1,19 @@
 using System.Diagnostics;
 
+using Microsoft.EntityFrameworkCore;
+
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class AddMessagesToOutbox
+internal sealed class AddMessagesToOutbox<TContext> where TContext : DbContext, IOutboxDbContext
 {
 #pragma warning disable CA1822, S2325 // Mark members as static
-    public async Task ExecuteAsync(IOutboxDbContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(TContext context, IEnumerable<OutboxMessage> messages, CancellationToken cancellationToken)
 #pragma warning restore CA1822, S2325 // Mark members as static
     {
-        if (!HasActiveTransaction(context))
+        if (context.Database.CurrentTransaction is null)
         {
             throw new NoActiveTransactionException();
         }
@@ -27,10 +29,5 @@ internal sealed class AddMessagesToOutbox
 
         await context.OutboxMessages.AddRangeAsync(toAdd, cancellationToken).ConfigureAwait(false);
         await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private static bool HasActiveTransaction(IDbContext context)
-    {
-        return context.Database.CurrentTransaction != null;
     }
 }

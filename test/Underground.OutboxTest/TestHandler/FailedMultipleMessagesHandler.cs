@@ -1,8 +1,10 @@
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class FailedMultipleMessagesHandler : IOutboxMessageHandler<FailedMultiMessageA>, IOutboxMessageHandler<FailedMultiMessageB>
 {
     public Task HandleAsync(FailedMultiMessageA message, MessageMetadata metadata, CancellationToken cancellationToken)

@@ -21,13 +21,14 @@ public class MessageTypeNameTests
     {
         var services = new ServiceCollection();
         var handler = new NestedMessageHandler();
-        services.AddSingleton<IOutboxMessageHandler<Envelope.Nested>>(handler);
-        services.AddSingleton<IOutboxMessageHandler<Wrapped<Envelope.Nested>>>(handler);
+        // keyed on the context, exactly as the registration does it: that is what the dispatcher looks up
+        services.AddKeyedSingleton<IOutboxMessageHandler<Envelope.Nested>>(typeof(TestDbContext), handler);
+        services.AddKeyedSingleton<IOutboxMessageHandler<Wrapped<Envelope.Nested>>>(typeof(TestDbContext), handler);
 
         await using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        await new GeneratedDispatcher<OutboxMessage>().ExecuteAsync(scope, message, TestContext.Current.CancellationToken);
+        await new Dispatcher_Underground_OutboxTest_TestDbContext<OutboxMessage>().ExecuteAsync(scope, message, TestContext.Current.CancellationToken);
     }
 
     [Fact]

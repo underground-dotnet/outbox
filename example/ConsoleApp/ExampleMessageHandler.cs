@@ -2,11 +2,13 @@
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace ConsoleApp;
 
 #pragma warning disable CA1848 // Use the LoggerMessage delegates
+[OutboxHandler<AppDbContext>]
 public class ExampleMessageHandler(ILogger<ExampleMessageHandler> logger) : IOutboxMessageHandler<ExampleMessage>, IOutboxMessageHandler<SecondMessage>
 {
     public Task HandleAsync(ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)

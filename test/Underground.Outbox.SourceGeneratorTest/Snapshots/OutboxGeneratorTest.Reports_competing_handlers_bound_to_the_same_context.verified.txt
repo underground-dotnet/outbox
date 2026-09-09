@@ -1,0 +1,16 @@
+﻿{
+  Diagnostics: [
+    {
+      Message: Message type 'Sample.TestMessage' is handled by more than one outbox handler bound to 'Sample.OrdersContext' (Sample.FirstHandler, Sample.SecondHandler). Only one of them is dispatched.,
+      Severity: Error,
+      Descriptor: {
+        Id: OUTBOX001,
+        Title: Message type has competing handlers,
+        MessageFormat: Message type '{0}' is handled by more than one {1} handler bound to '{2}' ({3}). Only one of them is dispatched.,
+        Category: Underground.Outbox,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

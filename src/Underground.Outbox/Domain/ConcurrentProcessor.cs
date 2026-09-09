@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -8,15 +9,20 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed partial class ConcurrentProcessor<TEntity>(
-    ILogger<ConcurrentProcessor<TEntity>> logger,
+internal sealed partial class ConcurrentProcessor<TContext, TEntity>(
+    ILogger<ConcurrentProcessor<TContext, TEntity>> logger,
     IServiceScopeFactory scopeFactory,
-    ServiceConfiguration<TEntity> config
-) where TEntity : class, IMessage
+    ServiceConfiguration<TContext, TEntity> config
+) : IWorkerSet, IWorkSignal<TContext, TEntity>
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
-    private readonly ILogger<ConcurrentProcessor<TEntity>> _logger = logger;
+    private readonly ILogger<ConcurrentProcessor<TContext, TEntity>> _logger = logger;
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory;
-    private readonly ServiceConfiguration<TEntity> _config = config;
+    private readonly ServiceConfiguration<TContext, TEntity> _config = config;
+
+    /// <inheritdoc />
+    public string Name { get; } = SideName.For<TContext, TEntity>();
 
     /// <summary>
     /// Wake-up signal for idle workers. Carries no information beyond "look again".
@@ -38,7 +44,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     /// Runs one worker per configured concurrent Group, plus the poll that wakes them, until cancelled.
     /// Each worker claims for itself and waits on the work signal once nothing is offered.
     /// </summary>
-    internal async Task RunAsync(CancellationToken cancellationToken)
+    public async Task RunAsync(CancellationToken cancellationToken)
     {
         var workers = Enumerable.Range(0, _config.MaxConcurrentGroups)
             .Select(_ => RunWorkerAsync(cancellationToken))
@@ -54,10 +60,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     /// Polling is what guarantees delivery; the commit interceptor calling this is only a latency
     /// optimisation, and a lost notification therefore costs time rather than correctness.
     /// </remarks>
-    internal void NotifyWork()
+    public void NotifyWork()
     {
         _workSignal.Writer.TryWrite(0);
     }
+
+    /// <inheritdoc />
+    void IWorkSignal<TContext, TEntity>.ProcessMessages() => NotifyWork();
 
     /// <summary>
     /// Waits until <see cref="NotifyWork"/> is called. Returns rather than throwing on cancellation; the
@@ -92,13 +101,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         {
             // use a separate scope & context for each claim
             using var scope = _scopeFactory.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
+            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TContext, TEntity>>();
 
             return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogProcessingError(ex);
+            LogProcessingError(Name, ex);
 
             // no work rather than an immediate retry, so a database refusing connections is not hammered
             return ClaimResult.NothingOffered;
@@ -146,6 +155,6 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Error,
-        Message = "Error claiming or handling the next HeadMessage")]
-    private partial void LogProcessingError(Exception exception);
+        Message = "Error claiming or handling the next HeadMessage in the {Side}")]
+    private partial void LogProcessingError(string side, Exception exception);
 }

@@ -21,7 +21,7 @@ public class OutboxTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => { });
+        serviceCollection.AddTestOutbox(cfg => { });
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
@@ -31,7 +31,7 @@ public class OutboxTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act & Assert
         await Assert.ThrowsAsync<NoActiveTransactionException>(async () =>
@@ -48,7 +48,7 @@ public class OutboxTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act & Assert
         await Assert.ThrowsAsync<NoActiveTransactionException>(async () =>
@@ -68,7 +68,7 @@ public class OutboxTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act
         using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
@@ -88,7 +88,7 @@ public class OutboxTests : DatabaseTest
     {
         // Arrange
         var context = CreateDbContext();
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
 
         // Act
         using var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -8,7 +9,12 @@ namespace Underground.Outbox.Domain.Middleware;
 /// One concern in the work done to a single message, wrapped around the rest of the pipeline. The order
 /// between middleware is a correctness property, so only <see cref="MessagePipelineFactory"/> composes them.
 /// </summary>
-internal interface IMessageMiddleware<TEntity> where TEntity : class, IMessage
+// S2326: TContext appears in no signature here; what it selects is which side's services are composed
+#pragma warning disable S2326 // Unused type parameters should be removed
+internal interface IMessageMiddleware<TContext, TEntity>
+#pragma warning restore S2326 // Unused type parameters should be removed
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
     /// <summary>
     /// Runs this middleware around <paramref name="next"/>.

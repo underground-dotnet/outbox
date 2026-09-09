@@ -90,7 +90,7 @@ public class TraceMessageMiddlewareTests
             () => Task.FromResult(ProcessingAttempt.LeaseLost(new InvalidOperationException())));
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal(TraceMessageMiddleware<OutboxMessage>.LeaseLostErrorType, activity.GetTagItem("error.type"));
+        Assert.Equal(TraceMessageMiddleware<TestDbContext, OutboxMessage>.LeaseLostErrorType, activity.GetTagItem("error.type"));
     }
 
     [Fact]
@@ -102,14 +102,14 @@ public class TraceMessageMiddlewareTests
             () => Task.FromResult(ProcessingAttempt.LeaseLost(failure: null)));
 
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
-        Assert.Equal(TraceMessageMiddleware<OutboxMessage>.DuplicateDeliveryErrorType, activity.GetTagItem("error.type"));
+        Assert.Equal(TraceMessageMiddleware<TestDbContext, OutboxMessage>.DuplicateDeliveryErrorType, activity.GetTagItem("error.type"));
     }
 
     [Fact]
     public async Task ShutdownMidAttemptIsNotAnError()
     {
         var message = NewMessage(traceParent: null);
-        var middleware = new TraceMessageMiddleware<OutboxMessage>();
+        var middleware = new TraceMessageMiddleware<TestDbContext, OutboxMessage>();
 
         using var spans = new RecordingTracerProvider();
 
@@ -126,7 +126,7 @@ public class TraceMessageMiddlewareTests
         OutboxMessage message,
         Func<Task<ProcessingAttempt>> next)
     {
-        var middleware = new TraceMessageMiddleware<OutboxMessage>();
+        var middleware = new TraceMessageMiddleware<TestDbContext, OutboxMessage>();
 
         using var spans = new RecordingTracerProvider();
 

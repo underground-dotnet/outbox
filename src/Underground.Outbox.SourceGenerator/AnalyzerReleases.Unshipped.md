@@ -6,3 +6,4 @@
 Rule ID | Category | Severity | Notes
 --------|----------|----------|------
 OUTBOX001 | Underground.Outbox | Error | Message type has competing handlers
+OUTBOX002 | Underground.Outbox | Error | Handler is not bound to a DbContext

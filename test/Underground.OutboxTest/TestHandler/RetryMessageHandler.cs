@@ -1,4 +1,5 @@
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
@@ -7,6 +8,7 @@ namespace Underground.OutboxTest.TestHandler;
 /// Counts its runs, so a test can tell whether a transient failure replayed the handler or only the
 /// statement that failed.
 /// </summary>
+[OutboxHandler<InboxOutboxDbContext>]
 public class RetryMessageHandler(InboxOutboxDbContext dbContext) : IOutboxMessageHandler<RetryMessage>
 {
     /// <summary>How often the handler ran. Static because the handler is resolved per message.</summary>

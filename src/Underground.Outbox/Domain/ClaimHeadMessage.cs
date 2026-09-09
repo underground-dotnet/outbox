@@ -6,7 +6,9 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
+internal abstract class ClaimHeadMessage<TContext, TEntity>(TContext dbContext)
+    where TContext : DbContext
+    where TEntity : class, IMessage
 {
     /// <summary>
     /// Claims the HeadMessage - the oldest Stable message not yet completed - of whichever Group offers the oldest one,
@@ -48,10 +50,10 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     /// <summary>
     /// The HeadMessage discovery both sides share, as two CTEs named <c>head_messages</c> and <c>claimed</c>. The second
     /// yields at most one id, already locked for the calling transaction; a caller appends the statement
-    /// that acts on it. The table is unqualified so the schema is the deployment's to choose through
-    /// <c>search_path</c>; see <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
+    /// that acts on it. The table is qualified by the schema given at registration, so two modules on one
+    /// connection string reach two different tables; see <c>docs/adr/0007-schema-is-chosen-at-registration.md</c>.
     /// </summary>
-    protected static string LockedHeadMessageCte()
+    protected static string LockedHeadMessageCte(string qualifiedTable)
     {
         // Two steps, because a Group's HeadMessage is its lowest (transaction_id, id) *regardless of
         // visibility*; only then is visibility tested. Filtering by visible_at first would hand out the
@@ -75,7 +77,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         return $"""
             WITH head_messages AS (
                 SELECT DISTINCT ON (group_key) id
-                FROM {TEntity.TableName}
+                FROM {qualifiedTable}
                 WHERE completed_at IS NULL
                 AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
                 ORDER BY group_key, transaction_id, id
@@ -83,7 +85,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
             claimed AS (
                 SELECT m.id
                 FROM head_messages h
-                JOIN {TEntity.TableName} m ON m.id = h.id
+                JOIN {qualifiedTable} m ON m.id = h.id
                 WHERE m.completed_at IS NULL
                 AND m.visible_at <= clock_timestamp()
                 ORDER BY m.transaction_id, m.id

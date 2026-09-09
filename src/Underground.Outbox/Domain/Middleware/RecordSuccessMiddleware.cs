@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -6,7 +7,7 @@ namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
 /// Records the message as completed once the rest of the pipeline reports that it was. With
-/// <see cref="RecordFailureMiddleware{TEntity}"/>, every run of the pipeline ends in exactly one write recording
+/// <see cref="RecordFailureMiddleware{TContext, TEntity}"/>, every run of the pipeline ends in exactly one write recording
 /// what became of the message.
 /// </summary>
 /// <remarks>
@@ -14,7 +15,8 @@ namespace Underground.Outbox.Domain.Middleware;
 /// a middleware below has already recorded that outcome. Where this middleware sits is on
 /// <see cref="MessagePipelineFactory"/> with the rest of the order.
 /// </remarks>
-internal sealed class RecordSuccessMiddleware<TEntity>(MarkCompleted<TEntity> markCompleted) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class RecordSuccessMiddleware<TContext, TEntity>(MarkCompleted<TContext, TEntity> markCompleted) : IMessageMiddleware<TContext, TEntity> where TContext : DbContext
+    where TEntity : class, IMessage
 {
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {

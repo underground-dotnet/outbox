@@ -50,7 +50,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10), visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
         await context.AddMessagesAsync(serviceProvider, [message], cancellationToken);
@@ -74,7 +74,7 @@ public class ScheduledDeliveryTests : DatabaseTest
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider();
-        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         var context = CreateDbContext();
         var scheduled = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1), groupKey: "scheduled", visibleAt: DateTime.UtcNow.Add(ScheduledAhead));
         var immediate = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2), groupKey: "immediate");
@@ -90,7 +90,7 @@ public class ScheduledDeliveryTests : DatabaseTest
     private ServiceProvider BuildServiceProvider()
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        serviceCollection.AddTestOutbox(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();

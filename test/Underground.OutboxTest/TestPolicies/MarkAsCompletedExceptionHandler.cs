@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
 using Underground.Outbox.Exceptions;
@@ -10,7 +12,7 @@ public class MarkAsCompletedExceptionHandler<TEntity>() : IMessageExceptionHandl
     public int CallCount = 0;
 #pragma warning restore CA1051 // Do not declare visible instance fields
 
-    public async Task HandleAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken)
+    public async Task HandleAsync(MessageHandlerException ex, TEntity message, DbContext dbContext, CancellationToken cancellationToken)
     {
         CallCount++;
         message.CompletedAt = DateTime.UtcNow;

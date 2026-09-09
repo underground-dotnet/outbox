@@ -1,5 +1,6 @@
 using System.Diagnostics;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
@@ -10,8 +11,15 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Opens the OpenTelemetry "process" span for one message, continuing the trace of the transaction that
 /// wrote it, and closes it with what became of the message.
 /// </summary>
-internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class TraceMessageMiddleware<TContext, TEntity> : IMessageMiddleware<TContext, TEntity> where TContext : DbContext
+    where TEntity : class, IMessage
 {
+    /// <summary>
+    /// Which inbox or outbox the Processing Attempt belongs to, so two modules' messages can be told apart
+    /// in one process.
+    /// </summary>
+    private static readonly string ContextName = typeof(TContext).Name;
+
     /// <summary>
     /// A lost Lease after the Handler threw: the failure was never recorded, because the message is no
     /// longer this worker's.
@@ -64,6 +72,7 @@ internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEnti
         // PostgreSQL table partitioning; this attribute is the documented exception.
         activity.SetTag("messaging.destination.partition.id", message.GroupKey);
 
+        activity.SetTag("underground.outbox.context", ContextName);
         activity.SetTag("underground.outbox.message.type", message.Type);
         activity.SetTag("underground.outbox.retry_count", message.RetryCount);
 

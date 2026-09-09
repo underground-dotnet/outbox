@@ -1,4 +1,5 @@
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
@@ -7,6 +8,7 @@ namespace Underground.OutboxTest.TestHandler;
 /// Writes one row and counts its runs. The row is what makes a replayed run observable: it is written in
 /// the inbox's transaction, so a replay rolls the first one back and only one survives.
 /// </summary>
+[InboxHandler<InboxOutboxDbContext>]
 public class InboxRetryMessageHandler(InboxOutboxDbContext dbContext) : IInboxMessageHandler<InboxRetryMessage>
 {
     /// <summary>How often the handler ran. Static because the handler is resolved per message.</summary>

@@ -27,7 +27,7 @@ public class ProcessorScopeTests : DatabaseTest
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
+        serviceCollection.AddTestOutbox(cfg =>
             cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped));
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -41,8 +41,8 @@ public class ProcessorScopeTests : DatabaseTest
         var context = CreateDbContext();
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "B" };
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -65,8 +65,8 @@ public class ProcessorScopeTests : DatabaseTest
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "A" };
         var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { GroupKey = "A" };
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))
@@ -91,8 +91,8 @@ public class ProcessorScopeTests : DatabaseTest
         var msg1 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { GroupKey = "A" };
         var msg2 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(11)) { GroupKey = "A" };
         var msg3 = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(12)) { GroupKey = "A" };
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(TestContext.Current.CancellationToken))

@@ -28,7 +28,7 @@ public class StableOrderingTests : DatabaseTest
 
         var serviceCollection = new ServiceCollection();
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        serviceCollection.AddTestOutbox(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
 
         serviceCollection.AddBaseServices(Database, testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
@@ -39,8 +39,8 @@ public class StableOrderingTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         await using var earlier = CreateDbContext();
         await using var later = CreateDbContext();
@@ -80,8 +80,8 @@ public class StableOrderingTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox<TestDbContext>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
 
         await using var earlier = CreateDbContext();
         await using var later = CreateDbContext();

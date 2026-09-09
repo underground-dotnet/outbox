@@ -25,7 +25,7 @@ public class TraceContextRoundTripTests : DatabaseTest
         ExampleMessageHandler.ObjectIds.Clear();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        serviceCollection.AddTestOutbox(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
         serviceCollection.AddBaseServices(Database, testOutputHelper);
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
@@ -62,7 +62,7 @@ public class TraceContextRoundTripTests : DatabaseTest
 
         // handled with nothing ambient, exactly as a background worker does
         Assert.Null(Activity.Current);
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<TestDbContext, OutboxMessage>>();
         await processor.ProcessUntilIdleAsync(cancellationToken);
 
         var handled = spans.SpanFor(eventId);

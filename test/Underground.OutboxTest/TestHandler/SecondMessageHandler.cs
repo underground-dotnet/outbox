@@ -1,10 +1,12 @@
 using System.Collections.Concurrent;
 
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[OutboxHandler<TestDbContext>]
 public class SecondMessageHandler : IOutboxMessageHandler<SecondMessage>
 {
     public static ConcurrentQueue<SecondMessage> CalledWith { get; } = new();

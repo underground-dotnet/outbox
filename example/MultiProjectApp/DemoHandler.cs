@@ -1,8 +1,12 @@
+using MultiProjectLib;
+
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace MultiProjectApp;
 
+[OutboxHandler<AppDbContext>]
 public class DemoHandler : IOutboxMessageHandler<DemoMessage>
 {
     public Task HandleAsync(DemoMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
