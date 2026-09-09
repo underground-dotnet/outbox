@@ -3,6 +3,10 @@
 A .NET library implementing the transactional outbox and inbox patterns on PostgreSQL, so that a
 database change and the messaging that follows from it cannot disagree with each other.
 
+An application may hold several inboxes and several outboxes, each bound to one `DbContext` and
+living in that context's schema. Each is named by what it belongs to — "the Orders outbox" — and
+never spoken of as "the outbox", which names all of them and so names none.
+
 ## Language
 
 **Outbox Message**:
@@ -19,9 +23,11 @@ replayed, which is why an inbox Handler's effects must not leave it.
 _Avoid_: Incoming message, consumed event
 
 **Group**:
-The set of messages that must be handled one at a time, in order, identified by `GroupKey`. Two
-messages of the same group are never in flight simultaneously; two messages of different groups
-may be. This is the unit of both ordering and concurrency, and the only source of parallelism.
+The set of messages *in one inbox or outbox* that must be handled one at a time, in order,
+identified by `GroupKey`. Two messages of the same group are never in flight simultaneously; two
+messages of different groups may be. This is the unit of both ordering and concurrency, and the
+only source of parallelism within the inbox or outbox it belongs to. Group keys are not comparable
+across them: a group has no meaning outside the table it lives in.
 _Avoid_: Partition, lane, stream, shard
 
 **Head Message**:
