@@ -13,7 +13,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// Maximum number of Groups handled concurrently, and the number of workers that run. A value of one
     /// means strictly serial handling across all Groups, not one message per Group.
     /// </summary>
-    public int MaxConcurrentGroups { get; set; } = 4;
+    public int MaxConcurrentGroups { get; set; } = 2;
 
     /// <summary>
     /// How often the pool is woken to look for work, in milliseconds. A cadence rather than a per-worker
@@ -21,7 +21,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// immediately, so this bounds the latency of work nothing told us about - and is what makes delivery
     /// guaranteed rather than dependent on a notification arriving.
     /// </summary>
-    public int ProcessingDelayMilliseconds { get; set; } = 4000;
+    public int ProcessingDelayMilliseconds { get; set; } = 10_000;
 
     /// <summary>
     /// The time a Handler is given to complete. When it elapses the Handler's token is cancelled and the
