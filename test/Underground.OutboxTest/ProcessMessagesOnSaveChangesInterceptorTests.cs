@@ -189,8 +189,8 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     }
 
     /// <summary>
-    /// Counts the notifications the interceptor sends. Adding is not reachable through it, so it is refused
-    /// rather than left as a silent no-op.
+    /// Counts the notifications the interceptor sends. Adding and staging are not reachable through it, so
+    /// they are refused rather than left as a silent no-op.
     /// </summary>
     private sealed class RecordingProcessor : IOutbox, IInbox
     {
@@ -205,5 +205,13 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         public Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task AddMessagesAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public void StageMessage(IOutboxDbContext context, OutboxMessage message) => throw new NotSupportedException();
+
+        public void StageMessages(IOutboxDbContext context, IEnumerable<OutboxMessage> messages) => throw new NotSupportedException();
+
+        public void StageMessage(IInboxDbContext context, InboxMessage message) => throw new NotSupportedException();
+
+        public void StageMessages(IInboxDbContext context, IEnumerable<InboxMessage> messages) => throw new NotSupportedException();
     }
 }

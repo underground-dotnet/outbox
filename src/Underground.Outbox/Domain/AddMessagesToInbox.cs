@@ -13,10 +13,18 @@ internal sealed class AddMessagesToInbox
     {
         if (!HasActiveTransaction(context))
         {
-            throw new NoActiveTransactionException();
+            throw new NoActiveTransactionException(InboxMessage.TableName);
         }
 
-        // materialised once: the trace context is stamped in a pass of its own, and AddRangeAsync enumerates again
+        Stage(context, messages);
+        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+#pragma warning disable CA1822, S2325 // Mark members as static
+    public void Stage(IInboxDbContext context, IEnumerable<InboxMessage> messages)
+#pragma warning restore CA1822, S2325 // Mark members as static
+    {
+        // materialised once: the trace context is stamped in a pass of its own, and AddRange enumerates again
         var toAdd = messages as IReadOnlyCollection<InboxMessage> ?? [.. messages];
 
         var traceParent = Activity.Current?.Id;
@@ -25,8 +33,7 @@ internal sealed class AddMessagesToInbox
             message.TraceParent = traceParent;
         }
 
-        await context.InboxMessages.AddRangeAsync(toAdd, cancellationToken).ConfigureAwait(false);
-        await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        context.InboxMessages.AddRange(toAdd);
     }
 
     private static bool HasActiveTransaction(IDbContext context)

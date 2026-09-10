@@ -15,6 +15,16 @@ internal sealed class InboxImpl(AddMessagesToInbox addMessage, ConcurrentProcess
         await addMessage.ExecuteAsync(context, messages, cancellationToken).ConfigureAwait(false);
     }
 
+    public void StageMessage(IInboxDbContext context, InboxMessage message)
+    {
+        addMessage.Stage(context, [message]);
+    }
+
+    public void StageMessages(IInboxDbContext context, IEnumerable<InboxMessage> messages)
+    {
+        addMessage.Stage(context, messages);
+    }
+
     public void ProcessMessages()
     {
         processor.NotifyWork();

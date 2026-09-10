@@ -18,6 +18,13 @@ database lands **exactly once**. The Handler itself may be *run* again if that t
 replayed, which is why an inbox Handler's effects must not leave it.
 _Avoid_: Incoming message, consumed event
 
+**Stage**:
+To put a message into the caller's unit of work without writing it, leaving it to whichever `SaveChanges`
+the caller makes next. Adding is Staging plus that save, in a transaction this library verified; Staging
+alone leaves both the save and the transaction to the caller, and with them the guarantee that the message
+commits with the change that justified it.
+_Avoid_: Enqueue, buffer, pend, queue *(a Group is the queue)*
+
 **Group**:
 The set of messages that must be handled one at a time, in order, identified by `GroupKey`. Two
 messages of the same group are never in flight simultaneously; two messages of different groups
@@ -112,7 +119,7 @@ One concern in the Processing of a single message — logging it, recording a fa
 holding a savepoint, bounding how long its Handler may run — written as a wrapper around the rest
 of that work. Middleware is ordered, and the order is a correctness property rather than a
 preference.
-_Avoid_: Stage, step, filter, interceptor, decorator
+_Avoid_: Stage *(taken — see Stage)*, step, filter, interceptor, decorator
 
 **Middleware Pipeline**:
 The ordered Middleware both the inbox and the outbox run against one Claimed Head Message.
