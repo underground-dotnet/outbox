@@ -15,6 +15,16 @@ internal sealed class OutboxImpl(AddMessagesToOutbox addMessage, ConcurrentProce
         await addMessage.ExecuteAsync(context, messages, cancellationToken).ConfigureAwait(false);
     }
 
+    public void StageMessage(IOutboxDbContext context, OutboxMessage message)
+    {
+        addMessage.Stage(context, [message]);
+    }
+
+    public void StageMessages(IOutboxDbContext context, IEnumerable<OutboxMessage> messages)
+    {
+        addMessage.Stage(context, messages);
+    }
+
     public void ProcessMessages()
     {
         processor.NotifyWork();

@@ -42,4 +42,44 @@ public class AddMessageToOutboxTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
         });
     }
+
+    [Fact]
+    public async Task StageMessage_IsWrittenByTheCallersSave_InsideACallerBegunTransaction()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var context = CreateDbContext();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1));
+
+        // Act
+        await using (var transaction = await context.Database.BeginTransactionAsync(cancellationToken))
+        {
+            outbox.StageMessage(context, message);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+
+        // Assert
+        await using var assertContext = CreateDbContext();
+        Assert.Single(await assertContext.OutboxMessages.Where(m => m.EventId == message.EventId).ToListAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task StageMessage_IsWrittenByTheCallersSave_WithoutATransaction()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var context = CreateDbContext();
+        var outbox = _serviceProvider.GetRequiredService<IOutbox>();
+        var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2));
+
+        // Act
+        outbox.StageMessage(context, message);
+        await context.SaveChangesAsync(cancellationToken);
+
+        // Assert
+        await using var assertContext = CreateDbContext();
+        Assert.Single(await assertContext.OutboxMessages.Where(m => m.EventId == message.EventId).ToListAsync(cancellationToken));
+    }
 }

@@ -182,6 +182,31 @@ new OutboxMessage(
     visibleAt: DateTime.UtcNow.AddDays(1));
 ```
 
+### Stage messages for your own save
+
+`AddMessageAsync` saves the message itself, which costs a second save when you were going to call `SaveChanges` anyway. `StageMessage` / `StageMessages` put the message into the context without saving it, so your own save writes it:
+
+```csharp
+await dbContext.ExecuteInTransactionAsync(async ct =>
+{
+    order.Status = OrderStatus.Shipped;
+
+    outbox.StageMessage(
+        dbContext,
+        new OutboxMessage(
+            Guid.NewGuid(),
+            DateTime.UtcNow,
+            new ExampleMessage("Hello, World!"),
+            groupKey: "customer-123"));
+
+    await dbContext.SaveChangesAsync(ct);
+}, cancellationToken);
+```
+
+Staging is synchronous — it touches only the change tracker — and it does not check for an active transaction, because a caller that has not saved yet may not have one. That check is what guarantees the message commits with the business change, so staging hands the guarantee to you: stage only where your own save carries the change the message belongs to, and remember that a staged message you never save is silently lost.
+
+A staged message committed without an explicit transaction also triggers no push-based processing, since the notification hangs off transaction commit (see [Push-based processing](#push-based-processing)). It is picked up by the next processing cycle, or at once if you call `ProcessMessages()` yourself. `AddMessageAsync` remains the recommended path; staging is for callers that own the unit of work and want one save rather than two.
+
 ### Connection retries and execution strategies
 
 Aspire's `EnrichNpgsqlDbContext`, and a plain `EnableRetryOnFailure()`, configure a **retrying execution strategy**. EF then refuses to run a query or `SaveChanges` inside a transaction you began yourself — which is every way of staging an outbox message:
