@@ -53,7 +53,3 @@ The five canonical roles, used verbatim as `Status:` values. See `docs/agents/tr
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
-
-## Additional Tools
-
-@.claude/RTK.md
