@@ -8,6 +8,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+# Set when Claude Code invokes the hook; derived from the script path when run by hand.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+
 log() { echo "[session-start] $*"; }
 
 if ! command -v dockerd > /dev/null 2>&1; then
@@ -34,14 +37,17 @@ else
   log "Docker daemon ready"
 fi
 
-# Pre-pull the image DatabaseTest asks for, so the first test run isn't a download.
-POSTGRES_IMAGE="$(grep -oP 'new PostgreSqlBuilder\("\K[^"]+' "$CLAUDE_PROJECT_DIR/test/Underground.OutboxTest/DatabaseTest.cs" || true)"
+# Pre-pull the image PostgresFixture asks for, so the first test run isn't a download.
+# Searched across the test project so moving the builder call between files does not silently skip the pull.
+POSTGRES_IMAGE="$(grep -rhoP 'new PostgreSqlBuilder\("\K[^"]+' "$PROJECT_DIR/test/Underground.OutboxTest" | head -1 || true)"
 if [ -n "$POSTGRES_IMAGE" ]; then
   log "pulling $POSTGRES_IMAGE"
   docker pull --quiet "$POSTGRES_IMAGE" > /dev/null || log "pull of $POSTGRES_IMAGE failed; Testcontainers will retry"
+else
+  log "no PostgreSqlBuilder image found; Testcontainers will pull on demand"
 fi
 
 log "restoring NuGet packages"
-dotnet restore --nologo "$CLAUDE_PROJECT_DIR/Underground.slnx" > /dev/null
+dotnet restore --nologo "$PROJECT_DIR/Underground.slnx" > /dev/null
 
 log "done"
