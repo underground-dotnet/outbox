@@ -15,13 +15,13 @@ is the only thing that can.
 
 **Blocked by:** 03 (nothing contributes entries until the generator emits them).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A Handler Registry type in `Underground.Outbox` builds a map from message type name to Handler Entry, separately per message side.
-- [ ] Building the registry throws when two entries claim the same message type on the same side, and the exception names the message type and both handlers.
-- [ ] The registry is built and validated in `BackgroundService<TEntity>.StartAsync`, before any message is claimed, so that the order of registration calls does not matter.
-- [ ] `IMessageDispatcher<TMessage>` is implemented in the library: it looks the message's `Type` up in the registry and invokes the entry's delegate.
-- [ ] A message whose type is absent from the registry throws `ParsingException`, with the message it throws today.
-- [ ] A message whose body will not deserialize throws `ParsingException`, with the message it throws today.
-- [ ] The dispatcher registration inside `AddOutboxServices` / `AddInboxServices` points at the library implementation.
-- [ ] `ProcessExceptionFromHandler` still selects policies correctly, because the entry delegate preserves the `MessageHandlerException` wrapping.
+- [x] A Handler Registry type in `Underground.Outbox` builds a map from message type name to Handler Entry, separately per message side.
+- [x] Building the registry throws when two entries claim the same message type on the same side, and the exception names the message type and both handlers.
+- [x] The registry is built and validated in `BackgroundService<TEntity>.StartAsync`, before any message is claimed, so that the order of registration calls does not matter.
+- [x] `IMessageDispatcher<TMessage>` is implemented in the library: it looks the message's `Type` up in the registry and invokes the entry's delegate.
+- [x] A message whose type is absent from the registry throws `ParsingException`, with the message it throws today.
+- [x] A message whose body will not deserialize throws `ParsingException`, with the message it throws today.
+- [x] The dispatcher registration inside `AddOutboxServices` / `AddInboxServices` points at the library implementation.
+- [x] `ProcessExceptionFromHandler` still selects policies correctly, because the entry delegate preserves the `MessageHandlerException` wrapping.

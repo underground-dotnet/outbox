@@ -18,12 +18,12 @@ that.
 
 **Blocked by:** 04 (handlers must already be registered by discovery before the manual path is removed).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `AddHandler<TH, TM>` is deleted from both `OutboxServiceConfiguration` and `InboxServiceConfiguration`.
-- [ ] `ForHandler<TH, TM>()` replaces it on both, taking no lifetime argument and returning `PolicyBuilder<TEntity>`.
-- [ ] `HandlerRegistration<TEntity>` no longer carries a `ServiceDescriptor`, and the `TryAddEnumerable` over registrations is deleted from `SetupServices.AddGenericServices`.
-- [ ] `ProcessExceptionFromHandler` still matches policies on `(HandlerType, MessageType)`, and the precedence rules are unchanged: a handler policy beats any global policy, and within a level the nearest matching exception type wins.
-- [ ] `cfg.Policies` and the global policy store are untouched.
-- [ ] The `[DynamicallyAccessedMembers]` annotations that existed to keep the trimmer honest about `AddHandler`'s `TH` are removed with it.
-- [ ] Calling `ForHandler` for a handler discovery did not find throws when the registry is validated at host start, consistent with the duplicate-handler throw, and names the handler and message type.
+- [x] `AddHandler<TH, TM>` is deleted from both `OutboxServiceConfiguration` and `InboxServiceConfiguration`.
+- [x] `ForHandler<TH, TM>()` replaces it on both, taking no lifetime argument and returning `PolicyBuilder<TEntity>`.
+- [x] `HandlerRegistration<TEntity>` no longer carries a `ServiceDescriptor`, and the `TryAddEnumerable` over registrations is deleted from `SetupServices.AddGenericServices`.
+- [x] `ProcessExceptionFromHandler` still matches policies on `(HandlerType, MessageType)`, and the precedence rules are unchanged: a handler policy beats any global policy, and within a level the nearest matching exception type wins.
+- [x] `cfg.Policies` and the global policy store are untouched.
+- [x] The `[DynamicallyAccessedMembers]` annotations that existed to keep the trimmer honest about `AddHandler`'s `TH` are removed with it.
+- [x] Calling `ForHandler` for a handler discovery did not find throws when the registry is validated at host start, consistent with the duplicate-handler throw, and names the handler and message type.

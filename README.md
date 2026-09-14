@@ -93,24 +93,40 @@ dotnet add package Underground.Outbox
 dotnet add package Underground.Outbox.SourceGenerator
 ```
 
-**Important**: The source generator package must be added to the root/main project where dependency injection is configured. Other referenced projects only need to import the main `Underground.Outbox` package.
+**Important**: The source generator package goes in **every project that declares handlers**, not only the root project. Each one emits an `Add<Assembly>MessageHandlers()` extension method registering its own handlers, and the project where dependency injection is configured calls one per module. A project with no handlers needs only `Underground.Outbox`.
 
 ### Configuration
 
-1. **Add Services**: Configure the outbox services in your `Program.cs` file:
+1. **Add Services**: Configure the outbox services in your `Program.cs` file, then register each module's handlers:
 
     ```csharp
-    builder.Services.AddOutboxServices<AppDbContext>(cfg =>
-    {
-        cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-        cfg.AddHandler<ExampleMessageHandler, AnotherMessage>();
-    });
+    builder.Services.AddOutboxServices<AppDbContext>(cfg => { });
+    builder.Services.AddInboxServices<AppDbContext>(cfg => { });
 
-    builder.Services.AddInboxServices<AppDbContext>(cfg =>
-    {
-        cfg.AddHandler<InboxMessageHandler, ExampleMessage>();
-    });
+    // one call per project that declares handlers; the method is named after the assembly
+    builder.Services.AddMyAppMessageHandlers();
+    builder.Services.AddMyOrdersModuleMessageHandlers();
     ```
+
+    Handlers are discovered: implementing `IOutboxMessageHandler<T>` or `IInboxMessageHandler<T>` is
+    all it takes to be registered. There is no list to keep in step with your handler classes. The
+    order of these calls does not matter.
+
+    A handler is `Transient` unless it says otherwise:
+
+    ```csharp
+    [MessageHandlerLifetime(ServiceLifetime.Scoped)]
+    public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage> { ... }
+    ```
+
+    The lifetime governs the handler class rather than one of its message types. A handler
+    implementing several handler interfaces is registered once, so a `Scoped` one is a single
+    instance per scope.
+
+    Two handlers claiming the same message type is an error. In one assembly the generator reports
+    `OUTBOX001` at compile time; across assemblies the host throws on startup, before any message is
+    claimed. A handler in a project that does not reference the source generator is simply not
+    registered, and its messages fail at dispatch with "no handler configured for message type".
 
 2. **Adjust DbContext**: Add interfaces and message types to your DbContext. This ensures that you can use EF migrations to add the tables to your database.
 
@@ -392,14 +408,12 @@ The backoff doubles with every failed attempt — `BackoffBase`, then twice that
 
 A handler that exceeds `HandlerTimeout` is cancelled and recorded as a failed attempt like any other, rather than occupying its worker indefinitely.
 
-You can configure exception policies per handler registration, or globally for all inbox and outbox handlers. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `AddHandler`:
+You can configure exception policies per handler and message type, or globally for all inbox and outbox handlers. `ForHandler` does not register anything — discovery has already done that — it names a discovered handler so you can say something about it. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `ForHandler`:
 
 ```csharp
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
-    cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-
-    cfg.AddHandler<ExampleMessageHandler, SecondMessage>()
+    cfg.ForHandler<ExampleMessageHandler, SecondMessage>()
         .OnException<InvalidOperationException>()
         .Discard();
 
@@ -408,9 +422,9 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 });
 ```
 
-`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be scoped to a specific handler and message type registration, or configured globally through `cfg.Policies`.
+`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be attached to a specific handler and message type through `cfg.ForHandler`, or configured globally through `cfg.Policies`. Naming a handler that was not discovered throws when the host starts, rather than silently doing nothing.
 
-Exactly one policy runs. If any registration-specific policy matches, the global policies are not consulted at all — however broad the registration's exception type and however narrow the global one — so a single `AddHandler` chain reads as a complete override. Among the policies at one level the nearest matching exception type wins, as in a `catch` block; the same exception type registered twice at one level keeps the first registration. Policies are terminal and mutually exclusive by design: a kind that composes with another, such as retrying before dead-lettering, needs a deliberate change to this selection rule rather than a second registration.
+Exactly one policy runs. If any registration-specific policy matches, the global policies are not consulted at all — however broad the registration's exception type and however narrow the global one — so a single `ForHandler` chain reads as a complete override. Among the policies at one level the nearest matching exception type wins, as in a `catch` block; the same exception type registered twice at one level keeps the first registration. Policies are terminal and mutually exclusive by design: a kind that composes with another, such as retrying before dead-lettering, needs a deliberate change to this selection rule rather than a second registration.
 
 If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount` and is retried once its backoff has elapsed — forever, stalling its group, per [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md).
 

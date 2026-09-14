@@ -16,12 +16,12 @@ trip OUTBOX001 and does not change which handler receives which message.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `MessageTypeNameTests` exercises dispatch through the Handler Registry rather than a directly constructed dispatcher, and still asserts the nested and generic `Type` spellings and the `ParsingException` on an unknown type.
-- [ ] Every `cfg.AddHandler<...>()` call site is removed; those that only registered become nothing, and those that attached a policy become `cfg.ForHandler<...>()`.
-- [ ] `ProcessorScopeTests` covers lifetime through `[MessageHandlerLifetime(ServiceLifetime.Scoped)]` on the handler.
-- [ ] A new test covers a Scoped handler implementing two message interfaces resolving to one instance per scope.
-- [ ] A new test covers the startup throw when two assemblies contribute handlers for one message type.
-- [ ] All generator snapshots are regenerated and reviewed rather than accepted wholesale.
-- [ ] The full suite passes, including the Docker-backed integration tests.
+- [x] `MessageTypeNameTests` exercises dispatch through the Handler Registry rather than a directly constructed dispatcher, and still asserts the nested and generic `Type` spellings and the `ParsingException` on an unknown type.
+- [x] Every `cfg.AddHandler<...>()` call site is removed; those that only registered become nothing, and those that attached a policy become `cfg.ForHandler<...>()`.
+- [x] `ProcessorScopeTests` covers lifetime through `[MessageHandlerLifetime(ServiceLifetime.Scoped)]` on the handler.
+- [x] A new test covers a Scoped handler implementing two message interfaces resolving to one instance per scope.
+- [x] A new test covers the startup throw when two assemblies contribute handlers for one message type.
+- [x] All generator snapshots are regenerated and reviewed rather than accepted wholesale.
+- [x] The full suite passes, including the Docker-backed integration tests.

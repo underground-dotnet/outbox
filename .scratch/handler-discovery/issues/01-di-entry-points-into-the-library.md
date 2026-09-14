@@ -14,10 +14,10 @@ they belong.
 
 **Blocked by:** nothing.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `AddOutboxServices<TContext>` and `AddInboxServices<TContext>` exist as ordinary source in `Underground.Outbox`, in the namespace they are generated into today, with their current signatures and XML docs preserved.
-- [ ] `GenerateDIMethod` and the `RegisterPostInitializationOutput` call are deleted from `OutboxGenerator`.
-- [ ] The `OutboxDependencyInjection.g.cs` snapshots are deleted, and the generator test that asserts DI source is produced without handlers is retired or retargeted.
-- [ ] The dispatcher registration inside those methods still runs; it is rewired in 04, not here.
-- [ ] `dotnet build -warnaserror` is clean and the full suite passes.
+- [x] `AddOutboxServices<TContext>` and `AddInboxServices<TContext>` exist as ordinary source in `Underground.Outbox`, in the namespace they are generated into today, with their current signatures and XML docs preserved.
+- [x] `GenerateDIMethod` and the `RegisterPostInitializationOutput` call are deleted from `OutboxGenerator`.
+- [x] The `OutboxDependencyInjection.g.cs` snapshots are deleted, and the generator test that asserts DI source is produced without handlers is retired or retargeted.
+- [x] The dispatcher registration inside those methods still runs; it is rewired in 04, not here.
+- [x] `dotnet build -warnaserror` is clean and the full suite passes.

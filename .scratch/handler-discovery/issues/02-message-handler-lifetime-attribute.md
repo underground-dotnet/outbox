@@ -12,9 +12,9 @@ it supersedes, so that the generator change is a single coherent diff.
 
 **Blocked by:** nothing.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `MessageHandlerLifetimeAttribute` exists in `Underground.Outbox.Attributes`, is `sealed`, targets classes only, takes a `Microsoft.Extensions.DependencyInjection.ServiceLifetime`, and exposes it.
-- [ ] Its XML `<summary>` says it is optional and that a handler without it is Transient; a `<remarks>` records that it governs both inbox and outbox handlers.
-- [ ] `ContainsOutboxHandlersAttribute` is deleted, along with `example/MultiProjectLib/AssemblyInfo.cs`.
-- [ ] `dotnet build -warnaserror` is clean.
+- [x] `MessageHandlerLifetimeAttribute` exists in `Underground.Outbox.Attributes`, is `sealed`, targets classes only, takes a `Microsoft.Extensions.DependencyInjection.ServiceLifetime`, and exposes it.
+- [x] Its XML `<summary>` says it is optional and that a handler without it is Transient; a `<remarks>` records that it governs both inbox and outbox handlers.
+- [x] `ContainsOutboxHandlersAttribute` is deleted, along with `example/MultiProjectLib/AssemblyInfo.cs`.
+- [x] `dotnet build -warnaserror` is clean.
