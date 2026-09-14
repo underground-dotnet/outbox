@@ -36,8 +36,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
-            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -69,8 +67,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -105,8 +101,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
-            cfg.AddHandler<SecondMessageHandler, SecondMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -157,7 +151,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -193,7 +186,6 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             // tries to insert a user via raw SQL
-            cfg.AddHandler<CustomSqlMessageHandler, CustomSqlMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -224,8 +216,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<UserMessageHandler, UserMessage>();
-            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -269,7 +259,6 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedUserMessageHandler, FailedUserMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -299,7 +288,7 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+            cfg.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
                 .OnException<DataException>()
                 .Discard();
         });
@@ -333,7 +322,6 @@ public class ProcessorErrorTests : DatabaseTest
         {
             cfg.Policies.OnException<DataException>().Discard();
 
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
@@ -367,7 +355,7 @@ public class ProcessorErrorTests : DatabaseTest
             cfg.Policies.OnException<DataException>().Discard();
 
             // message handler policy should prevent deletion
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+            cfg.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
                 .OnException<DataException>().MarkAsCompleted();
         });
 
@@ -401,7 +389,7 @@ public class ProcessorErrorTests : DatabaseTest
         {
             cfg.Policies.OnException<DataException>().MarkAsCompleted();
 
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+            cfg.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
                 .OnException<DataException>().MarkAsCompleted();
         });
 
@@ -434,7 +422,7 @@ public class ProcessorErrorTests : DatabaseTest
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
             // the broader policy is registered first, the handler throws a DataException
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+            cfg.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
                 .OnException<Exception>().Discard()
                 .OnException<DataException>().MarkAsCompleted();
         });
@@ -471,7 +459,7 @@ public class ProcessorErrorTests : DatabaseTest
             // the global policy matches the thrown exception exactly, the handler policy only through its base type
             cfg.Policies.OnException<DataException>().Discard();
 
-            cfg.AddHandler<DiscardFailedMessageHandler, DiscardMessage>()
+            cfg.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
                 .OnException<Exception>().MarkAsCompleted();
         });
 
@@ -505,10 +493,9 @@ public class ProcessorErrorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<FailedMultipleMessagesHandler, FailedMultiMessageA>()
+            cfg.ForHandler<FailedMultipleMessagesHandler, FailedMultiMessageA>()
                 .OnException<InvalidOperationException>()
                 .Discard();
-            cfg.AddHandler<FailedMultipleMessagesHandler, FailedMultiMessageB>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);

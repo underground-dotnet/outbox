@@ -110,6 +110,7 @@ alternative it beat.
 | 11 | `[MessageHandlerLifetime(ServiceLifetime)]`, falling back to Transient | Adding a caller-supplied default to the generated method |
 | 12 | One `Add<Assembly>MessageHandlers()` covering both sides | Separate inbox and outbox methods per assembly |
 | 13 | Entries carry typed delegates | Entries carry `Type` values for the library to reflect over |
+| 14 | `ForHandler` naming an undiscovered handler throws at host start | Logging a warning and continuing |
 
 ## Invariants the change must not break
 

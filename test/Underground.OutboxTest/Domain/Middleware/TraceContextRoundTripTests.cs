@@ -25,7 +25,7 @@ public class TraceContextRoundTripTests : DatabaseTest
         ExampleMessageHandler.ObjectIds.Clear();
 
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        serviceCollection.AddOutboxServices<TestDbContext>(_ => { });
         serviceCollection.AddBaseServices(Database, testOutputHelper);
 
         _serviceProvider = serviceCollection.BuildServiceProvider();

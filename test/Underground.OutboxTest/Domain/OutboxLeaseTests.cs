@@ -39,7 +39,7 @@ public class OutboxLeaseTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var serviceProvider = BuildServiceProvider(cfg => cfg.AddHandler<BlockingMessageHandler, BlockingMessage>());
+        var serviceProvider = BuildServiceProvider(_ => { });
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
         var context = CreateDbContext();
 
@@ -76,7 +76,6 @@ public class OutboxLeaseTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
 
             // the Handler is held by the test rather than by the clock, so its budget only has to be
             // longer than the test takes
@@ -133,7 +132,6 @@ public class OutboxLeaseTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
             cfg.HandlerTimeout = TimeSpan.FromMilliseconds(250);
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;

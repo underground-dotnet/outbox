@@ -36,7 +36,6 @@ public class HandlerTimeoutTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
             cfg.HandlerTimeout = TimeSpan.FromMilliseconds(250);
 
             // long enough that the timed-out message stays out of sight for the rest of this run
@@ -90,7 +89,6 @@ public class HandlerTimeoutTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
             cfg.HandlerTimeout = TimeSpan.FromSeconds(30);
         });
         var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();

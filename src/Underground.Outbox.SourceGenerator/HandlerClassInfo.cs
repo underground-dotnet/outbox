@@ -21,10 +21,17 @@ internal readonly record struct HandlerClassInfo
 
     internal HandlerKind Kind { get; }
 
-    public HandlerClassInfo(string handlerFullName, string messageTypeDisplayName, HandlerKind kind)
+    /// <summary>
+    /// The <c>ServiceLifetime</c> member named by <c>[MessageHandlerLifetime]</c>, or
+    /// <c>"Transient"</c> when the handler does not carry the attribute.
+    /// </summary>
+    internal string Lifetime { get; }
+
+    public HandlerClassInfo(string handlerFullName, string messageTypeDisplayName, HandlerKind kind, string lifetime)
     {
         HandlerFullName = handlerFullName;
         MessageTypeDisplayName = messageTypeDisplayName;
         Kind = kind;
+        Lifetime = lifetime;
     }
 }

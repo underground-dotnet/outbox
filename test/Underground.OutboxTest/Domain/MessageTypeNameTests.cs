@@ -1,16 +1,16 @@
 using Microsoft.Extensions.DependencyInjection;
 
-using Underground.Outbox;
+using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain;
+using Underground.Outbox.Domain.Dispatchers;
 using Underground.Outbox.Exceptions;
 using Underground.OutboxTest.TestHandler;
 
 namespace Underground.OutboxTest.Domain;
 
 /// <summary>
-/// The message's <see cref="IMessage.Type"/> is written from the runtime type and read by the generated
-/// dispatcher. Nested and generic types are where the two spellings used to diverge, leaving a message
+/// The message's <see cref="IMessage.Type"/> is written from the runtime type and read by the Handler
+/// Registry. Nested and generic types are where the two spellings used to diverge, leaving a message
 /// nobody could handle.
 /// </summary>
 public class MessageTypeNameTests
@@ -20,14 +20,17 @@ public class MessageTypeNameTests
     private static async Task DispatchAsync(OutboxMessage message)
     {
         var services = new ServiceCollection();
-        var handler = new NestedMessageHandler();
-        services.AddSingleton<IOutboxMessageHandler<Envelope.Nested>>(handler);
-        services.AddSingleton<IOutboxMessageHandler<Wrapped<Envelope.Nested>>>(handler);
+
+        // the generated registration is the only thing that puts handlers and entries in the container
+        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddSingleton<HandlerRegistry<OutboxMessage>>();
 
         await using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        await new GeneratedDispatcher<OutboxMessage>().ExecuteAsync(scope, message, TestContext.Current.CancellationToken);
+        var dispatcher = new MessageDispatcher<OutboxMessage>(provider.GetRequiredService<HandlerRegistry<OutboxMessage>>());
+
+        await dispatcher.ExecuteAsync(scope, message, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -58,5 +61,23 @@ public class MessageTypeNameTests
         var message = new OutboxMessage(Guid.NewGuid(), CreatedAt, "Sample.Unknown", "{}");
 
         await Assert.ThrowsAsync<ParsingException>(() => DispatchAsync(message));
+    }
+
+    /// <summary>
+    /// The registry is keyed on the runtime spelling, so an entry is found by the exact string the write
+    /// side stored rather than by the compiler's spelling of the same type.
+    /// </summary>
+    [Fact]
+    public void Registry_IsKeyedOnTheStoredSpelling_ForNestedTypes()
+    {
+        var services = new ServiceCollection();
+        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddSingleton<HandlerRegistry<OutboxMessage>>();
+
+        using var provider = services.BuildServiceProvider();
+        var registry = provider.GetRequiredService<HandlerRegistry<OutboxMessage>>();
+
+        Assert.True(registry.TryGetEntry("Underground.OutboxTest.TestHandler.Envelope+Nested", out var entry));
+        Assert.Equal(typeof(NestedMessageHandler), entry.HandlerType);
     }
 }

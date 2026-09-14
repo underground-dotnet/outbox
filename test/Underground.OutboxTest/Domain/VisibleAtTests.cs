@@ -31,7 +31,7 @@ public class VisibleAtTests : DatabaseTest
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
-        var serviceProvider = BuildServiceProvider(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        var serviceProvider = BuildServiceProvider(_ => { });
         var context = CreateDbContext();
         var message = new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
 
@@ -50,7 +50,6 @@ public class VisibleAtTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;
         });
@@ -84,7 +83,6 @@ public class VisibleAtTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
             cfg.BackoffBase = TimeSpan.FromSeconds(10);
             cfg.MaxBackoff = TimeSpan.FromSeconds(40);
             cfg.BackoffJitter = 0;
@@ -126,7 +124,6 @@ public class VisibleAtTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         var serviceProvider = BuildServiceProvider(cfg =>
         {
-            cfg.AddHandler<FailedMessageHandler, FailedMessage>();
             cfg.BackoffBase = TimeSpan.FromMilliseconds(250);
             cfg.BackoffJitter = 0;
         });

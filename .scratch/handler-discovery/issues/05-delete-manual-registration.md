@@ -26,4 +26,4 @@ that.
 - [ ] `ProcessExceptionFromHandler` still matches policies on `(HandlerType, MessageType)`, and the precedence rules are unchanged: a handler policy beats any global policy, and within a level the nearest matching exception type wins.
 - [ ] `cfg.Policies` and the global policy store are untouched.
 - [ ] The `[DynamicallyAccessedMembers]` annotations that existed to keep the trimmer honest about `AddHandler`'s `TH` are removed with it.
-- [ ] Calling `ForHandler` for a handler discovery did not find is reported — decide between a startup throw and a logged warning, and record which in the ADR.
+- [ ] Calling `ForHandler` for a handler discovery did not find throws when the registry is validated at host start, consistent with the duplicate-handler throw, and names the handler and message type.

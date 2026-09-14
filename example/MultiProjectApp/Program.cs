@@ -24,10 +24,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(postgreSqlContainer.GetConnectionString());
 });
 
-builder.Services.AddOutboxServices<AppDbContext>(cfg =>
-{
-    cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-});
+builder.Services.AddOutboxServices<AppDbContext>(_ => { });
+
+// one call per module that declares handlers
+builder.Services.AddMultiProjectAppMessageHandlers();
+builder.Services.AddMultiProjectLibMessageHandlers();
 
 IHost host = builder.Build();
 

@@ -1,11 +1,15 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
+using Microsoft.Extensions.DependencyInjection;
+
 using Underground.Outbox;
+using Underground.Outbox.Attributes;
 using Underground.Outbox.Data;
 
 namespace Underground.OutboxTest.TestHandler;
 
+[MessageHandlerLifetime(ServiceLifetime.Scoped)]
 public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
 {
     // the processors handle messages on background threads while a test reads these, so both have to

@@ -35,7 +35,6 @@ public class ConcurrentProcessorTests : DatabaseTest
         _serviceProvider = BuildServiceProvider(cfg =>
         {
             cfg.MaxConcurrentGroups = 4;
-            cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
         });
     }
 
@@ -193,7 +192,6 @@ public class ConcurrentProcessorTests : DatabaseTest
         {
             // exactly one worker is left over once the slow Group has taken one
             cfg.MaxConcurrentGroups = 2;
-            cfg.AddHandler<BlockingMessageHandler, BlockingMessage>();
         });
         var context = CreateDbContext();
 
@@ -243,7 +241,6 @@ public class ConcurrentProcessorTests : DatabaseTest
             cfg.MaxConcurrentGroups = 1;
             // short enough that the test does not wait on the production cadence
             cfg.ProcessingDelayMilliseconds = 500;
-            cfg.AddHandler<GroupedMessageHandler, GroupedMessage>();
         });
         var context = CreateDbContext();
         var outbox = serviceProvider.GetRequiredService<IOutbox>();

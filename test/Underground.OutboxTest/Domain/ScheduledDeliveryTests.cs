@@ -90,7 +90,7 @@ public class ScheduledDeliveryTests : DatabaseTest
     private ServiceProvider BuildServiceProvider()
     {
         var serviceCollection = new ServiceCollection();
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg => cfg.AddHandler<ExampleMessageHandler, ExampleMessage>());
+        serviceCollection.AddOutboxServices<TestDbContext>(_ => { });
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
 
         return serviceCollection.BuildServiceProvider();

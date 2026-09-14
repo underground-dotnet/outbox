@@ -144,7 +144,6 @@ public class HeadMessageDiscoveryTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<RecoveringMessageHandler, RecoveringMessage>();
             // long enough that a HeadMessage which failed stays out of sight for the rest of the test
             cfg.BackoffBase = TimeSpan.FromMinutes(10);
             cfg.BackoffJitter = 0;

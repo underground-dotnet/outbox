@@ -27,8 +27,8 @@ public class ProcessorScopeTests : DatabaseTest
         // setup dependency injection
         var serviceCollection = new ServiceCollection();
 
-        serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
-            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>(ServiceLifetime.Scoped));
+        // the handler declares Scoped through [MessageHandlerLifetime]; nothing here says so
+        serviceCollection.AddOutboxServices<TestDbContext>(_ => { });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
         _serviceProvider = serviceCollection.BuildServiceProvider();
