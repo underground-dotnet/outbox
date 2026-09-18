@@ -34,14 +34,4 @@ else
   log "Docker daemon ready"
 fi
 
-# Pre-pull the image DatabaseTest asks for, so the first test run isn't a download.
-POSTGRES_IMAGE="$(grep -oP 'new PostgreSqlBuilder\("\K[^"]+' "$CLAUDE_PROJECT_DIR/test/Underground.OutboxTest/DatabaseTest.cs" || true)"
-if [ -n "$POSTGRES_IMAGE" ]; then
-  log "pulling $POSTGRES_IMAGE"
-  docker pull --quiet "$POSTGRES_IMAGE" > /dev/null || log "pull of $POSTGRES_IMAGE failed; Testcontainers will retry"
-fi
-
-log "restoring NuGet packages"
-dotnet restore --nologo "$CLAUDE_PROJECT_DIR/Underground.slnx" > /dev/null
-
 log "done"

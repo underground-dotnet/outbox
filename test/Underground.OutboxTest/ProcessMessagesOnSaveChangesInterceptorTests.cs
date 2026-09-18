@@ -29,7 +29,6 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
         });
 
         _serviceProvider = serviceCollection.BuildServiceProvider();

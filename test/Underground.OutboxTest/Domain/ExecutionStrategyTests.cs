@@ -51,8 +51,9 @@ public class ExecutionStrategyTests : DatabaseTest
             }
         });
 
-        services.AddOutboxServices<InboxOutboxDbContext>(cfg => cfg.AddHandler<RetryMessageHandler, RetryMessage>());
-        services.AddInboxServices<InboxOutboxDbContext>(cfg => cfg.AddHandler<InboxRetryMessageHandler, InboxRetryMessage>());
+        services.AddOutboxServices<InboxOutboxDbContext>(_ => { });
+        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
+        services.AddUndergroundOutboxTestMessageHandlers();
 
         return services.BuildServiceProvider();
     }

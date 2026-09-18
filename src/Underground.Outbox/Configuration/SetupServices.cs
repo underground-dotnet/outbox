@@ -2,9 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-using Underground.Outbox.Configuration.ExceptionPolicies;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
+using Underground.Outbox.Domain.Dispatchers;
 using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
@@ -65,7 +65,8 @@ public static class SetupServices
     {
         services.AddSingleton(serviceConfig);
 
-        services.TryAddEnumerable(serviceConfig.Registrations.Select(r => r.ServiceDescriptor));
+        services.TryAddSingleton<HandlerRegistry<TEntity>>();
+        services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
 
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();

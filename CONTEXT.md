@@ -72,6 +72,26 @@ Application-supplied code that carries out the effect of one message. Never invo
 for two messages of the same group.
 _Avoid_: Consumer, subscriber, listener
 
+**Handler Lifetime**:
+How long one Handler instance lives in the container: Transient unless the Handler says otherwise with
+`[MessageHandlerLifetime]`. It governs the Handler class, not any one message type it handles - a Handler
+of several message types is registered once, so a Scoped one is a single instance per scope.
+_Avoid_: Scope *(taken - a Scope is the `IServiceScope` one message is Processed in, and "Scoped" is only
+one of the lifetimes)*, handler scope, DI scope
+
+**Handler Registry**:
+The map from a message's stored `Type` to the one Handler that may run it, built as the host starts from
+the Handler Entries every assembly contributed. Two assemblies claiming one message type is a
+contradiction the Registry refuses rather than resolves, which is why building it can fail.
+_Avoid_: Dispatch table *(a table is a Postgres table here)*, routing table *(routing implies a choice
+among destinations; this is an exact match where two candidates are an error)*, handler map
+
+**Handler Entry**:
+One Handler's claim on one message type: the stored type name, the Handler and message types, and the
+code that deserializes the payload and invokes the Handler. Contributed by the assembly that declares
+the Handler, which is the only thing that registers it.
+_Avoid_: Registration *(that named the manual act this replaced)*, binding, descriptor
+
 **Completed**:
 A message whose Handler returned and whose outcome has been recorded, stamped `CompletedAt`. This
 is the state of the *message*; the Handler is what ran, and the Processing Attempt is what

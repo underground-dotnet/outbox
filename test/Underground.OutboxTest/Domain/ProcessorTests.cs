@@ -29,9 +29,6 @@ public class ProcessorTests : DatabaseTest
 
         serviceCollection.AddOutboxServices<TestDbContext>(cfg =>
         {
-            cfg.AddHandler<ExampleMessageHandler, ExampleMessage>();
-            cfg.AddHandler<MultipleMessagesHandler, MultiMessageA>();
-            cfg.AddHandler<MultipleMessagesHandler, MultiMessageB>();
         });
 
         serviceCollection.AddBaseServices(Database, _testOutputHelper);
