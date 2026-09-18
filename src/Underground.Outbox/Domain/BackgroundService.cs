@@ -1,9 +1,6 @@
 using Microsoft.Extensions.Hosting;
 
-using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
-using Underground.Outbox.Domain.Dispatchers;
-using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
