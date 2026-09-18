@@ -65,7 +65,6 @@ public static class SetupServices
     {
         services.AddSingleton(serviceConfig);
 
-        // fed by the generated Add<Assembly>MessageHandlers methods, in whatever order they were called
         services.TryAddSingleton<HandlerRegistry<TEntity>>();
         services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
 
