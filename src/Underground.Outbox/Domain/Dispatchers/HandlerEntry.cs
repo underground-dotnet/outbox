@@ -16,6 +16,15 @@ public sealed class HandlerEntry<TEntity> where TEntity : class, IMessage
 {
     private readonly Func<IServiceProvider, TEntity, MessageMetadata, CancellationToken, Task> _handle;
 
+    /// <summary>The stored <see cref="IMessage.Type"/> this entry answers to.</summary>
+    public string MessageTypeName { get; }
+
+    /// <summary>The handler that runs the message.</summary>
+    public HandlerType HandlerType { get; }
+
+    /// <summary>The payload type the message deserializes to.</summary>
+    public MessageType MessageType { get; }
+
     /// <summary>Creates an entry. Called from generated code.</summary>
     /// <param name="messageTypeName">The stored <see cref="IMessage.Type"/> this entry answers to.</param>
     /// <param name="handlerType">The handler that runs it.</param>
@@ -32,15 +41,6 @@ public sealed class HandlerEntry<TEntity> where TEntity : class, IMessage
         MessageType = messageType;
         _handle = handle;
     }
-
-    /// <summary>The stored <see cref="IMessage.Type"/> this entry answers to.</summary>
-    public string MessageTypeName { get; }
-
-    /// <summary>The handler that runs the message.</summary>
-    public HandlerType HandlerType { get; }
-
-    /// <summary>The payload type the message deserializes to.</summary>
-    public MessageType MessageType { get; }
 
     /// <summary>Runs the message through its handler.</summary>
     /// <param name="serviceProvider">The scope's provider, from which the handler is resolved.</param>
