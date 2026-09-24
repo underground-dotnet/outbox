@@ -8,7 +8,9 @@ It stores messages in the same database transaction as your business changes, th
 
 Every message belongs to a **group**, identified by its `GroupKey`. A group offers only its **head message** — its oldest **stable** message that has not yet been completed, where stable means no still-running transaction could yet insert an earlier one into that group (see [Ordering](#ordering)). A group whose head message is not yet visible — because it is scheduled for later, because it is backing off after a failure, or because another worker currently holds it — offers nothing at all, rather than offering the message behind it.
 
-Each worker runs one query that considers every group's head message at once and claims the oldest of them it can lock with `FOR UPDATE ... SKIP LOCKED`. A head message another worker already holds is skipped rather than waited for, so the claim falls through to the next group's head message. The worker then handles that one message and claims again.
+Each worker claims the oldest head message, across all groups, that it can lock with `FOR UPDATE ... SKIP LOCKED`. A head message another worker already holds is skipped rather than waited for, so the claim falls through to the next group's head message. The worker then handles that one message and claims again.
+
+To find that message, the claim first walks the oldest pending messages and stops at the first one that is a claimable head, which costs the same however long the backlog is. Only when nothing near the front can be claimed does it consider every group's head message. The answer is the same either way. See [ADR 0010](docs/adr/0010-claim-looks-at-the-oldest-messages-first.md).
 
 Nothing hands groups out to workers; the database distributes them. Messages of one group are therefore handled one at a time, in order, and different groups proceed concurrently.
 
@@ -83,6 +85,17 @@ Host=...;Database=...;Search Path=app
 ```
 
 See [ADR 0005](docs/adr/0005-fixed-table-and-column-names.md) for why the names are fixed rather than read off the EF model.
+
+### Upgrading: the pending-order index
+
+Both tables carry a partial index on `(transaction_id, id)` over the messages not yet completed, which the claim walks to find the oldest claimable message ([ADR 0010](docs/adr/0010-claim-looks-at-the-oldest-messages-first.md)). Upgrading from a version without it needs an EF migration:
+
+```bash
+dotnet ef migrations add AddPendingOrderIndexToInboxAndOutbox
+dotnet ef database update
+```
+
+Until it is applied the claim is still correct, but its first step sorts the pending messages instead of reading them in order from the index.
 
 ## Getting started
 

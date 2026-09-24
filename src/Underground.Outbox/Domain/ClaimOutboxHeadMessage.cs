@@ -16,16 +16,15 @@ internal sealed class ClaimOutboxHeadMessage(
     ServiceConfiguration<OutboxMessage> config
 ) : ClaimHeadMessage<OutboxMessage>(dbContext)
 {
-    private static readonly string ClaimSql = $"""
-        {LockedHeadMessageCte()}
+    private static readonly ClaimStatements Claim = BuildStatements($"""
         UPDATE {OutboxMessage.TableName} m
         SET visible_at = clock_timestamp() + @lease
         FROM claimed c
         WHERE m.id = c.id
         RETURNING m.*
-        """;
+        """);
 
-    protected override string Sql => ClaimSql;
+    protected override ClaimStatements Statements => Claim;
 
     // an interval rather than an instant, so a skewed application clock cannot expire a Lease early
     protected override void AddParameters(List<NpgsqlParameter> parameters)
