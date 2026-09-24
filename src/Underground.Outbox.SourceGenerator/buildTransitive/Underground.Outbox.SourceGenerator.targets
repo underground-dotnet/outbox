@@ -1,0 +1,8 @@
+<Project>
+  <!-- An older compiler only warns (CS9057) and skips the generator, leaving handlers unregistered
+       at runtime, so fail the build instead. -->
+  <Target Name="UndergroundOutboxCheckCompilerVersion" BeforeTargets="CoreCompile"
+          Condition="'$(CompilerApiVersion)' != '' And $([MSBuild]::VersionLessThan($(CompilerApiVersion.Replace('roslyn', '')), '5.9'))">
+    <Error Text="Underground.Outbox.SourceGenerator requires .NET SDK 10.0.400 or newer (Roslyn 5.9), but this build uses $(CompilerApiVersion)." />
+  </Target>
+</Project>
