@@ -67,7 +67,7 @@ Both are deliberate, and knowing about them up front is cheaper than discovering
 
 ## Requirements
 
-- .NET / EF Core application
+- .NET 10 / EF Core application, built with **.NET SDK 10.0.400 or newer** (the source generator targets Roslyn 5.9)
 - **PostgreSQL 13 or newer**, via `Npgsql`
 
 PostgreSQL 13 is the floor because ordering depends on the 64-bit transaction identifier type `xid8` and on `pg_current_xact_id()`, `pg_current_snapshot()` and `pg_snapshot_xmin()`, all of which arrived in that release. Claiming also relies on `FOR UPDATE ... SKIP LOCKED`.

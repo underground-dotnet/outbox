@@ -2,4 +2,6 @@ Underground.Outbox.SourceGenerator is the Roslyn source generator that emits the
 [Underground.Outbox](https://www.nuget.org/packages/Underground.Outbox), a .NET implementation of the
 [transactional outbox pattern](https://microservices.io/patterns/data/transactional-outbox.html).
 
+Requires .NET SDK 10.0.400 or newer (Roslyn 5.9).
+
 Read the documentation [here](https://github.com/underground-dotnet/outbox).

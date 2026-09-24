@@ -28,3 +28,21 @@ jobs:
       run: dotnet build --no-restore -warnaserror
     - name: Test
       run: dotnet test --no-build --verbosity normal
+
+  # The oldest supported SDK: fails with CS9057 if the generator's Roslyn outgrows it.
+  build-minimum-sdk:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.0.401
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore -warnaserror
+    - name: Test source generator
+      run: dotnet test --no-build --project test/Underground.Outbox.SourceGeneratorTest/Underground.Outbox.SourceGeneratorTest.csproj
