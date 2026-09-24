@@ -449,12 +449,12 @@ The same setting on the outbox is only about table size: nothing else reads a co
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MaxConcurrentGroups` | `4` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
+| `MaxConcurrentGroups` | `2` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
 | `HandlerTimeout` | `45 seconds` | Time a handler is given before its cancellation token fires and the attempt is recorded as failed. The outbox lease is derived from this plus a margin for the completion write, and is deliberately not configurable on its own: a lease shorter than the timeout would guarantee double delivery on every slow message. |
 | `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
 | `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. Jitter is applied afterwards, so an actual delay may exceed this by the jitter proportion. |
 | `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |
-| `ProcessingDelayMilliseconds` | `4000` | Delay between scheduled processing cycles. |
+| `ProcessingDelayMilliseconds` | `10000` | Delay between scheduled processing cycles. |
 | `CompletedMessageRetention` | `7 days` | How long completed rows are kept before cleanup. On the inbox this is also the duplicate-suppression window. |
 | `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
 
