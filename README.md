@@ -346,7 +346,7 @@ builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
 
 Nothing is emitted until something subscribes: the library uses `System.Diagnostics.ActivitySource` and takes no dependency on the OpenTelemetry packages.
 
-`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0006](docs/adr/0006-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
+`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0009](docs/adr/0009-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
 
 The span is named `process outbox` / `process inbox`, is a `Consumer` span, and carries:
 
