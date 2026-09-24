@@ -17,7 +17,7 @@ namespace Underground.Outbox.Domain;
 /// ADR 0002.
 /// </remarks>
 internal sealed class InboxProcessor(
-    IDbContext dbContext,
+    IInboxDbContext dbContext,
     ClaimHeadMessage<InboxMessage> claimHeadMessage,
     MessagePipeline<InboxMessage> pipeline
 ) : IProcessor<InboxMessage>

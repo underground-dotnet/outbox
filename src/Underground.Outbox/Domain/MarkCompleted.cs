@@ -19,10 +19,11 @@ namespace Underground.Outbox.Domain;
 /// On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
 internal sealed partial class MarkCompleted<TEntity>(
-    IDbContext dbContext,
+    MessageDbContext<TEntity> messageDbContext,
     ILogger<MarkCompleted<TEntity>> logger
 ) where TEntity : class, IMessage
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
     private readonly ILogger<MarkCompleted<TEntity>> _logger = logger;
 
     /// <summary>
@@ -50,7 +51,7 @@ internal sealed partial class MarkCompleted<TEntity>(
 
         // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
 #pragma warning disable S2077 // Formatting SQL queries is security-sensitive
-        var rows = await dbContext.Database
+        var rows = await _dbContext.Database
             .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
             .ConfigureAwait(false);
 #pragma warning restore S2077

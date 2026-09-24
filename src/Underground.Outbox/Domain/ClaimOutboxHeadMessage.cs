@@ -12,7 +12,7 @@ namespace Underground.Outbox.Domain;
 /// guarded on the granted instant, which is what tells an expired worker the message is no longer its own.
 /// </summary>
 internal sealed class ClaimOutboxHeadMessage(
-    IDbContext dbContext,
+    IOutboxDbContext dbContext,
     ServiceConfiguration<OutboxMessage> config
 ) : ClaimHeadMessage<OutboxMessage>(dbContext)
 {

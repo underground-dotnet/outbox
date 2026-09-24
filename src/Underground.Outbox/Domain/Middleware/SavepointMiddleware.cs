@@ -13,11 +13,13 @@ namespace Underground.Outbox.Domain.Middleware;
 /// Only ever assembled into a pipeline that runs inside a transaction - today the inbox alone - which is why
 /// <see cref="Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction"/> is read without a null check.
 /// </remarks>
-internal sealed class SavepointMiddleware<TEntity>(IDbContext dbContext) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class SavepointMiddleware<TEntity>(MessageDbContext<TEntity> messageDbContext) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
+
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
-        var transaction = dbContext.Database.CurrentTransaction!;
+        var transaction = _dbContext.Database.CurrentTransaction!;
 
         var savepointName = $"processing_message_{message.Id}";
         await transaction.CreateSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);

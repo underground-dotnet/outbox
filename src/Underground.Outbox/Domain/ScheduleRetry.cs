@@ -18,11 +18,12 @@ namespace Underground.Outbox.Domain;
 /// now owns. On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
 /// </remarks>
 internal sealed partial class ScheduleRetry<TEntity>(
-    IDbContext dbContext,
+    MessageDbContext<TEntity> messageDbContext,
     ServiceConfiguration<TEntity> config,
     ILogger<ScheduleRetry<TEntity>> logger
 ) where TEntity : class, IMessage
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
     private readonly RetryBackoff _backoff = new(config.BackoffBase, config.MaxBackoff, config.BackoffJitter);
     private readonly ILogger<ScheduleRetry<TEntity>> _logger = logger;
 
@@ -54,7 +55,7 @@ internal sealed partial class ScheduleRetry<TEntity>(
 
         // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
 #pragma warning disable S2077 // Formatting SQL queries is security-sensitive
-        var rows = await dbContext.Database
+        var rows = await _dbContext.Database
             .ExecuteSqlRawAsync(sql, parameters, cancellationToken)
             .ConfigureAwait(false);
 #pragma warning restore S2077
