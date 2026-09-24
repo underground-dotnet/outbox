@@ -268,7 +268,8 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("            static async (serviceProvider, message, metadata, cancellationToken) =>");
         sb.AppendLine("            {");
         sb.AppendLine($"                var payload = JsonSerializer.Deserialize<{messageType}>(message.Data)");
-        sb.AppendLine("                    ?? throw new ParsingException($\"Cannot parse event body {message.Data} of message: {message.Id}\");");
+        // the id only: the body is application data, and this message ends up in logs and on spans
+        sb.AppendLine("                    ?? throw new ParsingException($\"Cannot parse event body of message: {message.Id}\");");
         sb.AppendLine($"                var handler = serviceProvider.GetRequiredService<{iface}>();");
         sb.AppendLine("                try");
         sb.AppendLine("                {");
