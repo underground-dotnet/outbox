@@ -20,8 +20,9 @@ public static class DbContextExtensions
         /// </summary>
         /// <remarks>
         /// A retrying Execution Strategy may run <paramref name="work"/> more than once, so it must be
-        /// re-runnable: stage everything it needs inside the delegate rather than before the call. When a
-        /// transaction is already open, it is joined and retries belong to whoever opened it.
+        /// re-runnable: load and stage everything it needs inside the delegate rather than before the call.
+        /// A replay starts from an empty change tracker, so an entity tracked before the call is detached
+        /// by then. When a transaction is already open, it is joined and retries belong to whoever opened it.
         /// </remarks>
         public Task ExecuteInTransactionAsync(Func<CancellationToken, Task> work, CancellationToken cancellationToken = default)
         {
@@ -39,8 +40,9 @@ public static class DbContextExtensions
         /// </summary>
         /// <remarks>
         /// A retrying Execution Strategy may run <paramref name="work"/> more than once, so it must be
-        /// re-runnable: stage everything it needs inside the delegate rather than before the call. When a
-        /// transaction is already open, it is joined and retries belong to whoever opened it.
+        /// re-runnable: load and stage everything it needs inside the delegate rather than before the call.
+        /// A replay starts from an empty change tracker, so an entity tracked before the call is detached
+        /// by then. When a transaction is already open, it is joined and retries belong to whoever opened it.
         /// </remarks>
         public Task<TResult> ExecuteInTransactionAsync<TResult>(Func<CancellationToken, Task<TResult>> work, CancellationToken cancellationToken = default)
         {
@@ -60,9 +62,20 @@ public static class DbContextExtensions
         }
 
         var strategy = context.Database.CreateExecutionStrategy();
+        var replay = false;
 
         return await strategy.ExecuteAsync(async ct =>
         {
+            // A failed attempt's saves were accepted by the change tracker, though their transaction rolled
+            // back: without this, a replay sees its changes as already made and skips them, while re-adding
+            // whatever the failed save left behind.
+            if (replay)
+            {
+                context.ChangeTracker.Clear();
+            }
+
+            replay = true;
+
             var transaction = await context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             await using (transaction.ConfigureAwait(false))
             {

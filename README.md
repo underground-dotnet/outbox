@@ -151,6 +151,7 @@ using Underground.Outbox.Data;
 
 await dbContext.ExecuteInTransactionAsync(async ct =>
 {
+    var order = await dbContext.Orders.SingleAsync(o => o.Id == orderId, ct);
     order.Status = OrderStatus.Shipped;
     await dbContext.SaveChangesAsync(ct);
 
@@ -205,6 +206,7 @@ new OutboxMessage(
 ```csharp
 await dbContext.ExecuteInTransactionAsync(async ct =>
 {
+    var order = await dbContext.Orders.SingleAsync(o => o.Id == orderId, ct);
     order.Status = OrderStatus.Shipped;
 
     outbox.StageMessage(
@@ -244,7 +246,9 @@ await strategy.ExecuteAsync(async () =>
 });
 ```
 
-Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so stage what it needs inside it rather than before the call.
+Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so load and stage what it needs inside it rather than before the call.
+
+A failed attempt's `SaveChanges` has already been accepted by the change tracker even though its transaction rolled back, so a replay on the same tracker would see the entity's changes as already made and skip them, while re-inserting the failed attempt's messages. `ExecuteInTransactionAsync` therefore clears the change tracker before each replay: an entity loaded inside the delegate is simply loaded again, and one tracked before the call is detached. If you drive the strategy yourself, do the same — call `dbContext.ChangeTracker.Clear()` at the start of every replay, or use a fresh context per attempt.
 
 The library's own processing adapts to the same strategy, and one consequence reaches your code. The inbox runs claim, handler and outcome write in a single transaction ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)), so that transaction is also its retry unit: **an inbox handler may be run more than once**, even though its effect on the database still lands exactly once — either the attempt rolled back entirely, or it committed and the replay finds the message no longer offered. Keep an inbox handler's effects inside its transaction and this costs nothing; give it an effect the transaction cannot roll back and a replay will repeat that effect. Outbox handlers are unaffected: only the claim is replayed, never the dispatch. See [ADR 0006](docs/adr/0006-adapt-to-the-host-execution-strategy.md).
 
