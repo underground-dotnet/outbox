@@ -15,7 +15,7 @@ namespace Underground.Outbox.Domain;
 /// is guarded on the granted Lease, which stops a worker that overran from overwriting a newer claim.
 /// </remarks>
 internal sealed class OutboxProcessor(
-    IDbContext dbContext,
+    IOutboxDbContext dbContext,
     ClaimHeadMessage<OutboxMessage> claimHeadMessage,
     MessagePipeline<OutboxMessage> pipeline
 ) : IProcessor<OutboxMessage>

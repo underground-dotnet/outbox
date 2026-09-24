@@ -10,9 +10,11 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </summary>
 internal sealed class DispatchMessage<TEntity>(
     IMessageDispatcher<TEntity> dispatcher,
-    IDbContext dbContext
+    MessageDbContext<TEntity> messageDbContext
 ) where TEntity : class, IMessage
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
+
     /// <summary>
     /// Invokes the Handler for this message. It returns only if the Handler did; the middleware wrapped around
     /// this call decide what a throw means. The save runs in the inbox's transaction, or - on the outbox,
@@ -23,6 +25,6 @@ internal sealed class DispatchMessage<TEntity>(
         await dispatcher.ExecuteAsync(scope, message, cancellationToken).ConfigureAwait(false);
 
         // in case the handler forgot to call SaveChanges
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 }

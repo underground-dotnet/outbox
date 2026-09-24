@@ -7,6 +7,7 @@
     <Description>Roslyn source generator for Underground.Outbox.</Description>
     <PackageTags>dotnet;outbox;sourcegenerator</PackageTags>
     <PackageProjectUrl>https://github.com/underground-dotnet/outbox</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>package.readme.md</PackageReadmeFile>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <!-- The package ships only analyzers/dotnet/cs, so there is no lib/ folder for the

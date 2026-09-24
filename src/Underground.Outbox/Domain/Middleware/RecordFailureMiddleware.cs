@@ -18,10 +18,12 @@ namespace Underground.Outbox.Domain.Middleware;
 /// <see cref="LogMessageMiddleware{TEntity}"/> reports it in its one outcome line.
 /// </remarks>
 internal sealed class RecordFailureMiddleware<TEntity>(
-    IDbContext dbContext,
+    MessageDbContext<TEntity> messageDbContext,
     ScheduleRetry<TEntity> scheduleRetry
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
+
     public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         Exception failure;
@@ -30,13 +32,15 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // shutdown is told by the token rather than by the exception type: a cancellation the Handler raised
+        // itself, such as an HttpClient timeout, is an ordinary failure
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             failure = ex;
         }
 
         // clear tracked entities, so the exception handler works against a clean context
-        dbContext.ChangeTracker.Clear();
+        _dbContext.ChangeTracker.Clear();
 
         var stillOurs = await scheduleRetry.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
 
@@ -51,7 +55,7 @@ internal sealed class RecordFailureMiddleware<TEntity>(
             // from the handling scope, so the exception handler sees the same services the Handler saw
             var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
-            await processHandlerException.ExecuteAsync(handlerException, message, dbContext, cancellationToken).ConfigureAwait(false);
+            await processHandlerException.ExecuteAsync(handlerException, message, _dbContext, cancellationToken).ConfigureAwait(false);
         }
 
         return ProcessingAttempt.Failed(failure);

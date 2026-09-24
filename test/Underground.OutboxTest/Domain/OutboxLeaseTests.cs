@@ -163,7 +163,7 @@ public class OutboxLeaseTests : DatabaseTest
     private static async Task<OutboxMessage?> ClaimAndAbandonAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
     {
         using var scope = serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IDbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
         var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>();
 
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);

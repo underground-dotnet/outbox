@@ -134,6 +134,44 @@ public class ExecutionStrategyTests : DatabaseTest
     }
 
     [Fact]
+    public async Task ExecuteInTransactionAsync_ReplayKeepsTheBusinessChangeAndWritesTheMessageOnce()
+    {
+        // Arrange: the business change is saved, then the outbox insert fails transiently
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fault = new TransientFaultInterceptor("INSERT INTO outbox", faults: 1);
+        await using var provider = CreateServiceProvider(fault);
+
+        await using (var seed = CreateDbContext())
+        {
+            seed.Users.Add(new User { Id = 42, Name = "before" });
+            await seed.SaveChangesAsync(cancellationToken);
+        }
+
+        using var scope = provider.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
+        var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+
+        // Act
+        await context.ExecuteInTransactionAsync(async ct =>
+        {
+            var user = await context.Users.SingleAsync(u => u.Id == 42, ct);
+            user.Name = "after";
+            await context.SaveChangesAsync(ct);
+
+            await outbox.AddMessageAsync(context, new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new RetryMessage(5)), ct);
+        }, cancellationToken);
+
+        // Assert: the replay neither mistook the rolled-back update for a saved one nor re-inserted the
+        // failed attempt's message
+        Assert.Equal(1, fault.Injected);
+
+        await using var verify = CreateDbContext();
+        var user = await verify.Users.AsNoTracking().SingleAsync(u => u.Id == 42, cancellationToken);
+        Assert.Equal("after", user.Name);
+        Assert.Equal(1, await verify.OutboxMessages.CountAsync(cancellationToken));
+    }
+
+    [Fact]
     public async Task OutboxHandlerIsNotReplayed_WhenTheCompletionWriteFails()
     {
         // Arrange

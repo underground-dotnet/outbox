@@ -151,6 +151,7 @@ using Underground.Outbox.Data;
 
 await dbContext.ExecuteInTransactionAsync(async ct =>
 {
+    var order = await dbContext.Orders.SingleAsync(o => o.Id == orderId, ct);
     order.Status = OrderStatus.Shipped;
     await dbContext.SaveChangesAsync(ct);
 
@@ -205,6 +206,7 @@ new OutboxMessage(
 ```csharp
 await dbContext.ExecuteInTransactionAsync(async ct =>
 {
+    var order = await dbContext.Orders.SingleAsync(o => o.Id == orderId, ct);
     order.Status = OrderStatus.Shipped;
 
     outbox.StageMessage(
@@ -244,7 +246,9 @@ await strategy.ExecuteAsync(async () =>
 });
 ```
 
-Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so stage what it needs inside it rather than before the call.
+Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so load and stage what it needs inside it rather than before the call.
+
+A failed attempt's `SaveChanges` has already been accepted by the change tracker even though its transaction rolled back, so a replay on the same tracker would see the entity's changes as already made and skip them, while re-inserting the failed attempt's messages. `ExecuteInTransactionAsync` therefore clears the change tracker before each replay: an entity loaded inside the delegate is simply loaded again, and one tracked before the call is detached. If you drive the strategy yourself, do the same — call `dbContext.ChangeTracker.Clear()` at the start of every replay, or use a fresh context per attempt.
 
 The library's own processing adapts to the same strategy, and one consequence reaches your code. The inbox runs claim, handler and outcome write in a single transaction ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)), so that transaction is also its retry unit: **an inbox handler may be run more than once**, even though its effect on the database still lands exactly once — either the attempt rolled back entirely, or it committed and the replay finds the message no longer offered. Keep an inbox handler's effects inside its transaction and this costs nothing; give it an effect the transaction cannot roll back and a replay will repeat that effect. Outbox handlers are unaffected: only the claim is replayed, never the dispatch. See [ADR 0006](docs/adr/0006-adapt-to-the-host-execution-strategy.md).
 
@@ -342,7 +346,7 @@ builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
 
 Nothing is emitted until something subscribes: the library uses `System.Diagnostics.ActivitySource` and takes no dependency on the OpenTelemetry packages.
 
-`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0006](docs/adr/0006-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
+`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0009](docs/adr/0009-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
 
 The span is named `process outbox` / `process inbox`, is a `Consumer` span, and carries:
 
@@ -445,12 +449,12 @@ The same setting on the outbox is only about table size: nothing else reads a co
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MaxConcurrentGroups` | `4` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
+| `MaxConcurrentGroups` | `2` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
 | `HandlerTimeout` | `45 seconds` | Time a handler is given before its cancellation token fires and the attempt is recorded as failed. The outbox lease is derived from this plus a margin for the completion write, and is deliberately not configurable on its own: a lease shorter than the timeout would guarantee double delivery on every slow message. |
 | `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
 | `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. Jitter is applied afterwards, so an actual delay may exceed this by the jitter proportion. |
 | `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |
-| `ProcessingDelayMilliseconds` | `4000` | Delay between scheduled processing cycles. |
+| `ProcessingDelayMilliseconds` | `10000` | Delay between scheduled processing cycles. |
 | `CompletedMessageRetention` | `7 days` | How long completed rows are kept before cleanup. On the inbox this is also the duplicate-suppression window. |
 | `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
 

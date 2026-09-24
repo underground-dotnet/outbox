@@ -96,7 +96,8 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
 
             return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // only a shutdown may end a worker; any other cancellation that got this far is a failure to survive
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             LogProcessingError(ex);
 
