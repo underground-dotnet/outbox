@@ -37,7 +37,7 @@ public static class GeneratorTestsHandlerRegistration
                 {
                     await handler.HandleAsync(payload, metadata, cancellationToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
                     throw new MessageHandlerException(
                         handler.GetType(),
@@ -61,7 +61,7 @@ public static class GeneratorTestsHandlerRegistration
                 {
                     await handler.HandleAsync(payload, metadata, cancellationToken);
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException)
+                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
                 {
                     throw new MessageHandlerException(
                         handler.GetType(),

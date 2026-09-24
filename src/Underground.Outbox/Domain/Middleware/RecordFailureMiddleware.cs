@@ -30,7 +30,9 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         {
             return await next(cancellationToken).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        // shutdown is told by the token rather than by the exception type: a cancellation the Handler raised
+        // itself, such as an HttpClient timeout, is an ordinary failure
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             failure = ex;
         }

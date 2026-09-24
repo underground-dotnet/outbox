@@ -37,7 +37,7 @@ internal sealed partial class CleanupBackgroundService<TEntity>(
                 LogDeletedMessages(deletedCount, typeof(TEntity).Name);
             }
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
             LogCleanupFailed(typeof(TEntity).Name, ex);
         }

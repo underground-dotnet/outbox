@@ -29,9 +29,9 @@ internal sealed class SavepointMiddleware<TEntity>(IDbContext dbContext) : IMess
 
             return attempt;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            // a cancellation is left alone: the transaction is about to be rolled back whole
+            // a shutdown is left alone: the transaction is about to be rolled back whole
             await transaction.RollbackToSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
 
             throw;

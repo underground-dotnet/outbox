@@ -274,7 +274,9 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("                {");
         sb.AppendLine("                    await handler.HandleAsync(payload, metadata, cancellationToken);");
         sb.AppendLine("                }");
-        sb.AppendLine("                catch (Exception ex) when (ex is not OperationCanceledException)");
+        // only a cancellation of the token it was given travels on as one; a Handler's own, such as an
+        // HttpClient timeout, is an ordinary failure
+        sb.AppendLine("                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)");
         sb.AppendLine("                {");
         sb.AppendLine("                    throw new MessageHandlerException(");
         sb.AppendLine("                        handler.GetType(),");
