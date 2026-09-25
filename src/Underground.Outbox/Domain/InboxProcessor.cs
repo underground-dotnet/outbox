@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.Middleware;
+using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain;
 
@@ -38,7 +39,14 @@ internal sealed class InboxProcessor(
                 return ClaimResult.NothingOffered;
             }
 
-            await pipeline.ExecuteAsync(message, scope, ct).ConfigureAwait(false);
+            var attempt = await pipeline.ExecuteAsync(message, scope, ct).ConfigureAwait(false);
+
+            // thrown so the transaction rolls back: committing would keep the Handler's writes while the
+            // message stays pending, and it would be applied again
+            if (attempt.Status == ProcessingStatus.LeaseLost)
+            {
+                throw new InboxClaimLostException(message.Id);
+            }
 
             return ClaimResult.HeadMessageClaimed;
         }, cancellationToken).ConfigureAwait(false);

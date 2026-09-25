@@ -23,10 +23,11 @@ internal sealed class MessagePipeline<TEntity>(
     /// Runs the pipeline for one claimed message, which ends in the write recording what became of it.
     /// </summary>
     /// <remarks>
-    /// Nothing is reported back: the outcome is recorded inside the pipeline, and a worker that acted on the
-    /// <see cref="ProcessingAttempt"/> would retry a message the backoff has already pushed out of sight.
+    /// The outcome is already recorded when this returns. The <see cref="ProcessingAttempt"/> is for the
+    /// transaction boundary alone: a worker that retried on it would retry a message the backoff has
+    /// already pushed out of sight.
     /// </remarks>
-    internal Task ExecuteAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
+    internal Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
         => ExecuteFromAsync(0, message, scope, cancellationToken);
 
     private Task<ProcessingAttempt> ExecuteFromAsync(int index, TEntity message, IServiceScope scope, CancellationToken cancellationToken)

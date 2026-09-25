@@ -64,8 +64,8 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     }
 
     /// <summary>
-    /// Puts <paramref name="actOnClaimed"/> - the statement acting on the one id in a CTE named <c>claimed</c>,
-    /// already locked for the calling transaction - behind each of the two ways of finding that id.
+    /// Puts <paramref name="actOnClaimed"/> - the statement acting on the one row in a CTE named <c>claimed</c>,
+    /// already locked for the calling transaction - behind each of the two ways of finding that row.
     /// </summary>
     protected static ClaimStatements BuildStatements(string actOnClaimed)
         => new($"{WindowedHeadMessageCte()}\n{actOnClaimed}", $"{AllGroupsHeadMessageCte()}\n{actOnClaimed}");
@@ -86,8 +86,8 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         // because as NOT EXISTS the planner may turn it into an anti-join over the whole table. A message
         // passing it is Stable, so the earlier one it is compared against is too.
         //
-        // completed_at IS NULL is repeated on m for the same reason as below: FOR UPDATE re-evaluates the
-        // predicates against the new row version.
+        // completed_at IS NULL is repeated on m, and claimed returns the whole row, for the same reasons as
+        // below: FOR UPDATE re-evaluates the predicates against the new row version.
         return $"""
             WITH window_end AS MATERIALIZED (
                 SELECT transaction_id, id FROM (
@@ -102,7 +102,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
                 LIMIT 1
             ),
             claimed AS (
-                SELECT m.id
+                SELECT m.*
                 FROM {TEntity.TableName} m
                 WHERE m.completed_at IS NULL
                 AND (m.transaction_id, m.id) <= ((SELECT transaction_id FROM window_end), (SELECT id FROM window_end))
@@ -124,7 +124,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
 
     /// <summary>
     /// The HeadMessage discovery every Group takes part in, as two CTEs named <c>head_messages</c> and <c>claimed</c>.
-    /// The second yields at most one id, already locked for the calling transaction. The table is unqualified
+    /// The second yields at most one row, already locked for the calling transaction. The table is unqualified
     /// so the schema is the deployment's to choose through <c>search_path</c>; see
     /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
     /// </summary>
@@ -150,7 +150,9 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         // FOR UPDATE cannot be combined with DISTINCT ON, hence the second CTE. SKIP LOCKED so a HeadMessage
         // another worker holds is passed over rather than aborting a statement spanning every Group.
         // It repeats completed_at IS NULL because FOR UPDATE re-evaluates only that predicate against the
-        // new row version; without it, a concurrent completion hands out a handled message.
+        // new row version; without it, a concurrent completion hands out a handled message. It returns
+        // the whole row because only its own output is that new version - anything joined back to the
+        // table afterwards reads the statement's snapshot, from before a concurrent retry.
         //
         // clock_timestamp() rather than now(), which is frozen for the transaction the inbox holds open.
         return $"""
@@ -162,7 +164,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
                 ORDER BY group_key, transaction_id, id
             ),
             claimed AS (
-                SELECT m.id
+                SELECT m.*
                 FROM head_messages h
                 JOIN {TEntity.TableName} m ON m.id = h.id
                 WHERE m.completed_at IS NULL
