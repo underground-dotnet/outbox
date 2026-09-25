@@ -91,10 +91,13 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
         try
         {
             // use a separate scope & context for each claim
-            using var scope = _scopeFactory.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
+            var scope = _scopeFactory.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+            {
+                var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
 
-            return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
+                return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
+            }
         }
         // only a shutdown may end a worker; any other cancellation that got this far is a failure to survive
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
