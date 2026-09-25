@@ -37,6 +37,7 @@ internal static class MessagePipelineFactory
                 services.GetRequiredService<LogMessageMiddleware<OutboxMessage>>(),
                 services.GetRequiredService<RecordSuccessMiddleware<OutboxMessage>>(),
                 services.GetRequiredService<RecordFailureMiddleware<OutboxMessage>>(),
+                services.GetRequiredService<RenewLeaseMiddleware>(),
                 services.GetRequiredService<TimeoutMiddleware<OutboxMessage>>(),
             ],
             services.GetRequiredService<DispatchMessage<OutboxMessage>>());

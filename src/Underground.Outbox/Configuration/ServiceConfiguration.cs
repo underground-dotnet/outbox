@@ -26,22 +26,34 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// <summary>
     /// The time a Handler is given to complete. When it elapses the Handler's token is cancelled and the
     /// message is recorded as a failed attempt, so a hung call costs its own Group a backoff rather than
-    /// occupying a worker. There is no way to switch it off.
+    /// occupying a worker. There is no way to switch it off. A Handler that ignores the token keeps its
+    /// worker and its Group until it returns.
     /// </summary>
     public TimeSpan HandlerTimeout { get; set; } = TimeSpan.FromSeconds(45);
 
     /// <summary>
-    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write.
-    /// A constant, because a configurable Lease shorter than the timeout guarantees double delivery.
+    /// What the outbox Lease adds to <see cref="HandlerTimeout"/>: the time left for the completion write,
+    /// and how far each renewal extends a Lease whose Handler overran.
     /// </summary>
-    private const int LeaseMarginSeconds = 15;
+    /// <remarks>
+    /// Not public, because a Lease shorter than the timeout guarantees double delivery. Settable only so
+    /// tests need not wait out the production value.
+    /// </remarks>
+    internal TimeSpan LeaseMargin { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// How often the Lease of an overrunning Handler is renewed. A third of the margin, so one renewal can
+    /// fail and the next still lands before the Lease expires.
+    /// </summary>
+    internal TimeSpan LeaseRenewalInterval => LeaseMargin / 3;
 
     /// <summary>
     /// How long an outbox worker's Lease runs for, measured from the claim. Derived from
-    /// <see cref="HandlerTimeout"/> so the Handler's cancellation always fires with the margin to spare
-    /// and a message can never be taken from a live worker. The inbox has nothing to expire.
+    /// <see cref="HandlerTimeout"/> so the Handler's cancellation always fires with the margin to spare.
+    /// A Handler that ignores it has its Lease renewed instead, so a message is never taken from a live
+    /// worker. The inbox has nothing to expire.
     /// </summary>
-    internal TimeSpan LeaseDuration => HandlerTimeout + TimeSpan.FromSeconds(LeaseMarginSeconds);
+    internal TimeSpan LeaseDuration => HandlerTimeout + LeaseMargin;
 
     /// <summary>
     /// Delay before a message that failed for the first time is offered again. Every further failure

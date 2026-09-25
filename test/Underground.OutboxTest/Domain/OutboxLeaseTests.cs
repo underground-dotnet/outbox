@@ -156,6 +156,58 @@ public class OutboxLeaseTests : DatabaseTest
     }
 
     /// <summary>
+    /// Cancelling a Handler only asks it to stop. One that ignores its token runs on past the Lease the claim
+    /// granted, so the Lease is renewed for as long as it runs: no second worker can claim the message
+    /// meanwhile, and the first worker's outcome write still lands once the Handler returns.
+    /// </summary>
+    [Fact]
+    public async Task HandlerThatIgnoresItsCancellationKeepsItsLeaseUntilItReturns()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var serviceProvider = BuildServiceProvider(cfg =>
+        {
+            cfg.HandlerTimeout = TimeSpan.FromMilliseconds(250);
+            cfg.LeaseMargin = TimeSpan.FromMilliseconds(900);
+        });
+        var processor = serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+        var context = CreateDbContext();
+
+        const int overrunning = 1;
+        BlockingMessageHandler.BlockingIds.Add(overrunning);
+        BlockingMessageHandler.IgnoresCancellation = true;
+        await context.AddMessagesAsync(serviceProvider, [MessageFor(overrunning, "group")], cancellationToken);
+
+        // Act: the first worker claims and its Handler carries on after being cancelled
+        var firstWorker = processor.ProcessNextAsync(cancellationToken);
+        await BlockingMessageHandler.Blocked.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+
+        // several times the Lease the claim granted, so without renewal it would long have expired
+        await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+
+        // Assert: a second worker finds nothing to claim, because the Lease is still in the future
+        Assert.Null(await ClaimAndAbandonAsync(serviceProvider, cancellationToken));
+        var message = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
+        Assert.True(await context.SecondsUntilVisibleAsync(message.Id, cancellationToken) > 0, "the Lease was not renewed");
+
+        BlockingMessageHandler.Release.TrySetResult();
+        await firstWorker;
+
+        Assert.True(BlockingMessageHandler.WasCancelled, "the handler was never cancelled");
+        Assert.Equal([overrunning], BlockingMessageHandler.CalledWith);
+
+        // the completion write was guarded on the renewed Lease rather than the one the claim granted
+        message = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
+        Assert.NotNull(message.CompletedAt);
+        Assert.DoesNotContain(
+            _logs.Entries,
+            entry => entry.Message.Contains("Lost the Lease", StringComparison.Ordinal));
+        Assert.Contains(
+            _logs.Entries,
+            entry => entry.Level == LogLevel.Warning && entry.Message.Contains("renewed its Lease", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Claims one HeadMessage in its own committed transaction and does nothing else with it - the claim half of
     /// a worker, without the dispatch. That is both a worker that dies immediately after claiming and a
     /// second worker taking over an expired Lease, which is why the two tests share it.

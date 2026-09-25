@@ -63,8 +63,9 @@ claiming writes)*, checkout
 **Lease**:
 An outbox worker's time-bounded Claim on a message, taken by setting `VisibleAt` into the future
 and released by Completing the message. It expires on its own, so a worker that dies never blocks
-its group permanently. Advisory: nothing prevents a second worker acting after expiry, which is
-why outbox delivery is at-least-once.
+its group permanently. A live worker whose Handler overruns its timeout renews it (ADR 0011).
+Advisory: nothing prevents a second worker acting after expiry, which is why outbox delivery is
+at-least-once.
 _Avoid_: Lock, reservation, checkout
 
 **Handler**:
