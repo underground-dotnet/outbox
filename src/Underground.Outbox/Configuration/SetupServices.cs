@@ -28,6 +28,7 @@ public static class SetupServices
         services.AddScoped<ClaimHeadMessage<OutboxMessage>, ClaimOutboxHeadMessage>();
 
         // no transaction open during dispatch: no savepoint, and the three-transaction outer loop
+        services.AddScoped<RenewLeaseMiddleware>();
         services.AddScoped(MessagePipelineFactory.CreateOutbox);
         services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
 

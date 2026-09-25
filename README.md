@@ -121,12 +121,14 @@ Pick a key per aggregate, account or customer: whatever must stay ordered. Leavi
 
 ## Delivery guarantees
 
-- **Outbox is at-least-once. Make outbox handlers idempotent.** A worker that dies or overruns
-  `HandlerTimeout` after the external effect but before recording success causes a second delivery.
+- **Outbox is at-least-once. Make outbox handlers idempotent.** A worker that dies, or a handler that times
+  out, after the external effect but before recording success causes a second delivery.
 - **Inbox is exactly-once for database effects.** The handler runs in the same transaction that marks
   the message handled. Under a retrying execution strategy the handler itself may run more than once,
   so keep its effects inside that transaction.
-- Handlers receive a `CancellationToken` that fires after `HandlerTimeout`; honour it.
+- Handlers receive a `CancellationToken` that fires after `HandlerTimeout`; honour it. An outbox handler
+  that ignores it keeps its lease renewed, so its group waits until it returns
+  ([ADR 0011](docs/adr/0011-renew-the-lease-of-a-handler-that-overruns.md)).
 
 ## Error handling
 

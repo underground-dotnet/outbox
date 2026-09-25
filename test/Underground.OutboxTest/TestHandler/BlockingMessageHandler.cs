@@ -30,6 +30,12 @@ public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>
     /// </summary>
     public static bool WasCancelled { get; set; }
 
+    /// <summary>
+    /// Makes a blocking handler ignore its token and wait for <see cref="Release"/> regardless, as a
+    /// Handler that never passes its token on would. <see cref="WasCancelled"/> still records whether it fired.
+    /// </summary>
+    public static bool IgnoresCancellation { get; set; }
+
     public static void Reset()
     {
         CalledWith = new ConcurrentQueue<int>();
@@ -37,6 +43,7 @@ public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>
         Blocked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         WasCancelled = false;
+        IgnoresCancellation = false;
     }
 
     public async Task HandleAsync(BlockingMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
@@ -49,6 +56,14 @@ public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>
         }
 
         Blocked.TrySetResult();
+
+        if (IgnoresCancellation)
+        {
+            await Release.Task.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None).ConfigureAwait(false);
+            WasCancelled = cancellationToken.IsCancellationRequested;
+
+            return;
+        }
 
         try
         {

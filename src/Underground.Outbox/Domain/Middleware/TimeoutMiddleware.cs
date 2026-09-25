@@ -9,7 +9,8 @@ namespace Underground.Outbox.Domain.Middleware;
 /// <summary>
 /// Bounds how long a Handler may run by narrowing the token the rest of the pipeline sees, so a Handler that
 /// never returns gives back its worker and any transaction it held. On the outbox it is also what keeps a
-/// worker inside its Lease, which is this budget plus a margin.
+/// worker inside its Lease, which is this budget plus a margin; a Handler that ignores the token has its
+/// Lease renewed by <see cref="RenewLeaseMiddleware"/> instead.
 /// </summary>
 /// <remarks>
 /// The cancellation becomes a <see cref="HandlerTimeoutException"/> rather than staying an
