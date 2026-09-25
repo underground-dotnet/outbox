@@ -6,7 +6,7 @@ namespace Underground.Outbox.Data;
 /// <summary>
 /// Model configuration shared by both message tables: the database-assigned
 /// <see cref="IMessage.TransactionId"/> and <see cref="IMessage.VisibleAt"/>, and the partial indexes that
-/// serve HeadMessage lookup and retention cleanup. Applied automatically through
+/// serve HeadMessage lookup, the windowed claim and retention cleanup. Applied automatically through
 /// <see cref="EntityTypeConfigurationAttribute"/>.
 /// </summary>
 /// <typeparam name="TEntity">The message entity being configured.</typeparam>
@@ -36,6 +36,10 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         // The filter names the column literally because an IEntityTypeConfiguration runs before the
         // mapping annotations are applied; safe only because the names are fixed (ADR 0005).
         builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
+            .HasFilter("\"completed_at\" IS NULL");
+
+        // Serves the windowed claim, which walks the pending messages oldest first across every Group (ADR 0010).
+        builder.HasIndex(nameof(IMessage.TransactionId), nameof(IMessage.Id))
             .HasFilter("\"completed_at\" IS NULL");
 
         // Serves the retention sweep, which deletes by completed_at. Complements the index above rather than
