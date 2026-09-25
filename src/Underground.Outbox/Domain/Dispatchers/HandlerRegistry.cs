@@ -52,8 +52,4 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
     /// <returns><see langword="true"/> when a handler claims this message type.</returns>
     public bool TryGetEntry(string messageTypeName, [NotNullWhen(true)] out HandlerEntry<TEntity>? entry)
         => _byMessageTypeName.TryGetValue(messageTypeName, out entry);
-
-    /// <summary>Whether a handler was discovered for this exact handler and message type pair.</summary>
-    internal bool Contains(HandlerType handlerType, MessageType messageType)
-        => _byMessageTypeName.Values.Any(e => e.HandlerType == handlerType && e.MessageType == messageType);
 }

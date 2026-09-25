@@ -1,14 +1,21 @@
 using Microsoft.Extensions.Hosting;
 
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain.Dispatchers;
 
 namespace Underground.Outbox.Domain;
 
-internal sealed class BackgroundService<TEntity>(
-    ConcurrentProcessor<TEntity> processor
-) : BackgroundService where TEntity : class, IMessage
+internal sealed class BackgroundService<TEntity> : BackgroundService where TEntity : class, IMessage
 {
-    private readonly ConcurrentProcessor<TEntity> _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+    private readonly ConcurrentProcessor<TEntity> _processor;
+
+    // taking the registry builds it as the host starts, so a CompetingHandlersException fails startup
+    // instead of being logged by every worker on every claim
+    public BackgroundService(ConcurrentProcessor<TEntity> processor, HandlerRegistry<TEntity> registry)
+    {
+        ArgumentNullException.ThrowIfNull(registry);
+        _processor = processor ?? throw new ArgumentNullException(nameof(processor));
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

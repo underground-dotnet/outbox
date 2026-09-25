@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
@@ -31,6 +32,24 @@ public class HandlerRegistryTests
         Assert.Equal("Sample.Message", exception.MessageTypeName);
         Assert.Contains(nameof(ExampleMessageHandler), exception.Message, StringComparison.Ordinal);
         Assert.Contains(nameof(SecondMessageHandler), exception.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The registry is otherwise built by the first claim, where the worker's catch-all would log the throw
+    /// on every poll. Resolving the hosted services is the step in which the host fails to start.
+    /// </summary>
+    [Fact]
+    public void FailsHostStart_WhenTwoHandlersClaimTheSameMessageType()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddOutboxServices<TestDbContext>(_ => { });
+        services.AddSingleton(Entry("Sample.Message", typeof(ExampleMessageHandler)));
+        services.AddSingleton(Entry("Sample.Message", typeof(SecondMessageHandler)));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<CompetingHandlersException>(() => provider.GetRequiredService<IEnumerable<IHostedService>>());
     }
 
     /// <summary>Calling one module's generated method twice contributes its entries twice.</summary>
