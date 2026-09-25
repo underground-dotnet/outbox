@@ -1,10 +1,5 @@
 # CLAUDE.md
 
-## Layout
-
-`Underground.slnx` — `src/Underground.Outbox` (library) + `src/Underground.Outbox.SourceGenerator`
-(Roslyn generator, netstandard2.0), `test/`, `example/` (consumers used as generator fixtures).
-
 ## Commands
 
 ```bash
@@ -31,8 +26,7 @@ dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTes
 - `Directory.Build.props` enables `EnforceCodeStyleInBuild` plus the Meziantou, Sonar and Roslynator
   analyzers, and `GenerateDocumentationFile` — public members need XML docs. This is what `-warnaserror`
   usually trips on, so build before handing work back.
-- `net10.0`, nullable and implicit usings enabled. The source generator project must stay
-  `netstandard2.0`.
+- The source generator project must stay `netstandard2.0`.
 - Keep comments short. Prefer readable code — naming, small methods, types that make the invariant
   obvious — over a comment explaining unclear code. Comment the *why* that the code cannot express
   (a non-obvious SQL predicate, an analyzer suppression, a subtle ordering), never the *what*.

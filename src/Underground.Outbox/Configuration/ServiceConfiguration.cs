@@ -79,9 +79,9 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     public TimeSpan CompletedMessageRetention { get; set; } = TimeSpan.FromDays(7);
 
     /// <summary>
-    ///  Delay in seconds between cleanup cycles for processed messages.
+    /// Interval between cleanup cycles for processed messages.
     /// </summary>
-    public int CleanupDelaySeconds { get; set; } = 3600;
+    public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromHours(1);
 
     internal readonly List<HandlerRegistration<TEntity>> Registrations = [];
 
@@ -109,10 +109,7 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException(nameof(ProcessingDelayMilliseconds), ProcessingDelayMilliseconds, "Must be greater than 0.");
         }
 
-        if (HandlerTimeout <= TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(HandlerTimeout), HandlerTimeout, "Must be greater than zero.");
-        }
+        EnsureWithin(nameof(HandlerTimeout), HandlerTimeout, ServiceConfigurationLimits.MinHandlerTimeout, ServiceConfigurationLimits.MaxHandlerTimeout);
 
         if (BackoffBase <= TimeSpan.Zero)
         {
@@ -130,14 +127,16 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
             throw new ArgumentOutOfRangeException(nameof(BackoffJitter), BackoffJitter, "Must be at least 0 and less than 1.");
         }
 
-        if (CompletedMessageRetention < TimeSpan.Zero)
-        {
-            throw new ArgumentOutOfRangeException(nameof(CompletedMessageRetention), CompletedMessageRetention, "Cannot be negative.");
-        }
+        EnsureWithin(nameof(CompletedMessageRetention), CompletedMessageRetention, TimeSpan.Zero, ServiceConfigurationLimits.MaxCompletedMessageRetention);
+        EnsureWithin(nameof(CleanupInterval), CleanupInterval, ServiceConfigurationLimits.MinCleanupInterval, ServiceConfigurationLimits.MaxCleanupInterval);
+    }
 
-        if (CleanupDelaySeconds <= 0)
+    // upper bounds also keep values within what Task.Delay, CancelAfter and DateTime arithmetic accept
+    private static void EnsureWithin(string propertyName, TimeSpan value, TimeSpan min, TimeSpan max)
+    {
+        if (value < min || value > max)
         {
-            throw new ArgumentOutOfRangeException(nameof(CleanupDelaySeconds), CleanupDelaySeconds, "Must be greater than 0.");
+            throw new ArgumentOutOfRangeException(propertyName, value, $"Must be between {min} and {max}.");
         }
     }
 }
