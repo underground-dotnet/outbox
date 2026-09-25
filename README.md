@@ -1,163 +1,82 @@
-# Outbox Library
+# Underground.Outbox
 
-`Underground.Outbox` is a .NET library for the transactional outbox and inbox patterns on top of EF Core and PostgreSQL.
+A .NET library for the transactional **outbox** and **inbox** patterns on EF Core and PostgreSQL.
 
-It stores messages in the same database transaction as your business changes, then processes them in the background. The library is group-aware, can run on multiple application instances, and supports push-triggered processing through `IOutbox.ProcessMessages()` — in-process only, so a commit on one instance does not wake another, which picks the work up on its next poll.
+Messages are written in the same database transaction as your business changes and handled in the
+background, in order per group, safely across multiple application instances.
 
-## How it works
-
-Every message belongs to a **group**, identified by its `GroupKey`. A group offers only its **head message** — its oldest **stable** message that has not yet been completed, where stable means no still-running transaction could yet insert an earlier one into that group (see [Ordering](#ordering)). A group whose head message is not yet visible — because it is scheduled for later, because it is backing off after a failure, or because another worker currently holds it — offers nothing at all, rather than offering the message behind it.
-
-Each worker claims the oldest head message, across all groups, that it can lock with `FOR UPDATE ... SKIP LOCKED`. A head message another worker already holds is skipped rather than waited for, so the claim falls through to the next group's head message. The worker then handles that one message and claims again.
-
-To find that message, the claim first walks the oldest pending messages and stops at the first one that is a claimable head, which costs the same however long the backlog is. Only when nothing near the front can be claimed does it consider every group's head message. The answer is the same either way. See [ADR 0010](docs/adr/0010-claim-looks-at-the-oldest-messages-first.md).
-
-Nothing hands groups out to workers; the database distributes them. Messages of one group are therefore handled one at a time, in order, and different groups proceed concurrently.
-
-One claim is one message. There is no batch and no batch size on either side — throughput comes from how many groups your application defines, not from how many messages fit in a fetch. See [ADR 0003](docs/adr/0003-no-batching.md).
-
-The two sides differ in where the transaction boundary sits, because their handlers do genuinely different things:
-
-- An **inbox** handler applies an externally-originated event to this same database. One transaction spans the claim, the handler, and the write that records the message as handled.
-- An **outbox** handler causes an effect *outside* this database — an HTTP call, a Kafka publish — whose latency we do not control, and holding a Postgres transaction open across that is what this design exists to avoid. The worker takes a time-bounded **lease** in a short transaction, commits it, dispatches with nothing open, and records the outcome in a second short transaction.
-
-See [ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md).
-
-## Delivery guarantees
-
-**Outbox delivery is at-least-once. Outbox handlers must be idempotent.**
-
-A lease is time-bounded, which is what stops an instance that dies mid-delivery from blocking its group forever: the lease expires on its own and the message is offered again. The price is that a worker which died — or merely overran — after the external effect but before the completion write causes that effect to happen twice. A worker that finishes after its lease expired detects the loss, logs a warning, and discards its outcome, so the message is not fanned out any further.
-
-**Inbox delivery is exactly-once.** The handler's writes and the record that the message was handled commit in the same transaction, so either both happen or neither does. That is a guarantee about the *effect on the database*: under a retrying execution strategy the handler may be run more than once, so keep its effects inside the transaction. See [Connection retries and execution strategies](#connection-retries-and-execution-strategies).
-
-## Ordering
-
-Messages within a group are handled strictly in order — but that order is **the order in which the writing transactions started**, not the order in which the rows were appended.
-
-An identity value is assigned when a row is inserted, not when its transaction commits, so ordering by `id` alone lets a transaction that started later but committed first have its message handled first. Every message therefore carries a `TransactionId`, messages are ordered by `(TransactionId, Id)`, and a message is offered only once it is **stable** — once no still-running transaction could yet insert an earlier message into its group. See [ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md).
-
-Two consequences are worth knowing before you rely on this:
-
-- **A long-running write transaction anywhere in the database delays delivery.** The stability test is against the snapshot minimum, which an open write transaction holds back, so a long writer stalls *all* message delivery until it commits — not just delivery of its own group. Read-only transactions are unaffected, as they are assigned no transaction id. This is the same coupling logical replication and CDC have, and it needs monitoring.
-- **A slow inbox handler does the same thing.** An inbox handler runs inside the transaction that claims its message and records the outcome, and that transaction is a writer for its whole length — so while it runs it holds the snapshot minimum back exactly as any other long writer would, delaying delivery for every group on both the inbox and the outbox. This is the price of exactly-once inbox delivery ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)); keep inbox handlers short, and move slow or external work to the outbox, whose claim transaction commits immediately.
-- Messages appended within one transaction keep their relative order.
-
-## Two behaviours that look like defects
-
-Both are deliberate, and knowing about them up front is cheaper than discovering them in production.
-
-**A permanently failing message stalls its own group, forever.** It is retried with an exponential backoff up to a ten-minute ceiling and never given up on, and every message behind it in that group waits. Other groups are unaffected. Under strict per-group ordering the alternative — skipping past it — silently drops a message out of an ordered stream, which is worse for a consumer that depends on the order. Detection is external: a group that stops draining shows up as unbounded growth in unhandled messages. See [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md). Until a dead-letter mechanism exists, `Discard()` exception policies are the way to drop a known-bad message.
-
-**A scheduled or backing-off message holds back everything behind it in its group.** A group offers only its head message, so nothing written after a message scheduled for tomorrow is handled until that message has been. Give a message its own group key if the delay is meant to apply to it alone.
-
-## Features
-
-- **EF Core based**: built on top of EF Core abstractions and DbContexts.
-- **Outbox and inbox support**: both sides share the claim model and the per-message chain, and diverge only where their transaction models genuinely differ.
-- **Push-triggered processing**: you can call `IOutbox.ProcessMessages()` to schedule a run immediately after commit. You can use a dbcontext interceptor to automate this.
-- **Background processing**: hosted services also schedule processing runs on a configurable delay.
-- **Group-aware parallelism**: different groups are handled concurrently.
-- **Multi-instance safe**: multiple servers can process the same table without duplicating work under normal operation.
-- **Total ordering within a group**: ordering holds even when two of your own transactions write to the same group concurrently.
-- **Scheduled delivery**: a message can be given the instant from which it may be handled.
-- **Retry backoff**: failed messages are retried with an exponential, jittered delay computed by the database.
-- **Bounded handler runtime**: every handler is cancelled once `HandlerTimeout` elapses, so a hung external call cannot occupy a worker for good.
-- **Retention cleanup**: completed messages are deleted automatically after a configurable retention period.
-- **Distributed tracing**: each message is handled inside an OpenTelemetry `process` span that continues the trace of the transaction that wrote it.
-- **Source generation**: avoids runtime reflection for handler dispatch and DI wiring.
+- **Outbox**: deliver an effect *outside* the database (HTTP call, Kafka publish) after your change commits. At-least-once.
+- **Inbox**: apply an incoming event to *this* database. Exactly-once, with duplicate suppression by `EventId`.
 
 ## Requirements
 
-- .NET 10 / EF Core application, built with **.NET SDK 10.0.400 or newer** (the source generator targets Roslyn 5.9)
-- **PostgreSQL 13 or newer**, via `Npgsql`
-
-PostgreSQL 13 is the floor because ordering depends on the 64-bit transaction identifier type `xid8` and on `pg_current_xact_id()`, `pg_current_snapshot()` and `pg_snapshot_xmin()`, all of which arrived in that release. Claiming also relies on `FOR UPDATE ... SKIP LOCKED`.
-
-### Table names and `search_path`
-
-The library stores its messages in two tables named `inbox` and `outbox`. The names are fixed: mapping either entity to a different table, schema or column through EF Core is not supported, and doing so breaks the library at its first claim rather than at startup.
-
-The schema is still yours to choose. Claiming and completion are hand-written SQL that names the tables **unqualified**, so both must be reachable through the connection's `search_path`. The default arrangement — tables in the default schema, `search_path` left alone — already satisfies this. If you put your `DbContext` in another schema, say so on the connection:
-
-```
-Host=...;Database=...;Search Path=app
-```
-
-See [ADR 0005](docs/adr/0005-fixed-table-and-column-names.md) for why the names are fixed rather than read off the EF model.
-
-### Upgrading: the pending-order index
-
-Both tables carry a partial index on `(transaction_id, id)` over the messages not yet completed, which the claim walks to find the oldest claimable message ([ADR 0010](docs/adr/0010-claim-looks-at-the-oldest-messages-first.md)). Upgrading from a version without it needs an EF migration:
-
-```bash
-dotnet ef migrations add AddPendingOrderIndexToInboxAndOutbox
-dotnet ef database update
-```
-
-Until it is applied the claim is still correct, but its first step sorts the pending messages instead of reading them in order from the index.
+- .NET 10 with EF Core, built with **.NET SDK 10.0.400 or newer**
+- **PostgreSQL 13 or newer**, via Npgsql
 
 ## Getting started
 
-### Installation
+### 1. Install
 
 ```bash
 dotnet add package Underground.Outbox
 dotnet add package Underground.Outbox.SourceGenerator
 ```
 
-**Important**: The source generator package goes in **every project that declares handlers**, not only the root project. Each one emits an `Add<Assembly>MessageHandlers()` extension method registering its own handlers, and the project where dependency injection is configured calls one per module. A project with no handlers needs only `Underground.Outbox`.
+Add the source generator to **every project that declares handlers**. Handlers in a project without it
+are not registered.
 
-### Configuration
+### 2. Add the tables to your DbContext
 
-1. **Add Services**: Configure the outbox services in your `Program.cs` file, then register each module's handlers:
+```csharp
+sealed class AppDbContext(DbContextOptions<AppDbContext> options)
+    : DbContext(options), IOutboxDbContext, IInboxDbContext
+{
+    public DbSet<OutboxMessage> OutboxMessages { get; set; }
+    public DbSet<InboxMessage> InboxMessages { get; set; }
+}
+```
 
-    ```csharp
-    builder.Services.AddOutboxServices<AppDbContext>(cfg => { });
-    builder.Services.AddInboxServices<AppDbContext>(cfg => { });
+Then create the `outbox` and `inbox` tables with an EF migration (`dotnet ef migrations add AddOutbox`).
+Implement only the interface for the side you use.
 
-    // one call per project that declares handlers; the method is named after the assembly
-    builder.Services.AddMyAppMessageHandlers();
-    builder.Services.AddMyOrdersModuleMessageHandlers();
-    ```
+### 3. Write a handler
 
-    Handlers are discovered: implementing `IOutboxMessageHandler<T>` or `IInboxMessageHandler<T>` is
-    all it takes to be registered. There is no list to keep in step with your handler classes. The
-    order of these calls does not matter.
-
-    A handler is `Transient` unless it says otherwise:
-
-    ```csharp
-    [MessageHandlerLifetime(ServiceLifetime.Scoped)]
-    public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage> { ... }
-    ```
-
-    The lifetime governs the handler class rather than one of its message types. A handler
-    implementing several handler interfaces is registered once, so a `Scoped` one is a single
-    instance per scope.
-
-    Two handlers claiming the same message type is an error. In one assembly the generator reports
-    `OUTBOX001` at compile time; across assemblies the host throws on startup, before any message is
-    claimed. A handler in a project that does not reference the source generator is simply not
-    registered, and its messages fail at dispatch with "no handler configured for message type".
-
-2. **Adjust DbContext**: Add interfaces and message types to your DbContext. This ensures that you can use EF migrations to add the tables to your database.
-
-    ```csharp
-    sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IOutboxDbContext, IInboxDbContext
+```csharp
+public class OrderShippedHandler : IOutboxMessageHandler<OrderShipped>
+{
+    public async Task HandleAsync(OrderShipped message, MessageMetadata metadata, CancellationToken cancellationToken)
     {
-        public DbSet<OutboxMessage> OutboxMessages { get; set; }
-        public DbSet<InboxMessage> InboxMessages { get; set; }
+        // metadata.EventId, metadata.GroupKey, metadata.RetryCount
+        await httpClient.PostAsJsonAsync("/shipments", message, cancellationToken);
     }
-    ```
+}
+```
 
-3. **Handle Messages**: Create message handlers by implementing `IInboxMessageHandler` and `IOutboxMessageHandler`.
+Inbox handlers implement `IInboxMessageHandler<T>` the same way. Handlers are discovered automatically
+and registered as `Transient`; change that with `[MessageHandlerLifetime(ServiceLifetime.Scoped)]`.
+Each message type can have only one outbox and one inbox handler.
 
-### Add messages
+### 4. Register the services
 
-Adding to the outbox requires an active database transaction. That is intentional: the outbox write must commit together with your business data.
+```csharp
+builder.Services.AddDbContext<AppDbContext>((sp, options) => options
+    .UseNpgsql(connectionString)
+    // optional: start processing right after commit instead of on the next poll
+    .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>()));
 
-`ExecuteInTransactionAsync` opens that transaction for you, through whichever execution strategy the host configured, so the same call works with and without connection retries:
+builder.Services.AddOutboxServices<AppDbContext>(cfg => { });
+builder.Services.AddInboxServices<AppDbContext>(cfg => { });
+
+// generated per project that declares handlers, named after its assembly
+builder.Services.AddMyAppMessageHandlers();
+builder.Services.AddMyOrdersModuleMessageHandlers();
+```
+
+### 5. Add messages
+
+Adding a message requires a transaction, so it commits together with your business data.
+`ExecuteInTransactionAsync` opens one (or joins an existing one) and works with retrying execution
+strategies:
 
 ```csharp
 using Underground.Outbox.Data;
@@ -170,267 +89,57 @@ await dbContext.ExecuteInTransactionAsync(async ct =>
 
     await outbox.AddMessageAsync(
         dbContext,
-        new OutboxMessage(
-            Guid.NewGuid(),
-            DateTime.UtcNow,
-            new ExampleMessage("Hello, World!"),
-            groupKey: "customer-123"),
+        new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new OrderShipped(order.Id), groupKey: $"order-{order.Id}"),
         ct);
 }, cancellationToken);
 ```
 
-There is a `Func<CancellationToken, Task<T>>` overload when the work returns something. A transaction that is already open is joined rather than nested, so a method using this stays callable from inside another one.
+The inbox works the same through `IInbox.AddMessageAsync` with an `InboxMessage`.
 
-Owning the transaction yourself works too, as long as no retrying execution strategy is configured:
+Useful variations:
 
-```csharp
-await using var transaction = await dbContext.Database.BeginTransactionAsync();
+- **Schedule** a message with `visibleAt: DateTime.UtcNow.AddDays(1)`.
+- **Batch** with `AddMessagesAsync`.
+- **Save once**: `StageMessage` / `StageMessages` only add the message to the change tracker, so your
+  own `SaveChangesAsync` writes it. A staged message that is never saved is lost.
+- **Own transaction**: `BeginTransactionAsync` / `CommitAsync` works too, unless a retrying execution
+  strategy is configured (e.g. Aspire's `EnrichNpgsqlDbContext` or `EnableRetryOnFailure()`); then use
+  `ExecuteInTransactionAsync`. See [ADR 0006](docs/adr/0006-adapt-to-the-host-execution-strategy.md).
 
-await outbox.AddMessageAsync(
-    dbContext,
-    new OutboxMessage(
-        Guid.NewGuid(),
-        DateTime.UtcNow,
-        new ExampleMessage("Hello, World!"),
-        groupKey: "customer-123"),
-    cancellationToken
-);
+The delegate passed to `ExecuteInTransactionAsync` may be replayed after a transient failure, so load
+what it needs inside it.
 
-await transaction.CommitAsync();
-```
+## Groups and ordering
 
-Use `AddMessageAsync` / `AddMessagesAsync` rather than tracking the entity yourself. Adding an `OutboxMessage` straight to the `DbSet` still works and is still processed, but it skips the trace-context capture below, so the message is handled in a trace of its own.
+Every message has a `GroupKey` (default `"default"`). Groups are the unit of ordering and of concurrency:
 
-To schedule a message instead of delivering it as soon as possible, pass `visibleAt`:
+- Messages in one group are handled one at a time, in the order their transactions started.
+- Different groups are handled concurrently, up to `MaxConcurrentGroups`.
 
-```csharp
-new OutboxMessage(
-    Guid.NewGuid(),
-    DateTime.UtcNow,
-    new ReminderMessage("Your trial ends today"),
-    groupKey: "customer-123",
-    visibleAt: DateTime.UtcNow.AddDays(1));
-```
+Pick a key per aggregate, account or customer: whatever must stay ordered. Leaving everything in
+`"default"` means strictly serial processing, and one failing message blocks all others.
 
-### Stage messages for your own save
+## Delivery guarantees
 
-`AddMessageAsync` saves the message itself, which costs a second save when you were going to call `SaveChanges` anyway. `StageMessage` / `StageMessages` put the message into the context without saving it, so your own save writes it:
-
-```csharp
-await dbContext.ExecuteInTransactionAsync(async ct =>
-{
-    var order = await dbContext.Orders.SingleAsync(o => o.Id == orderId, ct);
-    order.Status = OrderStatus.Shipped;
-
-    outbox.StageMessage(
-        dbContext,
-        new OutboxMessage(
-            Guid.NewGuid(),
-            DateTime.UtcNow,
-            new ExampleMessage("Hello, World!"),
-            groupKey: "customer-123"));
-
-    await dbContext.SaveChangesAsync(ct);
-}, cancellationToken);
-```
-
-Staging is synchronous — it touches only the change tracker — and it does not check for an active transaction, because a caller that has not saved yet may not have one. That check is what guarantees the message commits with the business change, so staging hands the guarantee to you: stage only where your own save carries the change the message belongs to, and remember that a staged message you never save is silently lost.
-
-A staged message committed without an explicit transaction also triggers no push-based processing, since the notification hangs off transaction commit (see [Push-based processing](#push-based-processing)). It is picked up by the next processing cycle, or at once if you call `ProcessMessages()` yourself. `AddMessageAsync` remains the recommended path; staging is for callers that own the unit of work and want one save rather than two.
-
-### Connection retries and execution strategies
-
-Aspire's `EnrichNpgsqlDbContext`, and a plain `EnableRetryOnFailure()`, configure a **retrying execution strategy**. EF then refuses to run a query or `SaveChanges` inside a transaction you began yourself — which is every way of staging an outbox message:
-
-> The configured execution strategy 'NpgsqlRetryingExecutionStrategy' does not support user-initiated transactions.
-
-`ExecuteInTransactionAsync` above avoids this entirely. If you own the transaction yourself, run it through the strategy:
-
-```csharp
-var strategy = dbContext.Database.CreateExecutionStrategy();
-
-await strategy.ExecuteAsync(async () =>
-{
-    await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-    await outbox.AddMessageAsync(dbContext, message, cancellationToken);
-
-    await transaction.CommitAsync(cancellationToken);
-});
-```
-
-Either way the delegate must be **re-runnable**: a transient failure replays the whole of it, so load and stage what it needs inside it rather than before the call.
-
-A failed attempt's `SaveChanges` has already been accepted by the change tracker even though its transaction rolled back, so a replay on the same tracker would see the entity's changes as already made and skip them, while re-inserting the failed attempt's messages. `ExecuteInTransactionAsync` therefore clears the change tracker before each replay: an entity loaded inside the delegate is simply loaded again, and one tracked before the call is detached. If you drive the strategy yourself, do the same — call `dbContext.ChangeTracker.Clear()` at the start of every replay, or use a fresh context per attempt.
-
-The library's own processing adapts to the same strategy, and one consequence reaches your code. The inbox runs claim, handler and outcome write in a single transaction ([ADR 0001](docs/adr/0001-split-transaction-model-between-inbox-and-outbox.md)), so that transaction is also its retry unit: **an inbox handler may be run more than once**, even though its effect on the database still lands exactly once — either the attempt rolled back entirely, or it committed and the replay finds the message no longer offered. Keep an inbox handler's effects inside its transaction and this costs nothing; give it an effect the transaction cannot roll back and a replay will repeat that effect. Outbox handlers are unaffected: only the claim is replayed, never the dispatch. See [ADR 0006](docs/adr/0006-adapt-to-the-host-execution-strategy.md).
-
-## Message model
-
-Both `OutboxMessage` and `InboxMessage` contain:
-
-| Property | Description |
-|----------|-------------|
-| `EventId` | Unique event identifier. A unique index prevents duplicates for the same event id. |
-| `TransactionId` | The identifier of the transaction that inserted the message, assigned by the database. Together with `Id` it is the sort key that makes ordering within a group total. |
-| `CreatedAt` | When the message was written. |
-| `Type` | Runtime CLR type name of the serialized payload — `Type.FullName`. See [The `Type` column is a contract](#the-type-column-is-a-contract). |
-| `GroupKey` | Logical group used for concurrency and ordering. Defaults to `"default"`. |
-| `Data` | Serialized message payload. |
-| `RetryCount` | Number of failed processing attempts. |
-| `VisibleAt` | The instant from which the message may be handled. Defaulted by the database to the present, pushed into the future by the retry backoff, and — on the outbox — set to the lease expiry while a worker holds the message. |
-| `CompletedAt` | Null until the message is completed successfully. |
-| `TraceParent` | The W3C trace context of the transaction that wrote the message, so handling it continues the same trace. Null when nothing was tracing. |
-
-Both types are mapped to fixed tables and columns — `inbox` and `outbox` — which cannot be remapped; see [Table names and `search_path`](#table-names-and-search_path).
-
-### The `Type` column is a contract
-
-`Type` is written from the payload's runtime type (`data.GetType().FullName`) and read back by the
-generated dispatcher, which selects a handler by comparing it against `typeof(T).FullName` for each
-handler it found. Both sides evaluate the same expression, so nested types (`Outer+Inner`) and generic
-types (`` Wrapped`1[[...]] ``) match as they should.
-
-That name is persisted, and rows outlive the code that wrote them. Two consequences:
-
-- **Renaming a message class, or moving it to another namespace, orphans the rows already in the table.**
-  Nothing fails at build time; the messages simply find no handler and, per
-  [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md), block their group. Drain the table
-  before such a rename, or keep the old type around with a handler until it has drained.
-- **A generic message type's name embeds the assembly version of its type arguments**, because that is
-  what `Type.FullName` produces. Bumping the assembly version orphans rows the same way. Prefer a
-  non-generic message type unless the table is always drained across deployments.
-
-On the inbox the same name is the integration contract: a foreign producer has to write your .NET type
-name into the `type` column for the message to be dispatched.
-
-Two handlers of the same kind for one message type is a build error (`OUTBOX001`) — only one of them
-could ever run.
-
-Handlers also receive `MessageMetadata` with `EventId`, `GroupKey`, and `RetryCount`.
-
-```csharp
-using Underground.Outbox;
-
-public class ExampleMessageHandler : IOutboxMessageHandler<ExampleMessage>
-{
-    public Task HandleAsync( ExampleMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
-    {
-        var eventId = metadata.EventId;
-        var groupKey = metadata.GroupKey;
-        var retryCount = metadata.RetryCount;
-
-        // Process the message
-        return Task.CompletedTask;
-    }
-}
-```
-
-The `cancellationToken` a handler is passed is cancelled once `HandlerTimeout` elapses, and honouring it is what turns a hung call into an ordinary failed attempt. On the outbox the lease is that timeout plus a margin for the completion write, so the token always fires while the worker still holds the message.
-
-## Push-based processing
-
-This library supports push-based processing through `IOutbox.ProcessMessages()`.
-
-That means the producer side can add messages, commit the transaction, and then trigger processing right away instead of waiting for the next scheduled cycle.
-
-If you want this to happen automatically after `transaction.CommitAsync()`, register the built-in EF Core interceptor:
-
-```csharp
-builder.Services.AddDbContext<AppDbContext>((sp, options) =>
-{
-    options
-        .UseNpgsql(connectionString)
-        .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>());
-});
-```
-
-With that registration in place, a successful `transaction.CommitAsync()` call will trigger `IOutbox.ProcessMessages()` and/or `IInbox.ProcessMessages()` when new `OutboxMessage` or `InboxMessage` rows were inserted in that unit of work.
-
-## Tracing
-
-Handling a message emits one OpenTelemetry span per attempt. Subscribe to it by name:
-
-```csharp
-builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
-    .AddSource(OutboxTelemetry.ActivitySourceName)   // "Underground.Outbox"
-    .AddNpgsql());                                   // the statements underneath, if you want them
-```
-
-Nothing is emitted until something subscribes: the library uses `System.Diagnostics.ActivitySource` and takes no dependency on the OpenTelemetry packages.
-
-`AddMessageAsync` records the ambient trace context on the message's `traceparent` column, and the worker that later handles it starts its span as a child of that context — so the request that caused the message and the handler that carries out its effect appear in one trace, however long the message waited. A message written while nothing was tracing has no context and is handled under a trace of its own. See [ADR 0009](docs/adr/0009-message-trace-context-is-stored-and-parented.md) for why the span parents to that context rather than linking to it.
-
-The span is named `process outbox` / `process inbox`, is a `Consumer` span, and carries:
-
-| Attribute | Value |
-|-----------|-------|
-| `messaging.system` | `underground_outbox` |
-| `messaging.operation.name`, `messaging.operation.type` | `process` |
-| `messaging.destination.name` | `outbox` or `inbox` |
-| `messaging.destination.partition.id` | The message's `GroupKey` |
-| `messaging.message.id` | The message's `EventId` |
-| `underground.outbox.message.type` | The message's `Type` |
-| `underground.outbox.retry_count` | The attempt number |
-| `error.type` | Only on failure — see below |
-
-A successful attempt leaves the span's status unset. A failed one sets `Error` and records the exception, with `error.type` naming the exception type. Two failures are the library's own rather than a handler's:
-
-- `lease_lost` — the handler threw, and by the time the failure was written the lease had expired, so nothing was recorded and another worker already has the message.
-- `duplicate_delivery` — the handler *succeeded* and the completion write came too late. The effect has been carried out and will be carried out again. This is the one span worth alerting on.
-
-Shutdown mid-attempt is not an error: the span closes with its status unset.
-
-### Migration
-
-`traceparent` is a new nullable column on both tables, so upgrading needs an EF migration:
-
-```bash
-dotnet ef migrations add AddTraceParentToInboxAndOutbox
-dotnet ef database update
-```
-
-Existing rows keep a null and are handled exactly as before.
-
-## Choosing group keys
-
-Groups are the unit of both ordering and concurrency, and the only source of parallelism.
-
-Use the group key to group messages that must stay ordered relative to each other, for example per aggregate, account, or customer. Messages that have no ordering relationship belong in different groups.
-
-The default group key is `"default"`. Leaving it there puts every message in one group, which means strictly serial handling and no parallelism at all — and it means one permanently failing message stalls everything.
-
-`MaxConcurrentGroups` is the number of workers, and with it the ceiling on how many groups are in flight at once. `1` means strictly serial handling across all groups — one message anywhere in the system at a time — rather than one message per group.
-
-## Multiple servers
-
-The library can run on multiple servers against the same database, with no global distributed lock and no coordination between instances.
-
-The claim query is what keeps two workers apart: one worker locks the head message it claims, another worker or server running the same query finds that row locked and skips it rather than waiting, and so ends up on a different group.
-
-How long that separation lasts differs by side:
-
-- On the **inbox**, the row lock is held for the whole transaction, which spans the handler. Nothing else can touch the message until it is done, and the lock dies with the connection if the instance does.
-- On the **outbox**, the claim transaction is short and the lock is gone once it commits. What keeps other workers off the message during dispatch is the lease: the claim sets `VisibleAt` to the lease expiry, so the message is out of sight for as long as this worker has to finish and comes back on its own if the worker never does.
-
-Under normal operation two workers therefore never handle the same message at the same time. The exception is an outbox lease that expires while its worker is still running, which is the deliberate cost of not holding a transaction across an external call — see [Delivery guarantees](#delivery-guarantees).
+- **Outbox is at-least-once. Make outbox handlers idempotent.** A worker that dies or overruns
+  `HandlerTimeout` after the external effect but before recording success causes a second delivery.
+- **Inbox is exactly-once for database effects.** The handler runs in the same transaction that marks
+  the message handled. Under a retrying execution strategy the handler itself may run more than once,
+  so keep its effects inside that transaction.
+- Handlers receive a `CancellationToken` that fires after `HandlerTimeout`; honour it.
 
 ## Error handling
 
-When a handler throws, the message's `RetryCount` is incremented and its `VisibleAt` is pushed into the future by the retry backoff. The message is now out of sight, so its group offers nothing until the backoff elapses, while every other group carries on.
+A handler that throws (or times out) is retried with exponential, jittered backoff up to `MaxBackoff`,
+**forever**. Until it succeeds, the messages behind it in the same group wait; other groups are unaffected
+([ADR 0004](docs/adr/0004-poison-messages-block-their-group.md)). Monitor for groups that stop draining.
 
-On the inbox the handler runs inside a savepoint, so its writes are rolled back while that bookkeeping still commits with the surrounding transaction. On the outbox there is no transaction open during dispatch and so no savepoint: an outbox handler's business is an effect outside this database, and one that also writes to this database is asking for the inbox.
-
-The backoff doubles with every failed attempt — `BackoffBase`, then twice that, and so on — up to `MaxBackoff`, and each delay is varied by `BackoffJitter` either way so that groups which all failed against one shared dependency do not retry in lockstep. The new `VisibleAt` is computed by PostgreSQL from `clock_timestamp()`; the application only ever supplies the interval, so an instance with a skewed clock cannot retry early or late.
-
-A handler that exceeds `HandlerTimeout` is cancelled and recorded as a failed attempt like any other, rather than occupying its worker indefinitely.
-
-You can configure exception policies per handler and message type, or globally for all inbox and outbox handlers. `ForHandler` does not register anything — discovery has already done that — it names a discovered handler so you can say something about it. To discard a message for a specific exception type, chain `OnException<TException>().Discard()` from `ForHandler`:
+To drop messages for known exceptions, configure a `Discard()` policy per handler or globally:
 
 ```csharp
 builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
-    cfg.ForHandler<ExampleMessageHandler, SecondMessage>()
+    cfg.ForHandler<OrderShippedHandler, OrderShipped>()
         .OnException<InvalidOperationException>()
         .Discard();
 
@@ -439,44 +148,73 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 });
 ```
 
-`Discard()` deletes the failed message from the outbox or inbox table instead of leaving it available for retry. Exception policies can be attached to a specific handler and message type through `cfg.ForHandler`, or configured globally through `cfg.Policies`. Naming a handler that was not discovered throws when the host starts, rather than silently doing nothing.
+Exactly one policy runs: a matching handler-specific policy wins over any global one, and within a
+level the most specific exception type wins, like a `catch` block.
 
-Exactly one policy runs. If any registration-specific policy matches, the global policies are not consulted at all — however broad the registration's exception type and however narrow the global one — so a single `ForHandler` chain reads as a complete override. Among the policies at one level the nearest matching exception type wins, as in a `catch` block; the same exception type registered twice at one level keeps the first registration. Policies are terminal and mutually exclusive by design: a kind that composes with another, such as retrying before dead-lettering, needs a deliberate change to this selection rule rather than a second registration.
+## Things to know before production
 
-If no matching exception policy exists, the failed message stays in the table with an incremented `RetryCount` and is retried once its backoff has elapsed — forever, stalling its group, per [ADR 0004](docs/adr/0004-poison-messages-block-their-group.md).
+- **Long write transactions delay all delivery.** Ordering waits until no running transaction could still
+  insert an earlier message, so any long-running writer in the database (including a slow inbox handler)
+  holds back every group. Keep inbox handlers short; move slow work to the outbox.
+  ([ADR 0002](docs/adr/0002-order-by-transaction-id-not-sequence.md))
+- **A scheduled or retrying message blocks its group.** Give a delayed message its own group key if the
+  delay should apply to it alone.
+- **The message type name is persisted.** Renaming or moving a message class orphans rows already in the
+  table. Drain the table first, or keep the old type and its handler until it has drained. Avoid generic
+  message types: their name includes assembly versions. On the inbox, external producers must write this
+  .NET type name into the `type` column.
+- **Inbox retention is your duplicate window.** Duplicates are rejected only while the original row
+  exists, so set `CompletedMessageRetention` to at least the longest redelivery window of your senders.
+- **Table names are fixed** (`outbox`, `inbox`) and queried unqualified. If they live in a non-default
+  schema, set it on the connection: `Search Path=app`.
+  ([ADR 0005](docs/adr/0005-fixed-table-and-column-names.md))
+- **Push-triggered processing is in-process.** A commit on one instance wakes only that instance; others
+  pick the work up on their next poll.
 
-## Cleanup and retention
+## Configuration
 
-Completed inbox and outbox messages are not kept forever.
-
-- `CompletedMessageRetention` controls how long completed messages are retained.
-- `CleanupDelaySeconds` controls how often the cleanup hosted service runs.
-
-Cleanup deletes rows where `CompletedAt` is older than the configured retention cutoff.
-
-**On the inbox, `CompletedMessageRetention` is your duplicate-suppression window.** A redelivered event is rejected because its `EventId` already exists in the inbox table — and that only works while the row is still there. Once cleanup has deleted it, the same event is accepted again and handled a second time. Set the retention to at least the longest window over which the systems that send you events might redeliver one; shortening it does not fail loudly, it silently starts accepting duplicates.
-
-The same setting on the outbox is only about table size: nothing else reads a completed outbox row.
-
-## Configuration reference
+Set on `cfg` in `AddOutboxServices` / `AddInboxServices`:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MaxConcurrentGroups` | `2` | Number of workers, and with it the number of groups that can be handled concurrently. `1` means strictly serial handling across all groups. |
-| `HandlerTimeout` | `45 seconds` | Time a handler is given before its cancellation token fires and the attempt is recorded as failed. The outbox lease is derived from this plus a margin for the completion write, and is deliberately not configurable on its own: a lease shorter than the timeout would guarantee double delivery on every slow message. |
-| `BackoffBase` | `1 second` | Delay before a message that failed for the first time is offered again. |
-| `MaxBackoff` | `10 minutes` | Ceiling the doubling retry delay stops at. Jitter is applied afterwards, so an actual delay may exceed this by the jitter proportion. |
-| `BackoffJitter` | `0.2` | Proportion each retry delay is randomly varied by, either way. `0` gives exact delays. |
-| `ProcessingDelayMilliseconds` | `10000` | Delay between scheduled processing cycles. |
-| `CompletedMessageRetention` | `7 days` | How long completed rows are kept before cleanup. On the inbox this is also the duplicate-suppression window. |
-| `CleanupDelaySeconds` | `3600` | Delay between cleanup runs. |
+| `MaxConcurrentGroups` | `2` | Number of workers, and so the number of groups handled at once. |
+| `HandlerTimeout` | `45 seconds` | When a handler's cancellation token fires and the attempt counts as failed. |
+| `BackoffBase` | `1 second` | Retry delay after the first failure; doubles on each further failure. |
+| `MaxBackoff` | `10 minutes` | Ceiling for the retry delay (before jitter). |
+| `BackoffJitter` | `0.2` | Random variation applied to each retry delay. `0` disables it. |
+| `ProcessingDelayMilliseconds` | `10000` | Poll interval between processing cycles. |
+| `CompletedMessageRetention` | `7 days` | How long completed messages are kept. Also the inbox duplicate window. |
+| `CleanupDelaySeconds` | `3600` | Interval between cleanup runs. |
 
-## Example
+## Tracing
+
+Each handling attempt emits an OpenTelemetry `Consumer` span (`process outbox` / `process inbox`) that
+continues the trace of the request that wrote the message:
+
+```csharp
+builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
+    .AddSource(OutboxTelemetry.ActivitySourceName));
+```
+
+The library uses `System.Diagnostics.ActivitySource` and has no OpenTelemetry dependency. A span with
+`error.type = duplicate_delivery` means an outbox effect will be carried out twice; it is worth alerting on.
+Messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace.
+
+## Upgrading
+
+New versions may add columns or indexes to the `outbox` and `inbox` tables. After updating the package,
+add and apply an EF migration:
 
 ```bash
-dotnet run --project example/ConsoleApp/
+dotnet ef migrations add UpdateOutbox
+dotnet ef database update
 ```
+
+## Further reading
+
+- [`example/ConsoleApp`](example/ConsoleApp) — runnable sample (`dotnet run --project example/ConsoleApp/`, needs Docker)
+- [`docs/adr`](docs/adr) — design decisions: transaction model, ordering, no batching, poison messages, claiming
 
 ## License
 
-This project is licensed under the MIT License.
+MIT
