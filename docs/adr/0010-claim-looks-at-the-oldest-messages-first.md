@@ -21,8 +21,8 @@ is in it as well. Ordering, stability (ADR 0002) and `SKIP LOCKED` behave exactl
 
 ## Consequences
 
-Both tables gain a partial index on `(transaction_id, id) WHERE completed_at IS NULL`, so upgrading
-needs an EF migration. It is one more index to maintain on insert, and it does not change what makes
+Both tables gain a partial index on `(transaction_id, id) WHERE completed_at IS NULL`.
+It is one more index to maintain on insert, and it does not change what makes
 an update HOT, because `completed_at` is already in an index predicate.
 
 The new index makes the planner prefer, for the full query, a plan that walks it and tests every row
