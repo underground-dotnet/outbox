@@ -58,8 +58,5 @@ instruction to add it only to the root project. That instruction existed because
 entry points sat in a fixed namespace and would have collided; those are ordinary library source now,
 and the only generated type is named after its assembly.
 
-**Configuration naming a handler that was not discovered throws** rather than being ignored, for the
-same reason the duplicate does: a policy that silently does nothing is worse than a startup failure.
-
 **`ForHandler` is a rename, not a redesign.** Existing `AddHandler` chains that attached a policy port
 by changing the verb; those that only registered are deleted outright.
