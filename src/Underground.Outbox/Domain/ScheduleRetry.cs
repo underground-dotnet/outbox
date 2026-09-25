@@ -15,7 +15,7 @@ namespace Underground.Outbox.Domain;
 /// <remarks>
 /// Guarded on the Lease instant the claim granted, which makes it the probe establishing that this worker
 /// still holds the message - consumer exception policies must not run against a message some other worker
-/// now owns. On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
+/// now owns. On the inbox the row lock keeps the guard satisfied, which is cheaper than a second write path.
 /// </remarks>
 internal sealed partial class ScheduleRetry<TEntity>(
     MessageDbContext<TEntity> messageDbContext,

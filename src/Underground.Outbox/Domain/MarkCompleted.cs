@@ -16,7 +16,8 @@ namespace Underground.Outbox.Domain;
 /// other worker now owns. Matching no row is reported and not thrown - the effect already happened - but
 /// it is still the one case in which an effect has certainly been carried out twice, so
 /// <see cref="Middleware.RecordSuccessMiddleware{TEntity}"/> puts it on the ProcessingAttempt for the outcome log.
-/// On the inbox the guard is trivially satisfied, which is cheaper than a second write path.
+/// On the inbox the row lock keeps the guard satisfied, which is cheaper than a second write path, and
+/// <see cref="InboxProcessor"/> rolls back a miss rather than commit the Handler's writes without it.
 /// </remarks>
 internal sealed partial class MarkCompleted<TEntity>(
     MessageDbContext<TEntity> messageDbContext,

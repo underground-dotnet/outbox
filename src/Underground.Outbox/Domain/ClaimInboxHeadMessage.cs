@@ -8,12 +8,8 @@ namespace Underground.Outbox.Domain;
 /// </summary>
 internal sealed class ClaimInboxHeadMessage(IInboxDbContext dbContext) : ClaimHeadMessage<InboxMessage>(dbContext)
 {
-    // the CTE's lock is held until the transaction ends, so this only reads the row back out
-    private static readonly ClaimStatements Claim = BuildStatements($"""
-        SELECT m.*
-        FROM claimed c
-        JOIN {InboxMessage.TableName} m ON m.id = c.id
-        """);
+    // the CTE's lock is held until the transaction ends, so this only hands out the row version it locked
+    private static readonly ClaimStatements Claim = BuildStatements("SELECT * FROM claimed");
 
     protected override ClaimStatements Statements => Claim;
 }
