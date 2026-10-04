@@ -32,21 +32,17 @@ public static class GeneratorTestsHandlerRegistration
             static async (serviceProvider, message, metadata, cancellationToken) =>
             {
                 var payload = JsonSerializer.Deserialize<global::Sample.InboxMessageType>(message.Data)
-                    ?? throw new ParsingException($"Cannot parse event body of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType>>();
+                    ?? throw new JsonException($"The payload of message {message.Id} is the JSON literal null.");
+                global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType> handler;
                 try
                 {
-                    await handler.HandleAsync(payload, metadata, cancellationToken);
+                    handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType>>();
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex)
                 {
-                    throw new MessageHandlerException(
-                        handler.GetType(),
-                        typeof(global::Sample.InboxMessageType),
-                        $"Error processing message {message.Id} with handler {handler.GetType().Name}",
-                        ex
-                    );
+                    throw new HandlerResolutionException(typeof(global::Sample.InboxHandler), message.Id, ex);
                 }
+                await handler.HandleAsync(payload, metadata, cancellationToken);
             }));
 
         services.AddSingleton(new HandlerEntry<OutboxMessage>(
@@ -56,21 +52,17 @@ public static class GeneratorTestsHandlerRegistration
             static async (serviceProvider, message, metadata, cancellationToken) =>
             {
                 var payload = JsonSerializer.Deserialize<global::Sample.OutboxMessageType>(message.Data)
-                    ?? throw new ParsingException($"Cannot parse event body of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.OutboxMessageType>>();
+                    ?? throw new JsonException($"The payload of message {message.Id} is the JSON literal null.");
+                global::Underground.Outbox.IOutboxMessageHandler<global::Sample.OutboxMessageType> handler;
                 try
                 {
-                    await handler.HandleAsync(payload, metadata, cancellationToken);
+                    handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.OutboxMessageType>>();
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex)
                 {
-                    throw new MessageHandlerException(
-                        handler.GetType(),
-                        typeof(global::Sample.OutboxMessageType),
-                        $"Error processing message {message.Id} with handler {handler.GetType().Name}",
-                        ex
-                    );
+                    throw new HandlerResolutionException(typeof(global::Sample.OutboxHandler), message.Id, ex);
                 }
+                await handler.HandleAsync(payload, metadata, cancellationToken);
             }));
 
         return services;

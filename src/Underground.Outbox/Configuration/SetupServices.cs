@@ -72,7 +72,7 @@ public static class SetupServices
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
-        services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
+        services.AddScoped<ApplyExceptionPolicy<TEntity>>();
         services.AddScoped<ScheduleRetry<TEntity>>();
         services.AddScoped<MarkCompleted<TEntity>>();
 

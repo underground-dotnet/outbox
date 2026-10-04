@@ -60,7 +60,7 @@ public class MessageTypeNameTests
     {
         var message = new OutboxMessage(Guid.NewGuid(), CreatedAt, "Sample.Unknown", "{}");
 
-        await Assert.ThrowsAsync<ParsingException>(() => DispatchAsync(message));
+        await Assert.ThrowsAsync<UnknownMessageTypeException>(() => DispatchAsync(message));
     }
 
     /// <summary>

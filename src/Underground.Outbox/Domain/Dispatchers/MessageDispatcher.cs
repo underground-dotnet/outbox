@@ -16,7 +16,7 @@ internal sealed class MessageDispatcher<TEntity>(
     {
         if (!registry.TryGetEntry(message.Type, out var entry))
         {
-            throw new ParsingException($"No handler configured for message type {message.Type} of message: {message.Id}");
+            throw new UnknownMessageTypeException(message.Type, message.Id);
         }
 
         var metadata = new MessageMetadata(message.EventId, message.GroupKey, message.RetryCount);

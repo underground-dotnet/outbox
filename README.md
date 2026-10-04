@@ -132,7 +132,7 @@ Pick a key per aggregate, account or customer: whatever must stay ordered. Leavi
 
 ## Error handling
 
-A handler that throws (or times out) is retried with exponential, jittered backoff up to `MaxBackoff`,
+A message whose processing attempt fails is retried with exponential, jittered backoff up to `MaxBackoff`,
 **forever**. Until it succeeds, the messages behind it in the same group wait; other groups are unaffected
 ([ADR 0004](docs/adr/0004-poison-messages-block-their-group.md)). Monitor for groups that stop draining.
 
@@ -145,13 +145,53 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
         .OnException<InvalidOperationException>()
         .Discard();
 
-    cfg.Policies.OnException<DataException>()
+    cfg.Policies.OnException<JsonException>()
         .Discard();
 });
 ```
 
-Exactly one policy runs: a matching handler-specific policy wins over any global one, and within a
-level the most specific exception type wins, like a `catch` block.
+A policy sees every failure that concerns the message, and matches the exception that actually went wrong:
+
+| Failure | Exception |
+|---------|-----------|
+| The payload cannot be read, or is the JSON literal `null` | `JsonException` |
+| The handler throws | whatever it throws |
+| The handler overruns `HandlerTimeout` | `HandlerTimeoutException` (a `TimeoutException`) |
+| Saving what the handler wrote fails | the database's exception, e.g. `DbUpdateException` |
+| No handler claims the message's type | `UnknownMessageTypeException` |
+| The handler cannot be built from the container | `HandlerResolutionException`, wrapping the container's error |
+
+Failures of the library's own bookkeeping (recording the retry or the completion) reach no policy. The
+retry is always recorded before a policy runs, whichever one matches.
+
+Exactly one policy runs: a matching policy on the message's handler wins over any global one, and within
+a level the most specific exception type wins, like a `catch` block. A message whose type no handler
+claims has no handler, so only global policies apply to it.
+
+### Deployment gaps
+
+`UnknownMessageTypeException` and `HandlerResolutionException` derive from `DeploymentGapException`: the
+running deployment lacks something, and the next one may supply it. During a rolling deploy, for example,
+a newer producer can write a type an older worker does not know yet. So a deployment gap matches only a
+policy that names `DeploymentGapException` or one of its subclasses; a broad `OnException<Exception>()`
+skips it and the message keeps retrying
+([ADR 0012](docs/adr/0012-exception-policies-see-every-failure-about-the-message.md)).
+
+To drop the leftover messages of a type you retired for good, name the exception on purpose:
+
+```csharp
+cfg.Policies.OnException<UnknownMessageTypeException>()
+    .Discard();
+```
+
+### Upgrading
+
+- `IMessageExceptionHandler<TEntity>.HandleAsync` now takes the cause as `Exception` instead of
+  `MessageHandlerException`; there is no `InnerException` to unwrap.
+- `MessageHandlerException` and `ParsingException` are removed. An unknown type throws
+  `UnknownMessageTypeException`, an unreadable payload `JsonException`.
+- Existing policies now also see failures outside the handler. `OnException<TimeoutException>()`, for
+  instance, now matches a handler that overruns `HandlerTimeout`.
 
 ## Things to know before production
 

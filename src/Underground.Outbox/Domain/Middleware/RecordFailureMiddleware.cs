@@ -2,13 +2,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
-using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// Turns a Handler that threw into a recorded attempt: pushes the message out of sight for its backoff
-/// delay, then consults the exception policies. Reports the failure rather than rethrowing, so one bad
+/// Turns a failure anywhere inside it into a recorded attempt: pushes the message out of sight for its
+/// backoff delay, then consults the exception policies. Reports the failure rather than rethrowing, so one bad
 /// message costs its own Group and nothing else.
 /// </summary>
 /// <remarks>
@@ -49,14 +48,9 @@ internal sealed class RecordFailureMiddleware<TEntity>(
             return ProcessingAttempt.LeaseLost(failure);
         }
 
-        // only an exception the Handler itself raised has a policy to consult
-        if (failure is MessageHandlerException handlerException)
-        {
-            // from the handling scope, so the exception handler sees the same services the Handler saw
-            var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
-
-            await processHandlerException.ExecuteAsync(handlerException, message, _dbContext, cancellationToken).ConfigureAwait(false);
-        }
+        // from the handling scope, so the exception handler sees the same services the Handler saw
+        var applyExceptionPolicy = scope.ServiceProvider.GetRequiredService<ApplyExceptionPolicy<TEntity>>();
+        await applyExceptionPolicy.ExecuteAsync(failure, message, _dbContext, cancellationToken).ConfigureAwait(false);
 
         return ProcessingAttempt.Failed(failure);
     }

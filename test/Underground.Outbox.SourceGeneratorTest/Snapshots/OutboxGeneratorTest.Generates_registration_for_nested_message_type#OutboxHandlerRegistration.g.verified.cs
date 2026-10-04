@@ -30,21 +30,17 @@ public static class GeneratorTestsHandlerRegistration
             static async (serviceProvider, message, metadata, cancellationToken) =>
             {
                 var payload = JsonSerializer.Deserialize<global::Sample.Outer.Inner>(message.Data)
-                    ?? throw new ParsingException($"Cannot parse event body of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.Outer.Inner>>();
+                    ?? throw new JsonException($"The payload of message {message.Id} is the JSON literal null.");
+                global::Underground.Outbox.IOutboxMessageHandler<global::Sample.Outer.Inner> handler;
                 try
                 {
-                    await handler.HandleAsync(payload, metadata, cancellationToken);
+                    handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.Outer.Inner>>();
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+                catch (Exception ex)
                 {
-                    throw new MessageHandlerException(
-                        handler.GetType(),
-                        typeof(global::Sample.Outer.Inner),
-                        $"Error processing message {message.Id} with handler {handler.GetType().Name}",
-                        ex
-                    );
+                    throw new HandlerResolutionException(typeof(global::Sample.InnerHandler), message.Id, ex);
                 }
+                await handler.HandleAsync(payload, metadata, cancellationToken);
             }));
 
         return services;

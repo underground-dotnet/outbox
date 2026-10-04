@@ -1,6 +1,5 @@
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
-using Underground.Outbox.Exceptions;
 
 namespace Underground.OutboxTest.TestPolicies;
 
@@ -10,9 +9,12 @@ public class MarkAsCompletedExceptionHandler<TEntity>() : IMessageExceptionHandl
     public int CallCount = 0;
 #pragma warning restore CA1051 // Do not declare visible instance fields
 
-    public async Task HandleAsync(MessageHandlerException ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken)
+    public Exception? ReceivedException { get; private set; }
+
+    public async Task HandleAsync(Exception ex, TEntity message, IDbContext dbContext, CancellationToken cancellationToken)
     {
         CallCount++;
+        ReceivedException = ex;
         message.CompletedAt = DateTime.UtcNow;
         dbContext.Set<TEntity>().Update(message);
         await dbContext.SaveChangesAsync(cancellationToken);

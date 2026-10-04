@@ -269,23 +269,18 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("            {");
         sb.AppendLine($"                var payload = JsonSerializer.Deserialize<{messageType}>(message.Data)");
         // the id only: the body is application data, and this message ends up in logs and on spans
-        sb.AppendLine("                    ?? throw new ParsingException($\"Cannot parse event body of message: {message.Id}\");");
-        sb.AppendLine($"                var handler = serviceProvider.GetRequiredService<{iface}>();");
+        sb.AppendLine("                    ?? throw new JsonException($\"The payload of message {message.Id} is the JSON literal null.\");");
+        // a container error means the deployment lacks something, which is a Deployment Gap rather than a bad message
+        sb.AppendLine($"                {iface} handler;");
         sb.AppendLine("                try");
         sb.AppendLine("                {");
-        sb.AppendLine("                    await handler.HandleAsync(payload, metadata, cancellationToken);");
+        sb.AppendLine($"                    handler = serviceProvider.GetRequiredService<{iface}>();");
         sb.AppendLine("                }");
-        // only a cancellation of the token it was given travels on as one; a Handler's own, such as an
-        // HttpClient timeout, is an ordinary failure
-        sb.AppendLine("                catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)");
+        sb.AppendLine("                catch (Exception ex)");
         sb.AppendLine("                {");
-        sb.AppendLine("                    throw new MessageHandlerException(");
-        sb.AppendLine("                        handler.GetType(),");
-        sb.AppendLine($"                        typeof({messageType}),");
-        sb.AppendLine("                        $\"Error processing message {message.Id} with handler {handler.GetType().Name}\",");
-        sb.AppendLine("                        ex");
-        sb.AppendLine("                    );");
+        sb.AppendLine($"                    throw new HandlerResolutionException(typeof({handler.HandlerFullName}), message.Id, ex);");
         sb.AppendLine("                }");
+        sb.AppendLine("                await handler.HandleAsync(payload, metadata, cancellationToken);");
         sb.AppendLine("            }));");
     }
 

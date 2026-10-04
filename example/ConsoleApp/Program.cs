@@ -28,6 +28,7 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
 {
     cfg.ForHandler<ExampleMessageHandler, SecondMessage>()
         .OnException<InvalidOperationException>().Discard()
+        // also matches HandlerTimeoutException, so a handler that overruns HandlerTimeout is discarded too
         .OnException<TimeoutException>().Discard();
 });
 builder.Services.AddInboxServices<AppDbContext>(cfg =>
