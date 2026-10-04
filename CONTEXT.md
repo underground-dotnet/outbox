@@ -117,8 +117,9 @@ _Avoid_: Attempt *(alone — an attempt at what?)*, context, envelope, result, o
 The rule for what else happens to a message whose Processing Attempt failed, chosen by the type of
 exception that made it fail. It runs after the failure is recorded, never instead of it: the retry and
 its backoff happen whichever policy matches. Any failure that concerns the message itself can match:
-its payload, finding or running its Handler, the Handler's time running out. A failure in this library's
-own bookkeeping writes cannot. Exactly one policy runs. One set on the Handler wins over one set for the
+its payload, finding or running its Handler, the Handler's time running out. Two kinds of failure cannot:
+one in this library's own bookkeeping writes, and a message whose type no Handler claims, which is
+retried until a Handler for it is deployed. Exactly one policy runs. One set on the Handler wins over one set for the
 whole inbox or outbox, and within each level the nearest exception type wins.
 _Avoid_: Error handler, fault policy, retry policy *(retrying is the default, not a policy)*
 
