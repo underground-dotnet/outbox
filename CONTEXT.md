@@ -113,6 +113,15 @@ this worker did counted. A message accumulates one Processing Attempt per time i
 which is what `RetryCount` counts.
 _Avoid_: Attempt *(alone — an attempt at what?)*, context, envelope, result, outcome
 
+**Exception Policy**:
+The rule for what else happens to a message whose Processing Attempt failed, chosen by the type of
+exception that made it fail. It runs after the failure is recorded, never instead of it: the retry and
+its backoff happen whichever policy matches. Any failure that concerns the message itself can match:
+its payload, finding or running its Handler, the Handler's time running out. A failure in this library's
+own bookkeeping writes cannot. Exactly one policy runs. One set on the Handler wins over one set for the
+whole inbox or outbox, and within each level the nearest exception type wins.
+_Avoid_: Error handler, fault policy, retry policy *(retrying is the default, not a policy)*
+
 **Execution Strategy**:
 The host's policy for retrying a database operation that failed transiently, configured on the
 `DbContext` and owned by the application rather than by this library. It decides what a replay
