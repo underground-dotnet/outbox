@@ -10,7 +10,7 @@ namespace Underground.OutboxTest.TestHandler;
 /// for every other one, so a test can hold one Group open and watch what the rest of the system does
 /// meanwhile. The waiting is on a signal rather than on a duration, so nothing here sleeps.
 /// </summary>
-public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>
+public class BlockingMessageHandler : IOutboxMessageHandler<BlockingMessage>, IInboxMessageHandler<BlockingMessage>
 {
     public static ConcurrentQueue<int> CalledWith { get; set; } = new();
 

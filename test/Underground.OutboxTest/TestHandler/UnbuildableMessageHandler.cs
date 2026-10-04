@@ -10,5 +10,10 @@ public class UnbuildableMessageHandler(IUnregisteredDependency dependency)
     : IOutboxMessageHandler<UnbuildableMessage>, IInboxMessageHandler<UnbuildableMessage>
 {
     public Task HandleAsync(UnbuildableMessage message, MessageMetadata metadata, CancellationToken cancellationToken)
-        => Task.FromResult(dependency);
+    {
+        // never reached; read only so the constructor parameter is not reported as unused
+        _ = dependency;
+
+        return Task.CompletedTask;
+    }
 }

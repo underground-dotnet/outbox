@@ -6,9 +6,8 @@ using Underground.Outbox.Domain.ExceptionHandlers;
 namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// Turns a failure anywhere inside it into a recorded attempt: pushes the message out of sight for its
-/// backoff delay, then consults the exception policies. Reports the failure rather than rethrowing, so one bad
-/// message costs its own Group and nothing else.
+/// Records a failed Processing Attempt (the retry and its backoff), then consults the exception policies.
+/// Reports the failure rather than rethrowing, so one bad message costs its own Group and nothing else.
 /// </summary>
 /// <remarks>
 /// The retry is written before the policies run because it is the guarded write, and a lost Lease has to

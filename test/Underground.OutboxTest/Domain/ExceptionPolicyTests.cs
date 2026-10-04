@@ -267,6 +267,23 @@ public class ExceptionPolicyTests : DatabaseTest
     }
 
     [Fact]
+    public async Task Inbox_HandlerTimeout_ReachesTimeoutExceptionPolicy()
+    {
+        await using var provider = CreateServiceProvider(inbox: cfg =>
+        {
+            cfg.HandlerTimeout = TimeSpan.FromMilliseconds(250);
+            cfg.Policies.OnException<TimeoutException>().Discard();
+        });
+        BlockingMessageHandler.BlockingIds.Add(1);
+        await AddAsync(provider, new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new BlockingMessage(1)));
+
+        await ProcessInboxAsync(provider);
+
+        Assert.True(BlockingMessageHandler.WasCancelled, "the handler was never cancelled");
+        Assert.Empty(await InboxRowsAsync(provider));
+    }
+
+    [Fact]
     public async Task Outbox_SaveFailureAfterTheHandler_ReachesItsPolicy()
     {
         await using var provider = CreateServiceProvider(outbox: cfg => cfg.Policies.OnException<DbUpdateException>().Discard());

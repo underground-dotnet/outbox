@@ -157,7 +157,7 @@ A policy sees every failure that concerns the message, and matches the exception
 | The payload cannot be read, or is the JSON literal `null` | `JsonException` |
 | The handler throws | whatever it throws |
 | The handler overruns `HandlerTimeout` | `HandlerTimeoutException` (a `TimeoutException`) |
-| Saving what the handler wrote fails | the database's exception, e.g. `DbUpdateException` |
+| Saving what the handler wrote fails | what EF Core throws, usually `DbUpdateException` (the database's error is its `InnerException`) |
 | No handler claims the message's type | `UnknownMessageTypeException` |
 | The handler cannot be built from the container | `HandlerResolutionException`, wrapping the container's error |
 
