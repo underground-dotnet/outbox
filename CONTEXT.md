@@ -118,12 +118,17 @@ The rule for what else happens to a message whose Processing Attempt failed, cho
 exception that made it fail. It runs after the failure is recorded, never instead of it: the retry and
 its backoff happen whichever policy matches. Any failure that concerns the message itself can match:
 its payload, finding or running its Handler, the Handler's time running out. A failure in this library's
-own bookkeeping writes cannot. A failure because the running deployment lacks what the message needs (no
-Handler claims its type, or its Handler cannot be built) matches only a policy that names it on purpose,
-never one written for a broader exception, because the next deployment may handle it. Exactly one policy
-runs. One set on the Handler wins over one set for the
+own bookkeeping writes cannot. A Deployment Gap matches only a policy that names it on purpose, never one
+written for a broader exception. Exactly one policy runs. One set on the Handler wins over one set for the
 whole inbox or outbox, and within each level the nearest exception type wins.
 _Avoid_: Error handler, fault policy, retry policy *(retrying is the default, not a policy)*
+
+**Deployment Gap**:
+A failed Processing Attempt caused by what the running deployment lacks, not by the message: no Handler
+claims the message's type, or its Handler cannot be built. Unlike a bad message it is expected to heal,
+because the next deployment may supply what is missing, which is why it keeps being retried.
+_Avoid_: Undeliverable *(reads as permanent)*, poison message *(ADR 0004's message that fails for good)*,
+missing handler *(covers only one of the two causes)*
 
 **Execution Strategy**:
 The host's policy for retrying a database operation that failed transiently, configured on the

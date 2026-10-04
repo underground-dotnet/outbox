@@ -16,7 +16,8 @@ unhandled messages, which is an alerting concern rather than a library one.
 
 A dead-letter mechanism is a deliberate follow-up, expected to be configurable per inbox/outbox so
 an application can choose stalling or dead-lettering. Until then, `Discard()` exception policies
-remain the way to drop a known-bad message for a known exception type.
+remain the way to drop a known-bad message for a known exception type. Since ADR 0012 that includes a
+payload that cannot be read, not only an exception thrown by the Handler.
 
 A crashed worker is not counted as a failed attempt, since no exception is ever observed. On the
 outbox this self-limits: the lease is committed before dispatch, so a killed worker costs one
