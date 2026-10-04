@@ -8,7 +8,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" />
     <!-- Alternative: https://www.meziantou.net/how-to-view-logs-from-ilogger-in-xunitdotnet.htm -->
     <!-- https://www.nuget.org/packages/Meziantou.Extensions.Logging.Xunit.v3/ -->
     <PackageReference Include="MartinCostello.Logging.XUnit.v3" />
