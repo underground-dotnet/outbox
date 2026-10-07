@@ -52,7 +52,7 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // Second message handler should not be called due to error in first message handler
@@ -117,9 +117,9 @@ public class ProcessorErrorTests : DatabaseTest
             await outbox.AddMessageAsync(context, msg2, TestContext.Current.CancellationToken);
             await transaction.CommitAsync(TestContext.Current.CancellationToken);
         }
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
         // a Group offers one message per claim, so the failing message behind the first one needs a second
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         // First message of type SecondMessage should be processed successfully, the message afterwards failed
@@ -165,7 +165,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -200,7 +200,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken));
@@ -235,9 +235,9 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
         // a Group offers one message per claim, so the failing message behind the first one needs a second
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         var users = await context.Users.AsNoTracking().ToListAsync(cancellationToken: TestContext.Current.CancellationToken);
@@ -273,7 +273,7 @@ public class ProcessorErrorTests : DatabaseTest
         }
 
         // Act
-        await IProcessor<OutboxMessage>.ProcessWithDefaultValues(serviceProvider, TestContext.Current.CancellationToken);
+        await IProcessor<OutboxMessage>.ProcessWithDefaultValuesAsync(serviceProvider, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(FailedUserMessageHandler.WasCalled, "the handler never ran");

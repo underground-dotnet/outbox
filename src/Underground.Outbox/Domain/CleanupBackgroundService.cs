@@ -18,11 +18,11 @@ internal sealed partial class CleanupBackgroundService<TEntity>(
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(config.CleanupInterval, stoppingToken).ConfigureAwait(false);
-            await PerformDelete(stoppingToken).ConfigureAwait(false);
+            await PerformDeleteAsync(stoppingToken).ConfigureAwait(false);
         }
     }
 
-    private async Task PerformDelete(CancellationToken stoppingToken)
+    private async Task PerformDeleteAsync(CancellationToken stoppingToken)
     {
         try
         {

@@ -23,7 +23,9 @@ public partial class DatabaseTest : IAsyncDisposable
 
         // Blocking, because xUnit constructs the test class before IAsyncLifetime runs and several tests build
         // their service provider in their own constructor. Copying the template takes milliseconds.
+#pragma warning disable VSTHRD002 // No single-threaded SynchronizationContext in xUnit v3 constructors.
         Database = PostgresFixture.Current.CreateDatabaseAsync(_loggerFactory).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
     }
 
     /// <summary>The database this test owns.</summary>
