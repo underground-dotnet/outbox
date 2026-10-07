@@ -13,7 +13,7 @@ public static class ProcessorExtensions
         /// Claims and handles one HeadMessage once. A claim yields one message, so a test that lines up two
         /// messages in one Group calls this twice.
         /// </summary>
-        internal static async Task ProcessWithDefaultValues(IServiceProvider serviceProvider, CancellationToken cancellationToken)
+        internal static async Task ProcessWithDefaultValuesAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<IProcessor<OutboxMessage>>();

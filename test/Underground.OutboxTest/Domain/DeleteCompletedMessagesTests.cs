@@ -21,7 +21,7 @@ public class DeleteCompletedMessagesTests(ITestOutputHelper testOutputHelper) : 
         var unprocessedId = Guid.NewGuid();
         var referenceTime = DateTime.UtcNow;
 
-        context.OutboxMessages.AddRange(
+        await context.OutboxMessages.AddRangeAsync(
             new OutboxMessage(outsideRetentionId, referenceTime.AddMinutes(-1), new ExampleMessage(1))
             {
                 CompletedAt = referenceTime - retention - TimeSpan.FromSeconds(5)
