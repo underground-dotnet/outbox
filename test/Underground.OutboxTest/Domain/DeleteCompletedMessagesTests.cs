@@ -19,7 +19,12 @@ public class DeleteCompletedMessagesTests(ITestOutputHelper testOutputHelper) : 
         var outsideRetentionId = Guid.NewGuid();
         var insideRetentionId = Guid.NewGuid();
         var unprocessedId = Guid.NewGuid();
-        var referenceTime = DateTime.UtcNow;
+        // the database's clock, which the cutoff is taken on
+        var referenceTime = await context.Database
+            .SqlQuery<DateTime>($"""
+                SELECT clock_timestamp() AS "Value"
+                """)
+            .SingleAsync(TestContext.Current.CancellationToken);
 
         await context.OutboxMessages.AddRangeAsync(
             new OutboxMessage(outsideRetentionId, referenceTime.AddMinutes(-1), new ExampleMessage(1))
