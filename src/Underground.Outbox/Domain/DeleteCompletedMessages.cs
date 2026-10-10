@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
+using Npgsql;
+
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 
@@ -14,11 +16,18 @@ internal sealed class DeleteCompletedMessages<TEntity>(
 
     internal async Task<int> ExecuteAsync(CancellationToken cancellationToken)
     {
-        var cutoff = DateTime.UtcNow - config.CompletedMessageRetention;
+        // the cutoff is taken on the database's clock, which stamped completed_at, so a skewed application
+        // clock cannot shorten or lengthen the retention
+        var sql = $"""
+            DELETE FROM {TEntity.TableName}
+            WHERE completed_at < clock_timestamp() - @retention
+            """;
 
-        return await _dbContext.Set<TEntity>()
-            .Where(message => message.CompletedAt != null && message.CompletedAt < cutoff)
-            .ExecuteDeleteAsync(cancellationToken)
+        // S2077: the only interpolated value is TEntity.TableName, a compile-time constant (ADR 0005)
+#pragma warning disable S2077 // Formatting SQL queries is security-sensitive
+        return await _dbContext.Database
+            .ExecuteSqlRawAsync(sql, [new NpgsqlParameter("retention", config.CompletedMessageRetention)], cancellationToken)
             .ConfigureAwait(false);
+#pragma warning restore S2077
     }
 }
