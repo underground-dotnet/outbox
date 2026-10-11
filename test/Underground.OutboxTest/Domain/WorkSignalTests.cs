@@ -37,7 +37,10 @@ public class WorkSignalTests
     /// </summary>
     private static async Task<bool> WasReleasedAsync(Task wait, CancellationToken cancellationToken)
     {
+        // VSTHRD003: observing a task the caller started is the point; there is no main thread to deadlock here
+#pragma warning disable VSTHRD003 // Avoid awaiting foreign Tasks
         var finished = await Task.WhenAny(wait, Task.Delay(LongEnoughToBeConclusive, cancellationToken)).ConfigureAwait(false);
+#pragma warning restore VSTHRD003
 
         return finished == wait;
     }
