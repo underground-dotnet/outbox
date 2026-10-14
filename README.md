@@ -184,7 +184,7 @@ Set on `cfg` in `AddOutboxServices` / `AddInboxServices`:
 | `BackoffBase` | `1 second` | Retry delay after the first failure; doubles on each further failure. |
 | `MaxBackoff` | `10 minutes` | Ceiling for the retry delay (before jitter). |
 | `BackoffJitter` | `0.2` | Random variation applied to each retry delay. `0` disables it. |
-| `ProcessingDelayMilliseconds` | `10000` | Poll interval between processing cycles. |
+| `ProcessingDelayMilliseconds` | `20000` | Poll interval. Bounds the latency of work no commit in this process announced: retries, scheduled messages and messages written by another host. |
 | `CompletedMessageRetention` | `7 days` | How long completed messages are kept. Also the inbox duplicate window. At most 365 days. |
 | `CleanupInterval` | `1 hour` | Interval between cleanup runs. 1 second to 31 days. |
 

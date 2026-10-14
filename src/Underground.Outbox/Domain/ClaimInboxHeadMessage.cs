@@ -9,7 +9,7 @@ namespace Underground.Outbox.Domain;
 internal sealed class ClaimInboxHeadMessage(IInboxDbContext dbContext) : ClaimHeadMessage<InboxMessage>(dbContext)
 {
     // the CTE's lock is held until the transaction ends, so this only hands out the row version it locked
-    private static readonly ClaimStatements Claim = BuildStatements("SELECT * FROM claimed");
+    private static readonly string Claim = BuildStatement("SELECT * FROM claimed");
 
-    protected override ClaimStatements Statements => Claim;
+    protected override string Statement => Claim;
 }
