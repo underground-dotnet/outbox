@@ -14,9 +14,10 @@ dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTes
 
 ## Tests
 
-- `test/Underground.Outbox.SourceGeneratorTest` — Verify snapshot tests of generator output (~4s).
-  Snapshots live in `Snapshots/` as `<Class>.<Test>#<GeneratedFile>.g.verified.cs`. A diff fails the
-  test and writes a `.received.cs` next to it; accept by replacing the `.verified.cs` with it.
+- `test/Underground.Outbox.SourceGeneratorTest` — Meziantou.Framework.SnapshotTesting tests of generator
+  output (~4s). Snapshots live in `__snapshots__/` as `<Class>_<Test>.verified.cs`, numbered `_0`, `_1`, …
+  when a run yields several files (generated sources by hint name, then a `.txt` of diagnostics). A diff
+  fails the test and writes an `.actual.*` next to it; accept by renaming it over the `.verified.*`.
 - `test/Underground.OutboxTest` — integration tests on Testcontainers Postgres. **Requires Docker**
 
 ## Conventions

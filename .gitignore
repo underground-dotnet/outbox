@@ -5,7 +5,7 @@
 
 .DS_Store
 # Snapshot testing files
-*.received.*
+*.actual.*
 
 # dotenv files
 .env

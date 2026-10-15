@@ -1,0 +1,1 @@
+error OUTBOX001: Message type 'Sample.TestMessage' is handled by more than one outbox handler (Sample.FirstHandler, Sample.SecondHandler). Only one of them is dispatched.
