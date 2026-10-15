@@ -411,16 +411,12 @@ dotnet_diagnostic.MA0004.severity = none # Use Task.ConfigureAwait(false) if the
 dotnet_diagnostic.MA0004.severity = none # Use Task.ConfigureAwait(false) if the current SynchronizationContext is not needed
 dotnet_diagnostic.MA0011.severity = none # Use an overload of 'ToString' that has a 'System.IFormatProvider' parameter
 
-# Verify settings
-[*.{received,verified}.{json,txt,xml}]
-charset = utf-8-bom
+# Snapshot files are written by Meziantou.Framework.SnapshotTesting, not by hand
+[**/__snapshots__/**]
+charset = utf-8
 end_of_line = lf
 indent_size = unset
 indent_style = unset
-insert_final_newline = false
+insert_final_newline = true
 tab_width = unset
 trim_trailing_whitespace = false
-
-[*.{received,verified}.{json,xml,html,htm,yaml,svg}]
-indent_size = 2
-indent_style = space

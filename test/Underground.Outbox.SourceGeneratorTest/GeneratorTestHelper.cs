@@ -9,7 +9,7 @@ namespace Underground.Outbox.SourceGeneratorTest;
 
 internal static class GeneratorTestHelper
 {
-    public static GeneratorDriver Run(string source)
+    public static GeneratorDriverRunResult Run(string source)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source);
 
@@ -20,7 +20,7 @@ internal static class GeneratorTestHelper
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(new OutboxGenerator());
 
-        return driver.RunGenerators(compilation);
+        return driver.RunGenerators(compilation).GetRunResult();
     }
 
     /// <summary>
