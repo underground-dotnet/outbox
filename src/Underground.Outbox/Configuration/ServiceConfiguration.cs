@@ -21,7 +21,12 @@ public abstract class ServiceConfiguration<TEntity> where TEntity : class, IMess
     /// immediately, so this bounds the latency of work nothing told us about - and is what makes delivery
     /// guaranteed rather than dependent on a notification arriving.
     /// </summary>
-    public int ProcessingDelayMilliseconds { get; set; } = 10_000;
+    /// <remarks>
+    /// Work nothing announces includes retries, scheduled messages, expired Leases, and messages written by
+    /// another host or through a context without the commit interceptor. A retry whose backoff is shorter than
+    /// this interval therefore waits for the next tick.
+    /// </remarks>
+    public int ProcessingDelayMilliseconds { get; set; } = 20_000;
 
     /// <summary>
     /// The time a Handler is given to complete. When it elapses the Handler's token is cancelled and the

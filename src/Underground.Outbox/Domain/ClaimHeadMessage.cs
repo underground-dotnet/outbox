@@ -9,8 +9,8 @@ namespace Underground.Outbox.Domain;
 internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
 {
     /// <summary>
-    /// How many of the oldest pending messages the first statement looks through before falling back to
-    /// every Group. Bounds that statement's cost when nothing near the front can be claimed.
+    /// How many of the oldest pending messages the claim looks through before it considers every Group.
+    /// Bounds the claim's cost whenever the answer is near the front.
     /// </summary>
     internal const int HeadMessageWindow = 1000;
 
@@ -20,19 +20,14 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     /// answer: the inbox keeps the row lock, the outbox commits a Lease.
     /// </summary>
     /// <remarks>
-    /// Two statements with one answer. The first looks only among the oldest pending messages, which is where
-    /// the answer almost always is, and costs the same however long the backlog. Only when nothing there
-    /// can be claimed does the second consider every Group, whose cost grows with the backlog. See ADR 0010.
+    /// One statement with two ways of finding the answer. It looks first among the oldest pending messages,
+    /// which is where the answer almost always is, at a cost that does not grow with the backlog. Only when
+    /// nothing there can be claimed and messages lie beyond them does it consider every Group, whose cost
+    /// does. See ADR 0010.
     /// </remarks>
     internal async Task<TEntity?> ExecuteAsync(CancellationToken cancellationToken)
     {
-        return await ClaimAsync(Statements.WithinWindow, cancellationToken).ConfigureAwait(false)
-            ?? await ClaimAsync(Statements.AcrossAllGroups, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<TEntity?> ClaimAsync(string sql, CancellationToken cancellationToken)
-    {
-        // fresh per statement: an NpgsqlParameter belongs to one command at a time
+        // fresh per call: an NpgsqlParameter belongs to one command at a time
         List<NpgsqlParameter> parameters = [];
         AddParameters(parameters);
 
@@ -41,7 +36,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         // ToListAsync rather than FirstOrDefaultAsync: any LINQ operator composed onto FromSqlRaw makes EF
         // wrap the statement in a subquery, which is invalid around the outbox's data-modifying CTE.
         var claimed = await dbContext.Set<TEntity>()
-            .FromSqlRaw(sql, [.. parameters])
+            .FromSqlRaw(Statement, [.. parameters])
             .AsNoTracking()
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -50,13 +45,13 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     }
 
     /// <summary>
-    /// The two statements this side claims with, built by <see cref="BuildStatements"/>. Each must return
-    /// every mapped column, since EF materialises the entity from the result set by column name.
+    /// The statement this side claims with, built by <see cref="BuildStatement"/>. It must return every mapped
+    /// column, since EF materialises the entity from the result set by column name.
     /// </summary>
-    protected abstract ClaimStatements Statements { get; }
+    protected abstract string Statement { get; }
 
     /// <summary>
-    /// Binds whatever <see cref="Statements"/> parameterised. HeadMessage discovery itself takes no parameters.
+    /// Binds whatever <see cref="Statement"/> parameterised. HeadMessage discovery itself takes no parameters.
     /// </summary>
     protected virtual void AddParameters(List<NpgsqlParameter> parameters)
     {
@@ -65,16 +60,17 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
 
     /// <summary>
     /// Puts <paramref name="actOnClaimed"/> - the statement acting on the one row in a CTE named <c>claimed</c>,
-    /// already locked for the calling transaction - behind each of the two ways of finding that row.
+    /// already locked for the calling transaction - behind the two ways of finding that row.
     /// </summary>
-    protected static ClaimStatements BuildStatements(string actOnClaimed)
-        => new($"{WindowedHeadMessageCte()}\n{actOnClaimed}", $"{AllGroupsHeadMessageCte()}\n{actOnClaimed}");
+    protected static string BuildStatement(string actOnClaimed)
+        => $"WITH {WindowedHeadMessageCtes()},\n{AllGroupsHeadMessageCtes()},\n{ClaimedCte()}\n{actOnClaimed}";
 
     /// <summary>
     /// HeadMessage discovery among the <see cref="HeadMessageWindow"/> oldest Stable messages not yet completed,
-    /// walked oldest first and stopping at the first one that can be claimed.
+    /// walked oldest first and stopping at the first one that can be claimed, as two CTEs named
+    /// <c>window_end</c> and <c>claimed_within_window</c>.
     /// </summary>
-    private static string WindowedHeadMessageCte()
+    private static string WindowedHeadMessageCtes()
     {
         // Exact rather than approximate: the window holds every Stable pending message up to its last one,
         // so if any message in it can be claimed, the oldest one that can be claimed anywhere is in it too.
@@ -86,10 +82,10 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         // because as NOT EXISTS the planner may turn it into an anti-join over the whole table. A message
         // passing it is Stable, so the earlier one it is compared against is too.
         //
-        // completed_at IS NULL is repeated on m, and claimed returns the whole row, for the same reasons as
+        // completed_at IS NULL is repeated on m, and the CTE returns the whole row, for the same reasons as
         // below: FOR UPDATE re-evaluates the predicates against the new row version.
         return $"""
-            WITH window_end AS MATERIALIZED (
+            window_end AS MATERIALIZED (
                 SELECT transaction_id, id FROM (
                     SELECT transaction_id, id
                     FROM {TEntity.TableName}
@@ -101,7 +97,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
                 ORDER BY transaction_id DESC, id DESC
                 LIMIT 1
             ),
-            claimed AS (
+            claimed_within_window AS (
                 SELECT m.*
                 FROM {TEntity.TableName} m
                 WHERE m.completed_at IS NULL
@@ -123,12 +119,13 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     }
 
     /// <summary>
-    /// The HeadMessage discovery every Group takes part in, as two CTEs named <c>head_messages</c> and <c>claimed</c>.
+    /// The HeadMessage discovery every Group takes part in, as two CTEs named <c>head_messages</c> and
+    /// <c>claimed_across_all_groups</c>.
     /// The second yields at most one row, already locked for the calling transaction. The table is unqualified
     /// so the schema is the deployment's to choose through <c>search_path</c>; see
     /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
     /// </summary>
-    private static string AllGroupsHeadMessageCte()
+    private static string AllGroupsHeadMessageCtes()
     {
         // Two steps, because a Group's HeadMessage is its lowest (transaction_id, id) *regardless of
         // visibility*; only then is visibility tested. Filtering by visible_at first would hand out the
@@ -156,14 +153,14 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
         //
         // clock_timestamp() rather than now(), which is frozen for the transaction the inbox holds open.
         return $"""
-            WITH head_messages AS MATERIALIZED (
+            head_messages AS MATERIALIZED (
                 SELECT DISTINCT ON (group_key) id, transaction_id
                 FROM {TEntity.TableName}
                 WHERE completed_at IS NULL
                 AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
                 ORDER BY group_key, transaction_id, id
             ),
-            claimed AS (
+            claimed_across_all_groups AS (
                 SELECT m.*
                 FROM head_messages h
                 JOIN {TEntity.TableName} m ON m.id = h.id
@@ -177,9 +174,38 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     }
 
     /// <summary>
-    /// One side's claim statement behind each of the two ways of finding the HeadMessage to claim.
+    /// The CTE named <c>claimed</c>: the claim within the window or, when that finds nothing and the window did
+    /// not hold every Stable pending message, the claim across every Group.
     /// </summary>
-    /// <param name="WithinWindow">Looks among the oldest pending messages only; tried first.</param>
-    /// <param name="AcrossAllGroups">Considers every Group; tried when the first finds nothing.</param>
-    protected sealed record ClaimStatements(string WithinWindow, string AcrossAllGroups);
+    private static string ClaimedCte()
+    {
+        // A WITH query is evaluated only as far as its reader fetches, and the gate is a one-time filter, so the
+        // claim across every Group runs only when the window claimed nothing and a Stable message lies beyond it.
+        // Without one, the window held every Stable pending message and that claim could only agree. Planning
+        // still pays for it on every claim; ADR 0010 records that trade.
+        //
+        // The probe beyond the window is ORDER BY ... LIMIT 1, one probe of the (transaction_id, id) index,
+        // because as EXISTS the planner may turn it into a scan of the whole table.
+        //
+        // The rows pass through as the locking CTEs returned them and are never joined back to the table, for
+        // the reason given on claimed_across_all_groups.
+        return $"""
+            claimed AS (
+                SELECT * FROM claimed_within_window
+                UNION ALL
+                SELECT * FROM claimed_across_all_groups
+                WHERE NOT EXISTS (SELECT FROM claimed_within_window)
+                AND (
+                    SELECT b.id
+                    FROM {TEntity.TableName} b
+                    WHERE b.completed_at IS NULL
+                    AND b.transaction_id < pg_snapshot_xmin(pg_current_snapshot())
+                    AND (b.transaction_id, b.id) > ((SELECT transaction_id FROM window_end), (SELECT id FROM window_end))
+                    ORDER BY b.transaction_id, b.id
+                    LIMIT 1
+                ) IS NOT NULL
+                LIMIT 1
+            )
+            """;
+    }
 }
