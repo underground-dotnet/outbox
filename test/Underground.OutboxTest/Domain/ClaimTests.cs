@@ -117,7 +117,8 @@ public class ClaimTests : DatabaseTest
     }
 
     /// <summary>
-    /// The inbox holds its Claim as the row lock inside one transaction, which keeps the same guard satisfied.
+    /// The inbox holds its Claim as the row lock inside one transaction, which keeps the same guard satisfied,
+    /// and the completion joins that transaction: rolled back, the message is still pending.
     /// </summary>
     [Fact]
     public async Task InboxClaimCompletesTheMessageInsideItsTransaction()
@@ -139,22 +140,24 @@ public class ClaimTests : DatabaseTest
             var context = scope.ServiceProvider.GetRequiredService<IInboxDbContext>();
             var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<InboxMessage>>();
 
-            var completed = await context.ExecuteInTransactionAsync(async ct =>
-            {
-                var claim = await claimHeadMessage.ExecuteAsync(ct);
-                Assert.NotNull(claim);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var claim = await claimHeadMessage.ExecuteAsync(cancellationToken);
+            Assert.NotNull(claim);
 
-                return await claim.TryCompleteAsync(ct);
-            }, cancellationToken);
+            Assert.True(await claim.TryCompleteAsync(cancellationToken));
+            Assert.NotNull(await ReadInboxCompletedAtAsync(context, cancellationToken));
 
-            Assert.True(completed);
+            await transaction.RollbackAsync(cancellationToken);
         }
 
         await using var verify = provider.CreateAsyncScope();
         var stored = await verify.ServiceProvider.GetRequiredService<InboxOutboxDbContext>()
             .InboxMessages.AsNoTracking().SingleAsync(cancellationToken);
-        Assert.NotNull(stored.CompletedAt);
+        Assert.Null(stored.CompletedAt);
     }
+
+    private static async Task<DateTime?> ReadInboxCompletedAtAsync(IInboxDbContext context, CancellationToken cancellationToken)
+        => await context.InboxMessages.AsNoTracking().Select(m => m.CompletedAt).SingleAsync(cancellationToken);
 
     private static async Task AddOutboxMessageAsync(ServiceProvider provider, CancellationToken cancellationToken)
     {
@@ -173,13 +176,22 @@ public class ClaimTests : DatabaseTest
     private static async Task<HeldClaim> ClaimOutboxAsync(ServiceProvider provider, CancellationToken cancellationToken)
     {
         var scope = provider.CreateAsyncScope();
-        var context = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-        var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>();
 
-        var claim = await context.ExecuteInTransactionAsync(claimHeadMessage.ExecuteAsync, cancellationToken);
-        Assert.NotNull(claim);
+        try
+        {
+            var context = scope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
+            var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>();
 
-        return new HeldClaim(scope, claim);
+            var claim = await context.ExecuteInTransactionAsync(claimHeadMessage.ExecuteAsync, cancellationToken);
+            Assert.NotNull(claim);
+
+            return new HeldClaim(scope, claim);
+        }
+        catch
+        {
+            await scope.DisposeAsync();
+            throw;
+        }
     }
 
     private ServiceProvider CreateServiceProvider()

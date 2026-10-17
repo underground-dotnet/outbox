@@ -20,7 +20,7 @@ internal sealed class ClaimOutboxHeadMessage(
     ILoggerFactory loggerFactory
 ) : ClaimHeadMessage<OutboxMessage>(dbContext, loggerFactory)
 {
-    private static readonly string Claim = BuildStatement($"""
+    private static readonly string ClaimStatement = BuildStatement($"""
         UPDATE {OutboxMessage.TableName} m
         SET visible_at = clock_timestamp() + @lease
         FROM claimed c
@@ -28,7 +28,7 @@ internal sealed class ClaimOutboxHeadMessage(
         RETURNING m.*
         """);
 
-    protected override string Statement => Claim;
+    protected override string Statement => ClaimStatement;
 
     // an interval rather than an instant, so a skewed application clock cannot expire a Lease early
     protected override void AddParameters(List<NpgsqlParameter> parameters)

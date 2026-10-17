@@ -18,7 +18,6 @@ namespace Underground.Outbox.Domain;
 /// </remarks>
 internal sealed partial class Claim<TEntity> where TEntity : class, IMessage
 {
-    // the one predicate every guarded write shares; @lease is bound from _lease
     private const string GuardedById = "WHERE id = @id AND visible_at = @lease";
 
     private readonly IDbContext _dbContext;
@@ -37,8 +36,8 @@ internal sealed partial class Claim<TEntity> where TEntity : class, IMessage
     }
 
     /// <summary>
-    /// The claimed message, as the claim statement returned it. Its <see cref="IMessage.VisibleAt"/> is the
-    /// Lease as granted and goes stale once the Lease is renewed.
+    /// The claimed message, as the claim statement returned it. On the outbox its <see cref="IMessage.VisibleAt"/>
+    /// is the Lease as granted, and goes stale once the Lease is renewed.
     /// </summary>
     internal TEntity Message { get; }
 
@@ -84,17 +83,21 @@ internal sealed partial class Claim<TEntity> where TEntity : class, IMessage
     }
 
     /// <summary>
-    /// Moves the Lease expiry to <paramref name="extension"/> from now, on <paramref name="connection"/>
+    /// Moves the Lease expiry to <paramref name="extension"/> from now, on <paramref name="renewalContext"/>
     /// rather than the Claim's own context, which the Handler may be using at that moment. See ADR 0011.
     /// </summary>
-    /// <returns>Whether the Claim was still held. <c>false</c> has been logged.</returns>
-    internal async Task<bool> TryRenewAsync(IDbContext connection, TimeSpan extension, CancellationToken cancellationToken)
+    /// <remarks>
+    /// Outbox only: on the inbox the renewal connection would wait on the row lock the worker's own
+    /// transaction holds, and hang.
+    /// </remarks>
+    /// <returns>Whether the Claim was still held. Not logged here; the caller reports a lost renewal.</returns>
+    internal async Task<bool> TryRenewAsync(IDbContext renewalContext, TimeSpan extension, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(renewalContext);
 
-        await connection.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await renewalContext.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
 
-        var command = connection.Database.GetDbConnection().CreateCommand();
+        var command = renewalContext.Database.GetDbConnection().CreateCommand();
         await using (command.ConfigureAwait(false))
         {
             // an interval rather than an instant, so a skewed application clock cannot expire the Lease early.
@@ -112,7 +115,6 @@ internal sealed partial class Claim<TEntity> where TEntity : class, IMessage
 
             if (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) is not DateTime renewed)
             {
-                LogLeaseLost(Message.Id, "renewal");
                 return false;
             }
 

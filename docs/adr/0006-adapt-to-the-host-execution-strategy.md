@@ -41,8 +41,9 @@ An outbox claim whose commit fails ambiguously grants a Lease that no worker hol
 claim finds the message invisible and reports nothing offered. The message is delivered a lease
 duration later than it would otherwise have been, which the design already tolerates.
 
-The outcome writes — `MarkCompleted` and `ScheduleRetry` — go through `ExecuteSqlRawAsync`, which
-does not apply the execution strategy, unlike a LINQ query or `SaveChanges`. They are deliberately
+The outcome writes — the Claim's `TryCompleteAsync` and `TryRecordFailureAsync` — go through
+`ExecuteSqlRawAsync`, which does not apply the execution strategy, unlike a LINQ query or
+`SaveChanges`. They are deliberately
 left that way: this decision is about working under a host that configures retries, not about adding
 retries of its own. A transient failure in an outbox outcome write therefore behaves exactly as it
 did before — the attempt fails, the Lease expires, and the message is offered again — which is the

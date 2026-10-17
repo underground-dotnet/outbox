@@ -88,6 +88,7 @@ internal sealed partial class RenewLeaseMiddleware(
             // outcome write guarded on a Lease that no longer exists.
             if (!await claim.TryRenewAsync(dbContext, config.LeaseMargin, CancellationToken.None).ConfigureAwait(false))
             {
+                LogRenewalLost(claim.Message.Id);
                 return false;
             }
 
@@ -107,6 +108,12 @@ internal sealed partial class RenewLeaseMiddleware(
         Level = LogLevel.Warning,
         Message = "The Handler for message {MessageId} is still running {Elapsed} after it started, ignoring its cancellation; renewed its Lease so no other worker takes the message")]
     private partial void LogRenewed(long messageId, TimeSpan elapsed);
+
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "Could not renew the Lease on message {MessageId}: it is no longer this worker's")]
+    private partial void LogRenewalLost(long messageId);
 
     [LoggerMessage(
         EventId = 3,

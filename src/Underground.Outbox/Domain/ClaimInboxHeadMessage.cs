@@ -14,7 +14,7 @@ internal sealed class ClaimInboxHeadMessage(
 ) : ClaimHeadMessage<InboxMessage>(dbContext, loggerFactory)
 {
     // the CTE's lock is held until the transaction ends, so this only hands out the row version it locked
-    private static readonly string Claim = BuildStatement("SELECT * FROM claimed");
+    private static readonly string ClaimStatement = BuildStatement("SELECT * FROM claimed");
 
-    protected override string Statement => Claim;
+    protected override string Statement => ClaimStatement;
 }
