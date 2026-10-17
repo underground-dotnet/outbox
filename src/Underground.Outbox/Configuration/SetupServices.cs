@@ -65,6 +65,7 @@ public static class SetupServices
     where TContext : IDbContext
     {
         services.AddSingleton(serviceConfig);
+        services.AddSingleton(new RetryBackoff<TEntity>(serviceConfig.BackoffBase, serviceConfig.MaxBackoff, serviceConfig.BackoffJitter));
 
         services.TryAddSingleton<HandlerRegistry<TEntity>>();
         services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
@@ -73,8 +74,6 @@ public static class SetupServices
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddScoped<ScheduleRetry<TEntity>>();
-        services.AddScoped<MarkCompleted<TEntity>>();
 
         // per-message middleware, registered individually but only ever composed by the factory, which owns
         // the order between them

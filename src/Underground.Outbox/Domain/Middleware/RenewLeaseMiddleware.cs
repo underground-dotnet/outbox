@@ -1,10 +1,7 @@
 using System.Diagnostics;
 
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
-using Npgsql;
 
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
@@ -17,11 +14,10 @@ namespace Underground.Outbox.Domain.Middleware;
 /// time as the worker that claims the message next. See ADR 0011.
 /// </summary>
 /// <remarks>
-/// Idle until <see cref="ServiceConfiguration{TEntity}.HandlerTimeout"/> has passed. From then on it moves
-/// the Lease expiry forward every <see cref="ServiceConfiguration{TEntity}.LeaseRenewalInterval"/>, guarded
-/// on the current Lease, and hands the new instant to the outcome writes through
-/// <see cref="OutboxMessage.VisibleAt"/>. It has to sit inside the outcome writes so they see the last
-/// renewal, and outside <see cref="TimeoutMiddleware{TEntity}"/> so it outlasts the Handler.
+/// Idle until <see cref="ServiceConfiguration{TEntity}.HandlerTimeout"/> has passed. From then on it has the
+/// <see cref="Claim{TEntity}"/> renew the Lease every <see cref="ServiceConfiguration{TEntity}.LeaseRenewalInterval"/>.
+/// It has to sit inside the outcome writes, and stop renewing before they run, so they are guarded on the last
+/// renewal; and outside <see cref="TimeoutMiddleware{TEntity}"/> so it outlasts the Handler.
 /// </remarks>
 internal sealed partial class RenewLeaseMiddleware(
     IServiceScopeFactory scopeFactory,
@@ -31,12 +27,12 @@ internal sealed partial class RenewLeaseMiddleware(
 {
     private readonly ILogger<RenewLeaseMiddleware> _logger = logger;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(OutboxMessage message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<OutboxMessage> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         // not linked to the caller's token: a shutdown does not stop a Handler that ignores it, so it must
         // not stop the renewal either
         using var handlerReturned = new CancellationTokenSource();
-        var renewal = RenewWhileOverrunningAsync(message, handlerReturned.Token);
+        var renewal = RenewWhileOverrunningAsync(claim, handlerReturned.Token);
 
         try
         {
@@ -44,12 +40,13 @@ internal sealed partial class RenewLeaseMiddleware(
         }
         finally
         {
+            // awaited before returning, so no renewal is in flight once the outcome write reads the Lease
             await handlerReturned.CancelAsync().ConfigureAwait(false);
             await renewal.ConfigureAwait(false);
         }
     }
 
-    private async Task RenewWhileOverrunningAsync(OutboxMessage message, CancellationToken handlerReturned)
+    private async Task RenewWhileOverrunningAsync(Claim<OutboxMessage> claim, CancellationToken handlerReturned)
     {
         var started = Stopwatch.GetTimestamp();
 
@@ -66,7 +63,7 @@ internal sealed partial class RenewLeaseMiddleware(
 
                 while (await timer.WaitForNextTickAsync(handlerReturned).ConfigureAwait(false))
                 {
-                    if (!await TryRenewAsync(dbContext, message, Stopwatch.GetElapsedTime(started)).ConfigureAwait(false))
+                    if (!await TryRenewAsync(claim, dbContext, Stopwatch.GetElapsedTime(started)).ConfigureAwait(false))
                     {
                         return;
                     }
@@ -83,56 +80,27 @@ internal sealed partial class RenewLeaseMiddleware(
     /// Renews the Lease once, if this worker still holds it.
     /// </summary>
     /// <returns>Whether to keep renewing. <c>false</c> once the Lease is no longer this worker's.</returns>
-    private async Task<bool> TryRenewAsync(IOutboxDbContext dbContext, OutboxMessage message, TimeSpan elapsed)
+    private async Task<bool> TryRenewAsync(Claim<OutboxMessage> claim, IOutboxDbContext dbContext, TimeSpan elapsed)
     {
         try
         {
             // Never cancelled: a renewal that landed but whose new instant was not read would leave the
             // outcome write guarded on a Lease that no longer exists.
-            var renewed = await RenewAsync(dbContext, message, CancellationToken.None).ConfigureAwait(false);
-
-            if (renewed is null)
+            if (!await claim.TryRenewAsync(dbContext, config.LeaseMargin, CancellationToken.None).ConfigureAwait(false))
             {
-                LogRenewalLost(message.Id);
+                LogRenewalLost(claim.Message.Id);
                 return false;
             }
 
-            message.VisibleAt = renewed.Value;
-            LogRenewed(message.Id, elapsed);
+            LogRenewed(claim.Message.Id, elapsed);
         }
         // the Lease still has two intervals left, so a failed renewal is logged and tried again on the next tick
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogRenewalFailed(ex, message.Id);
+            LogRenewalFailed(ex, claim.Message.Id);
         }
 
         return true;
-    }
-
-    private async Task<DateTime?> RenewAsync(IOutboxDbContext dbContext, OutboxMessage message, CancellationToken cancellationToken)
-    {
-        await dbContext.Database.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-
-        var command = dbContext.Database.GetDbConnection().CreateCommand();
-        await using (command.ConfigureAwait(false))
-        {
-            // an interval rather than an instant, so a skewed application clock cannot expire the Lease early.
-            // S2077: the only interpolated value is OutboxMessage.TableName, a compile-time constant (ADR 0005)
-#pragma warning disable S2077 // Formatting SQL queries is security-sensitive
-            command.CommandText = $"""
-                UPDATE {OutboxMessage.TableName}
-                SET visible_at = clock_timestamp() + @margin
-                WHERE id = @id
-                AND visible_at = @lease
-                RETURNING visible_at
-                """;
-#pragma warning restore S2077
-            command.Parameters.Add(new NpgsqlParameter("id", message.Id));
-            command.Parameters.Add(new NpgsqlParameter("lease", message.VisibleAt));
-            command.Parameters.Add(new NpgsqlParameter("margin", config.LeaseMargin));
-
-            return await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as DateTime?;
-        }
     }
 
     [LoggerMessage(

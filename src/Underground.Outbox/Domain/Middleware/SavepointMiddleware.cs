@@ -17,11 +17,11 @@ internal sealed class SavepointMiddleware<TEntity>(MessageDbContext<TEntity> mes
 {
     private readonly IDbContext _dbContext = messageDbContext.Context;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var transaction = _dbContext.Database.CurrentTransaction!;
 
-        var savepointName = $"processing_message_{message.Id}";
+        var savepointName = $"processing_message_{claim.Message.Id}";
         await transaction.CreateSavepointAsync(savepointName, cancellationToken).ConfigureAwait(false);
 
         try

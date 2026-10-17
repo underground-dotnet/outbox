@@ -33,19 +33,19 @@ internal sealed class InboxProcessor(
             // a replayed attempt inherits what the failed one tracked, whose transaction is gone
             dbContext.ChangeTracker.Clear();
 
-            var message = await claimHeadMessage.ExecuteAsync(ct).ConfigureAwait(false);
-            if (message is null)
+            var claim = await claimHeadMessage.ExecuteAsync(ct).ConfigureAwait(false);
+            if (claim is null)
             {
                 return ClaimResult.NothingOffered;
             }
 
-            var attempt = await pipeline.ExecuteAsync(message, scope, ct).ConfigureAwait(false);
+            var attempt = await pipeline.ExecuteAsync(claim, scope, ct).ConfigureAwait(false);
 
             // thrown so the transaction rolls back: committing would keep the Handler's writes while the
             // message stays pending, and it would be applied again
             if (attempt.Status == ProcessingStatus.LeaseLost)
             {
-                throw new InboxClaimLostException(message.Id);
+                throw new InboxClaimLostException(claim.Message.Id);
             }
 
             return ClaimResult.HeadMessageClaimed;

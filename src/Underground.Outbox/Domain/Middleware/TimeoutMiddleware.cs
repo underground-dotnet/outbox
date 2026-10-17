@@ -20,7 +20,7 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class TimeoutMiddleware<TEntity>(ServiceConfiguration<TEntity> config) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(config.HandlerTimeout);
@@ -33,7 +33,7 @@ internal sealed class TimeoutMiddleware<TEntity>(ServiceConfiguration<TEntity> c
         // cancellation becomes a failed attempt
         catch (OperationCanceledException ex) when (deadline.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            throw new HandlerTimeoutException(message.Id, config.HandlerTimeout, ex);
+            throw new HandlerTimeoutException(claim.Message.Id, config.HandlerTimeout, ex);
         }
     }
 }

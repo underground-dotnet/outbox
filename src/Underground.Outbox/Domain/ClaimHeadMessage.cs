@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 using Npgsql;
 
@@ -6,8 +7,10 @@ using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
 
-internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TEntity : class, IMessage
+internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerFactory loggerFactory) where TEntity : class, IMessage
 {
+    private readonly ILogger<Claim<TEntity>> _claimLogger = loggerFactory.CreateLogger<Claim<TEntity>>();
+
     /// <summary>
     /// How many of the oldest pending messages the claim looks through before it considers every Group.
     /// Bounds the claim's cost whenever the answer is near the front.
@@ -16,7 +19,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
 
     /// <summary>
     /// Claims the HeadMessage - the oldest Stable message not yet completed - of whichever Group offers the oldest one,
-    /// or <c>null</c> when no Group offers anything. What holding the claim means is the subclass's
+    /// or <c>null</c> when no Group offers anything. What holding the Claim means is the subclass's
     /// answer: the inbox keeps the row lock, the outbox commits a Lease.
     /// </summary>
     /// <remarks>
@@ -25,14 +28,14 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
     /// nothing there can be claimed and messages lie beyond them does it consider every Group, whose cost
     /// does. See ADR 0010.
     /// </remarks>
-    internal async Task<TEntity?> ExecuteAsync(CancellationToken cancellationToken)
+    internal async Task<Claim<TEntity>?> ExecuteAsync(CancellationToken cancellationToken)
     {
         // fresh per call: an NpgsqlParameter belongs to one command at a time
         List<NpgsqlParameter> parameters = [];
         AddParameters(parameters);
 
         // AsNoTracking: a tracked copy would let an application's SaveChanges inside the handler write
-        // the message behind the guarded writes' back.
+        // the message behind the Claim's guarded writes.
         // ToListAsync rather than FirstOrDefaultAsync: any LINQ operator composed onto FromSqlRaw makes EF
         // wrap the statement in a subquery, which is invalid around the outbox's data-modifying CTE.
         var claimed = await dbContext.Set<TEntity>()
@@ -41,7 +44,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext) where TE
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return claimed.Count > 0 ? claimed[0] : null;
+        return claimed.Count > 0 ? new Claim<TEntity>(claimed[0], dbContext, _claimLogger) : null;
     }
 
     /// <summary>

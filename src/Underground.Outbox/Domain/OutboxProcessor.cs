@@ -12,7 +12,8 @@ namespace Underground.Outbox.Domain;
 /// </summary>
 /// <remarks>
 /// The cost is at-least-once delivery, so outbox Handlers must be idempotent. Every write after the claim
-/// is guarded on the granted Lease, which stops a worker that overran from overwriting a newer claim.
+/// goes through the <see cref="Claim{TEntity}"/>, guarded on the Lease, which stops a worker that overran from
+/// overwriting a newer Claim.
 /// </remarks>
 internal sealed class OutboxProcessor(
     IOutboxDbContext dbContext,
@@ -27,18 +28,18 @@ internal sealed class OutboxProcessor(
         // and replaying them from here would replay the Handler with them. What happens to a failure in
         // them is unchanged - the Lease expires and the message is offered again. See ADR 0006.
         // The Lease only exists once that transaction commits; until then the row is merely locked.
-        var message = await dbContext
-            .ExecuteInTransactionAsync<OutboxMessage?>(claimHeadMessage.ExecuteAsync, cancellationToken)
+        var claim = await dbContext
+            .ExecuteInTransactionAsync<Claim<OutboxMessage>?>(claimHeadMessage.ExecuteAsync, cancellationToken)
             .ConfigureAwait(false);
 
-        if (message is null)
+        if (claim is null)
         {
             return ClaimResult.NothingOffered;
         }
 
         dbContext.ChangeTracker.Clear();
 
-        await pipeline.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
+        await pipeline.ExecuteAsync(claim, scope, cancellationToken).ConfigureAwait(false);
 
         dbContext.ChangeTracker.Clear();
 

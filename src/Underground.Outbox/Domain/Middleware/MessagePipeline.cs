@@ -20,23 +20,23 @@ internal sealed class MessagePipeline<TEntity>(
 ) where TEntity : class, IMessage
 {
     /// <summary>
-    /// Runs the pipeline for one claimed message, which ends in the write recording what became of it.
+    /// Runs the pipeline for one Claim, which ends in the write recording what became of its message.
     /// </summary>
     /// <remarks>
     /// The outcome is already recorded when this returns. The <see cref="ProcessingAttempt"/> is for the
     /// transaction boundary alone: a worker that retried on it would retry a message the backoff has
     /// already pushed out of sight.
     /// </remarks>
-    internal Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
-        => ExecuteFromAsync(0, message, scope, cancellationToken);
+    internal Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, CancellationToken cancellationToken)
+        => ExecuteFromAsync(0, claim, scope, cancellationToken);
 
-    private Task<ProcessingAttempt> ExecuteFromAsync(int index, TEntity message, IServiceScope scope, CancellationToken cancellationToken)
+    private Task<ProcessingAttempt> ExecuteFromAsync(int index, Claim<TEntity> claim, IServiceScope scope, CancellationToken cancellationToken)
         => index == middleware.Count
-            ? DispatchAsync(message, scope, cancellationToken)
+            ? DispatchAsync(claim.Message, scope, cancellationToken)
             : middleware[index].ExecuteAsync(
-                message,
+                claim,
                 scope,
-                token => ExecuteFromAsync(index + 1, message, scope, token),
+                token => ExecuteFromAsync(index + 1, claim, scope, token),
                 cancellationToken);
 
     private async Task<ProcessingAttempt> DispatchAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)

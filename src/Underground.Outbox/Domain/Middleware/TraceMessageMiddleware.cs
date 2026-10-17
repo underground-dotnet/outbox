@@ -23,11 +23,11 @@ internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEnti
     /// </summary>
     internal const string DuplicateDeliveryErrorType = "duplicate_delivery";
 
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(claim);
 
-        using var activity = StartActivity(message);
+        using var activity = StartActivity(claim.Message);
 
         var attempt = await next(cancellationToken).ConfigureAwait(false);
 

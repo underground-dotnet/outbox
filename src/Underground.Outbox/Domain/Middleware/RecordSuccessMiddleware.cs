@@ -14,9 +14,9 @@ namespace Underground.Outbox.Domain.Middleware;
 /// a middleware below has already recorded that outcome. Where this middleware sits is on
 /// <see cref="MessagePipelineFactory"/> with the rest of the order.
 /// </remarks>
-internal sealed class RecordSuccessMiddleware<TEntity>(MarkCompleted<TEntity> markCompleted) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
+internal sealed class RecordSuccessMiddleware<TEntity> : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var attempt = await next(cancellationToken).ConfigureAwait(false);
 
@@ -25,7 +25,7 @@ internal sealed class RecordSuccessMiddleware<TEntity>(MarkCompleted<TEntity> ma
             return attempt;
         }
 
-        var stillOurs = await markCompleted.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
+        var stillOurs = await claim.TryCompleteAsync(cancellationToken).ConfigureAwait(false);
 
         // not a failure - the effect happened, the message is just no longer ours to mark. Reported
         // rather than swallowed because it is the one case of a certain double delivery.

@@ -16,7 +16,7 @@ public static class ProcessorExtensions
         internal static async Task ProcessWithDefaultValuesAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken)
         {
             using var scope = serviceProvider.CreateScope();
-            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<OutboxMessage>>();
+            var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
             await processor.TryProcessHeadMessageAsync(scope, cancellationToken);
         }
     }
