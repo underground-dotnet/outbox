@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Exceptions;
@@ -20,7 +18,7 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class TimeoutMiddleware<TEntity>(ServiceConfiguration<TEntity> config) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(config.HandlerTimeout);

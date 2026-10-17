@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
 using Underground.Outbox.Exceptions;
@@ -19,12 +17,13 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class RecordFailureMiddleware<TEntity>(
     MessageDbContext<TEntity> messageDbContext,
-    RetryBackoff<TEntity> backoff
+    RetryBackoff<TEntity> backoff,
+    ProcessExceptionFromHandler<TEntity> processHandlerException
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
     private readonly IDbContext _dbContext = messageDbContext.Context;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         Exception failure;
 
@@ -53,9 +52,7 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         // only an exception the Handler itself raised has a policy to consult
         if (failure is MessageHandlerException handlerException)
         {
-            // from the handling scope, so the exception handler sees the same services the Handler saw
-            var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
-
+            // injected from the Claim's scope, so the exception handler sees the same services the Handler saw
             await processHandlerException.ExecuteAsync(handlerException, claim.Message, _dbContext, cancellationToken).ConfigureAwait(false);
         }
 

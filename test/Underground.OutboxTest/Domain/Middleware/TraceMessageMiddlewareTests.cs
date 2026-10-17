@@ -117,7 +117,7 @@ public class TraceMessageMiddlewareTests
         using var spans = new RecordingTracerProvider();
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => middleware.ExecuteAsync(ClaimOn(message), scope: null!, _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
+            () => middleware.ExecuteAsync(ClaimOn(message), _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
 
         Assert.Equal(ActivityStatusCode.Unset, spans.SpanFor(message.EventId).Status);
     }
@@ -133,7 +133,7 @@ public class TraceMessageMiddlewareTests
 
         using var spans = new RecordingTracerProvider();
 
-        var attempt = await middleware.ExecuteAsync(ClaimOn(message), scope: null!, _ => next(), TestContext.Current.CancellationToken);
+        var attempt = await middleware.ExecuteAsync(ClaimOn(message), _ => next(), TestContext.Current.CancellationToken);
 
         return (spans.SpanFor(message.EventId), attempt);
     }

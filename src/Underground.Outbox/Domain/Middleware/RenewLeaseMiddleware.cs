@@ -27,7 +27,7 @@ internal sealed partial class RenewLeaseMiddleware(
 {
     private readonly ILogger<RenewLeaseMiddleware> _logger = logger;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<OutboxMessage> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<OutboxMessage> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         // not linked to the caller's token: a shutdown does not stop a Handler that ignores it, so it must
         // not stop the renewal either

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Exceptions;
@@ -23,7 +21,7 @@ internal sealed class InboxProcessor(
     MessagePipeline<InboxMessage> pipeline
 ) : IProcessor<InboxMessage>
 {
-    public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<ClaimResult> TryProcessHeadMessageAsync(CancellationToken cancellationToken)
     {
         // .net aspire compatability
         // One transaction spans the whole attempt, so the attempt is also what a transient failure
@@ -39,7 +37,7 @@ internal sealed class InboxProcessor(
                 return ClaimResult.NothingOffered;
             }
 
-            var attempt = await pipeline.ExecuteAsync(claim, scope, ct).ConfigureAwait(false);
+            var attempt = await pipeline.ExecuteAsync(claim, ct).ConfigureAwait(false);
 
             // thrown so the transaction rolls back: committing would keep the Handler's writes while the
             // message stays pending, and it would be applied again

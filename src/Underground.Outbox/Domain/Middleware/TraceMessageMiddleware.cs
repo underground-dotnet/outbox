@@ -1,7 +1,5 @@
 using System.Diagnostics;
 
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain.Middleware;
@@ -23,7 +21,7 @@ internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEnti
     /// </summary>
     internal const string DuplicateDeliveryErrorType = "duplicate_delivery";
 
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(claim);
 

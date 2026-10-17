@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Data;
@@ -15,7 +14,7 @@ internal sealed partial class LogMessageMiddleware<TEntity>(
 {
     private readonly ILogger<LogMessageMiddleware<TEntity>> _logger = logger;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var message = claim.Message;
 

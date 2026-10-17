@@ -17,7 +17,7 @@ public static class ProcessorExtensions
         {
             using var scope = serviceProvider.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
-            await processor.TryProcessHeadMessageAsync(scope, cancellationToken);
+            await processor.TryProcessHeadMessageAsync(cancellationToken);
         }
     }
 

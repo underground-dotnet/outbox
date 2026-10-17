@@ -1,8 +1,12 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.Dispatchers;
+using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Exceptions;
 using Underground.OutboxTest.TestHandler;
 
@@ -28,9 +32,12 @@ public class MessageTypeNameTests
         await using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        var dispatcher = new MessageDispatcher<OutboxMessage>(provider.GetRequiredService<HandlerRegistry<OutboxMessage>>());
+        var dispatch = new DispatchMessage<OutboxMessage>(
+            provider.GetRequiredService<HandlerRegistry<OutboxMessage>>(),
+            scope.ServiceProvider,
+            new MessageDbContext<OutboxMessage>(new SaveOnlyDbContext()));
 
-        await dispatcher.ExecuteAsync(scope, message, TestContext.Current.CancellationToken);
+        await dispatch.ExecuteAsync(message, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -79,5 +86,18 @@ public class MessageTypeNameTests
 
         Assert.True(registry.TryGetEntry("Underground.OutboxTest.TestHandler.Envelope+Nested", out var entry));
         Assert.Equal(typeof(NestedMessageHandler), entry.HandlerType);
+    }
+
+    /// <summary>
+    /// Dispatch ends in a save, which has nothing to write here; anything else touching the context is a bug in
+    /// the test.
+    /// </summary>
+    private sealed class SaveOnlyDbContext : IDbContext
+    {
+        public DatabaseFacade Database => throw new NotSupportedException();
+        public ChangeTracker ChangeTracker => throw new NotSupportedException();
+        public DbSet<TEntity> Set<TEntity>() where TEntity : class => throw new NotSupportedException();
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

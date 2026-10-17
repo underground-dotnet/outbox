@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.Middleware;
 
@@ -21,7 +19,7 @@ internal sealed class OutboxProcessor(
     MessagePipeline<OutboxMessage> pipeline
 ) : IProcessor<OutboxMessage>
 {
-    public async Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken)
+    public async Task<ClaimResult> TryProcessHeadMessageAsync(CancellationToken cancellationToken)
     {
         // .net aspire compatability
         // Only the claim is wrapped: the dispatch and the outcome write open no transaction of their own,
@@ -39,7 +37,7 @@ internal sealed class OutboxProcessor(
 
         dbContext.ChangeTracker.Clear();
 
-        await pipeline.ExecuteAsync(claim, scope, cancellationToken).ConfigureAwait(false);
+        await pipeline.ExecuteAsync(claim, cancellationToken).ConfigureAwait(false);
 
         dbContext.ChangeTracker.Clear();
 
