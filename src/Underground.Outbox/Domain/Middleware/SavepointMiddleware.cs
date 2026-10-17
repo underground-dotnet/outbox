@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 using Underground.Outbox.Data;
 
@@ -17,7 +16,7 @@ internal sealed class SavepointMiddleware<TEntity>(MessageDbContext<TEntity> mes
 {
     private readonly IDbContext _dbContext = messageDbContext.Context;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var transaction = _dbContext.Database.CurrentTransaction!;
 

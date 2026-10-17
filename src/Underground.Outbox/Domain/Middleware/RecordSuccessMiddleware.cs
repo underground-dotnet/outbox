@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain.Middleware;
@@ -16,7 +14,7 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class RecordSuccessMiddleware<TEntity> : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
-    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var attempt = await next(cancellationToken).ConfigureAwait(false);
 

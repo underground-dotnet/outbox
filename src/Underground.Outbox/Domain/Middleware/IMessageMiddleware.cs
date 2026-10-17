@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain.Middleware;
@@ -14,7 +12,6 @@ internal interface IMessageMiddleware<TEntity> where TEntity : class, IMessage
     /// Runs this middleware around <paramref name="next"/>.
     /// </summary>
     /// <param name="claim">The Claim on the HeadMessage this run of the pipeline is about.</param>
-    /// <param name="scope">The scope the message is handled in; the Handler is resolved from it.</param>
     /// <param name="next">The rest of the pipeline.</param>
     /// <param name="cancellationToken">Cancellation for this middleware.</param>
     /// <returns>
@@ -22,5 +19,5 @@ internal interface IMessageMiddleware<TEntity> where TEntity : class, IMessage
     /// <see cref="ProcessingStatus.Succeeded"/> has already recorded that outcome itself. The
     /// <see cref="ProcessingAttempt"/> only travels outwards, which is why it is a return value.
     /// </returns>
-    Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken);
+    Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken);
 }

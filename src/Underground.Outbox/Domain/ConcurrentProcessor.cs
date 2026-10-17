@@ -96,7 +96,7 @@ internal sealed partial class ConcurrentProcessor<TEntity>(
             {
                 var processor = scope.ServiceProvider.GetRequiredService<IProcessor<TEntity>>();
 
-                return await processor.TryProcessHeadMessageAsync(scope, cancellationToken).ConfigureAwait(false);
+                return await processor.TryProcessHeadMessageAsync(cancellationToken).ConfigureAwait(false);
             }
         }
         // only a shutdown may end a worker; any other cancellation that got this far is a failure to survive

@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain;
@@ -28,5 +26,5 @@ internal interface IProcessor<TEntity> where TEntity : class, IMessage
     /// <returns>
     /// Whether a message was claimed. A message that was claimed and then failed still counts as claimed.
     /// </returns>
-    Task<ClaimResult> TryProcessHeadMessageAsync(IServiceScope scope, CancellationToken cancellationToken);
+    Task<ClaimResult> TryProcessHeadMessageAsync(CancellationToken cancellationToken);
 }

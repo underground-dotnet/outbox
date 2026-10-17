@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-
 using Underground.Outbox.Data;
 
 namespace Underground.Outbox.Domain.Middleware;
@@ -27,21 +25,20 @@ internal sealed class MessagePipeline<TEntity>(
     /// transaction boundary alone: a worker that retried on it would retry a message the backoff has
     /// already pushed out of sight.
     /// </remarks>
-    internal Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, CancellationToken cancellationToken)
-        => ExecuteFromAsync(0, claim, scope, cancellationToken);
+    internal Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, CancellationToken cancellationToken)
+        => ExecuteFromAsync(0, claim, cancellationToken);
 
-    private Task<ProcessingAttempt> ExecuteFromAsync(int index, Claim<TEntity> claim, IServiceScope scope, CancellationToken cancellationToken)
+    private Task<ProcessingAttempt> ExecuteFromAsync(int index, Claim<TEntity> claim, CancellationToken cancellationToken)
         => index == middleware.Count
-            ? DispatchAsync(claim.Message, scope, cancellationToken)
+            ? DispatchAsync(claim.Message, cancellationToken)
             : middleware[index].ExecuteAsync(
                 claim,
-                scope,
-                token => ExecuteFromAsync(index + 1, claim, scope, token),
+                token => ExecuteFromAsync(index + 1, claim, token),
                 cancellationToken);
 
-    private async Task<ProcessingAttempt> DispatchAsync(TEntity message, IServiceScope scope, CancellationToken cancellationToken)
+    private async Task<ProcessingAttempt> DispatchAsync(TEntity message, CancellationToken cancellationToken)
     {
-        await dispatch.ExecuteAsync(message, scope, cancellationToken).ConfigureAwait(false);
+        await dispatch.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
 
         // the Handler returned rather than threw, which is the whole of what completing a message means
         return ProcessingAttempt.Succeeded;

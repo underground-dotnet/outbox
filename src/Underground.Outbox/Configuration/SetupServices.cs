@@ -67,7 +67,6 @@ public static class SetupServices
         services.AddSingleton(new ExceptionPolicyTable<TEntity>(serviceConfig.Registrations, serviceConfig.GlobalPolicies.ExceptionPolicies));
 
         services.TryAddSingleton<HandlerRegistry<TEntity>>();
-        services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
 
         services.AddSingleton<ConcurrentProcessor<TEntity>>();
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();

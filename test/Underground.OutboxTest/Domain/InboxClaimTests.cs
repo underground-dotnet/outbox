@@ -132,7 +132,7 @@ public class InboxClaimTests : DatabaseTest
         await using var scope = provider.CreateAsyncScope();
         var processor = scope.ServiceProvider.GetRequiredService<IProcessor<InboxMessage>>();
 
-        await processor.TryProcessHeadMessageAsync(scope, cancellationToken);
+        await processor.TryProcessHeadMessageAsync(cancellationToken);
     }
 
     private ServiceProvider CreateServiceProvider(IInterceptor interceptor)
