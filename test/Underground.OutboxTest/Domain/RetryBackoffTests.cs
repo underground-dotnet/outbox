@@ -1,3 +1,4 @@
+using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 
 namespace Underground.OutboxTest.Domain;
@@ -11,7 +12,7 @@ public class RetryBackoffTests
     [Fact]
     public void DelayDoublesWithEveryFailedAttempt()
     {
-        var backoff = new RetryBackoff(TimeSpan.FromSeconds(1), TimeSpan.FromHours(1), jitter: 0);
+        var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromHours(1), jitter: 0);
 
         var delays = Enumerable.Range(0, 5).Select(backoff.DelayFor);
 
@@ -23,7 +24,7 @@ public class RetryBackoffTests
     [Fact]
     public void DelayStopsGrowingAtTheConfiguredMaximum()
     {
-        var backoff = new RetryBackoff(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), jitter: 0);
+        var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), jitter: 0);
 
         var delays = Enumerable.Range(0, 6).Select(backoff.DelayFor);
 
@@ -36,7 +37,7 @@ public class RetryBackoffTests
     public void DelayStaysAtTheMaximumForAMessageThatHasFailedFarTooOftenToDouble()
     {
         // a message that fails forever passes the point where doubling the base overflows a TimeSpan
-        var backoff = new RetryBackoff(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(10), jitter: 0);
+        var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(10), jitter: 0);
 
         Assert.Equal(TimeSpan.FromMinutes(10), backoff.DelayFor(1_000));
     }
@@ -44,7 +45,7 @@ public class RetryBackoffTests
     [Fact]
     public void JitterVariesTheDelayWithinTheConfiguredProportion()
     {
-        var backoff = new RetryBackoff(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0.2);
+        var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0.2);
 
         var delays = Enumerable.Range(0, 50).Select(_ => backoff.DelayFor(0)).ToList();
 
@@ -56,7 +57,7 @@ public class RetryBackoffTests
     [Fact]
     public void NoJitterMeansTheDelayIsExact()
     {
-        var backoff = new RetryBackoff(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0);
+        var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0);
 
         var delays = Enumerable.Range(0, 10).Select(_ => backoff.DelayFor(0));
 

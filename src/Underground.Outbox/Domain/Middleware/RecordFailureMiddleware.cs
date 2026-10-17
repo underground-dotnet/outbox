@@ -1,6 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 
-using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
 using Underground.Outbox.Exceptions;
@@ -20,11 +19,10 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class RecordFailureMiddleware<TEntity>(
     MessageDbContext<TEntity> messageDbContext,
-    ServiceConfiguration<TEntity> config
+    RetryBackoff<TEntity> backoff
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
     private readonly IDbContext _dbContext = messageDbContext.Context;
-    private readonly RetryBackoff _backoff = new(config.BackoffBase, config.MaxBackoff, config.BackoffJitter);
 
     public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
@@ -44,7 +42,7 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         // clear tracked entities, so the exception handler works against a clean context
         _dbContext.ChangeTracker.Clear();
 
-        var delay = _backoff.DelayFor(claim.Message.RetryCount);
+        var delay = backoff.DelayFor(claim.Message.RetryCount);
         var stillOurs = await claim.TryRecordFailureAsync(delay, cancellationToken).ConfigureAwait(false);
 
         if (!stillOurs)

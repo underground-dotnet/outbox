@@ -1,3 +1,5 @@
+using Underground.Outbox.Data;
+
 namespace Underground.Outbox.Domain;
 
 /// <summary>
@@ -8,7 +10,12 @@ namespace Underground.Outbox.Domain;
 /// <param name="baseDelay">The delay after the first failed attempt.</param>
 /// <param name="maxDelay">The ceiling the doubling stops at, before jitter.</param>
 /// <param name="jitter">The proportion the capped delay is randomly varied by, either way.</param>
-internal sealed class RetryBackoff(TimeSpan baseDelay, TimeSpan maxDelay, double jitter)
+/// <typeparam name="TEntity">
+/// The side whose configuration this follows. It appears in no member; what it selects is the registration.
+/// </typeparam>
+#pragma warning disable S2326 // Unused type parameters should be removed
+internal sealed class RetryBackoff<TEntity>(TimeSpan baseDelay, TimeSpan maxDelay, double jitter) where TEntity : class, IMessage
+#pragma warning restore S2326 // Unused type parameters should be removed
 {
     /// <summary>
     /// The delay after a failed attempt, given how many had already failed before it. The first failure

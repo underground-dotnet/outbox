@@ -65,6 +65,7 @@ public static class SetupServices
     where TContext : IDbContext
     {
         services.AddSingleton(serviceConfig);
+        services.AddSingleton(new RetryBackoff<TEntity>(serviceConfig.BackoffBase, serviceConfig.MaxBackoff, serviceConfig.BackoffJitter));
 
         services.TryAddSingleton<HandlerRegistry<TEntity>>();
         services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
