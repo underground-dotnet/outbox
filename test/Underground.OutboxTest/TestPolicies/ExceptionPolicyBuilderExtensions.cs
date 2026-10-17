@@ -13,5 +13,11 @@ public static class ExceptionPolicyBuilderExtensions
             builder.Target.AddExceptionPolicy(new MarkAsCompletedExceptionPolicy<T>(builder.ExceptionType));
             return builder.PolicyBuilder;
         }
+
+        public PolicyBuilder<T> RecordScope()
+        {
+            builder.Target.AddExceptionPolicy(new RecordScopeExceptionPolicy<T>(builder.ExceptionType));
+            return builder.PolicyBuilder;
+        }
     }
 }
