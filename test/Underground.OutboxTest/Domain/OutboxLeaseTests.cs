@@ -221,13 +221,13 @@ public class OutboxLeaseTests : DatabaseTest
         var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         await using (transaction.ConfigureAwait(false))
         {
-            var message = await claimHeadMessage.ExecuteAsync(cancellationToken);
+            var claim = await claimHeadMessage.ExecuteAsync(cancellationToken);
 
             // committing is what turns the row lock into a Lease; without it the Group would stay blocked
             // rather than merely leased
             await transaction.CommitAsync(cancellationToken);
 
-            return message;
+            return claim?.Message;
         }
     }
 

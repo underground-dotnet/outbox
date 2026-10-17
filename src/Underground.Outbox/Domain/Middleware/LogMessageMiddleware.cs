@@ -15,8 +15,10 @@ internal sealed partial class LogMessageMiddleware<TEntity>(
 {
     private readonly ILogger<LogMessageMiddleware<TEntity>> _logger = logger;
 
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
+        var message = claim.Message;
+
         LogProcessingMessage(message.Id, typeof(TEntity).ToString(), message.GroupKey);
 
         var attempt = await next(cancellationToken).ConfigureAwait(false);

@@ -134,7 +134,9 @@ public class WindowedClaimTests : DatabaseTest
     {
         await using var scope = provider.CreateAsyncScope();
 
-        return await scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>().ExecuteAsync(cancellationToken);
+        var claim = await scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<OutboxMessage>>().ExecuteAsync(cancellationToken);
+
+        return claim?.Message;
     }
 
     private ServiceProvider CreateServiceProvider(params IInterceptor[] interceptors)

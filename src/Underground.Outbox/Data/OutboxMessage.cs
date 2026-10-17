@@ -47,9 +47,8 @@ public class OutboxMessage : IMessage
     [Column("retry_count")]
     public int RetryCount { get; set; } = 0;
 
-    // settable internally because a renewed Lease moves the instant the guarded writes compare against
     [Column("visible_at")]
-    public DateTime VisibleAt { get; internal set; }
+    public DateTime VisibleAt { get; init; }
 
     [Column("completed_at")]
     public DateTime? CompletedAt { get; set; }

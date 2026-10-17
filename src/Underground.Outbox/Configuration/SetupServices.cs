@@ -73,8 +73,6 @@ public static class SetupServices
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
-        services.AddScoped<ScheduleRetry<TEntity>>();
-        services.AddScoped<MarkCompleted<TEntity>>();
 
         // per-message middleware, registered individually but only ever composed by the factory, which owns
         // the order between them

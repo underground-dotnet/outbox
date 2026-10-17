@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
+using Underground.Outbox.Configuration;
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain.ExceptionHandlers;
 using Underground.Outbox.Exceptions;
@@ -7,9 +8,9 @@ using Underground.Outbox.Exceptions;
 namespace Underground.Outbox.Domain.Middleware;
 
 /// <summary>
-/// Turns a Handler that threw into a recorded attempt: pushes the message out of sight for its backoff
-/// delay, then consults the exception policies. Reports the failure rather than rethrowing, so one bad
-/// message costs its own Group and nothing else.
+/// Turns a Handler that threw into a recorded attempt: has the <see cref="Claim{TEntity}"/> push the message
+/// out of sight for its backoff delay, then consults the exception policies. Reports the failure rather than
+/// rethrowing, so one bad message costs its own Group and nothing else.
 /// </summary>
 /// <remarks>
 /// The retry is written before the policies run because it is the guarded write, and a lost Lease has to
@@ -19,12 +20,13 @@ namespace Underground.Outbox.Domain.Middleware;
 /// </remarks>
 internal sealed class RecordFailureMiddleware<TEntity>(
     MessageDbContext<TEntity> messageDbContext,
-    ScheduleRetry<TEntity> scheduleRetry
+    ServiceConfiguration<TEntity> config
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
     private readonly IDbContext _dbContext = messageDbContext.Context;
+    private readonly RetryBackoff _backoff = new(config.BackoffBase, config.MaxBackoff, config.BackoffJitter);
 
-    public async Task<ProcessingAttempt> ExecuteAsync(TEntity message, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
+    public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, IServiceScope scope, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         Exception failure;
 
@@ -42,7 +44,8 @@ internal sealed class RecordFailureMiddleware<TEntity>(
         // clear tracked entities, so the exception handler works against a clean context
         _dbContext.ChangeTracker.Clear();
 
-        var stillOurs = await scheduleRetry.ExecuteAsync(message, cancellationToken).ConfigureAwait(false);
+        var delay = _backoff.DelayFor(claim.Message.RetryCount);
+        var stillOurs = await claim.TryRecordFailureAsync(delay, cancellationToken).ConfigureAwait(false);
 
         if (!stillOurs)
         {
@@ -55,7 +58,7 @@ internal sealed class RecordFailureMiddleware<TEntity>(
             // from the handling scope, so the exception handler sees the same services the Handler saw
             var processHandlerException = scope.ServiceProvider.GetRequiredService<ProcessExceptionFromHandler<TEntity>>();
 
-            await processHandlerException.ExecuteAsync(handlerException, message, _dbContext, cancellationToken).ConfigureAwait(false);
+            await processHandlerException.ExecuteAsync(handlerException, claim.Message, _dbContext, cancellationToken).ConfigureAwait(false);
         }
 
         return ProcessingAttempt.Failed(failure);

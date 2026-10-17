@@ -1,7 +1,10 @@
 using System.Diagnostics;
 
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Underground.Outbox;
 using Underground.Outbox.Data;
+using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.Middleware;
 
 namespace Underground.OutboxTest.Domain.Middleware;
@@ -114,7 +117,7 @@ public class TraceMessageMiddlewareTests
         using var spans = new RecordingTracerProvider();
 
         await Assert.ThrowsAsync<OperationCanceledException>(
-            () => middleware.ExecuteAsync(message, scope: null!, _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
+            () => middleware.ExecuteAsync(ClaimOn(message), scope: null!, _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
 
         Assert.Equal(ActivityStatusCode.Unset, spans.SpanFor(message.EventId).Status);
     }
@@ -130,10 +133,14 @@ public class TraceMessageMiddlewareTests
 
         using var spans = new RecordingTracerProvider();
 
-        var attempt = await middleware.ExecuteAsync(message, scope: null!, _ => next(), TestContext.Current.CancellationToken);
+        var attempt = await middleware.ExecuteAsync(ClaimOn(message), scope: null!, _ => next(), TestContext.Current.CancellationToken);
 
         return (spans.SpanFor(message.EventId), attempt);
     }
+
+    // the span is opened and closed around next, so the Claim's writes are never reached
+    private static Claim<OutboxMessage> ClaimOn(OutboxMessage message) =>
+        new(message, dbContext: null!, NullLogger<Claim<OutboxMessage>>.Instance);
 
     private static OutboxMessage NewMessage(string? traceParent) =>
         new(Guid.NewGuid(), DateTime.UtcNow, "Test.Message", "{}", groupKey: "orders")
