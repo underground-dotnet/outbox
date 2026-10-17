@@ -11,7 +11,7 @@ namespace Underground.Outbox;
 /// <see cref="IInbox"/> are this closed over each side's types, so a change to either path lands on both.
 /// </summary>
 internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntity> processor)
-    where TEntity : class, IMessage, ICarriesCreationContext
+    where TEntity : class, IMessage, ITraceContextCarrier
     where TContext : IDbContext
 {
     public Task AddMessageAsync(TContext context, TEntity message, CancellationToken cancellationToken)
@@ -43,7 +43,7 @@ internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntit
         var traceParent = Activity.Current?.Id;
         foreach (var message in toAdd)
         {
-            message.StampCreationContext(traceParent);
+            message.SetTraceParent(traceParent);
         }
 
         context.Set<TEntity>().AddRange(toAdd);

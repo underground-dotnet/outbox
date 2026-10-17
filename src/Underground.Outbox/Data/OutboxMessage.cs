@@ -16,7 +16,7 @@ namespace Underground.Outbox.Data;
 [Table("outbox")]
 [Index(nameof(EventId), IsUnique = true)]
 [EntityTypeConfiguration(typeof(OutboxMessageConfiguration))]
-public class OutboxMessage : IMessage, ICarriesCreationContext
+public class OutboxMessage : IMessage, ITraceContextCarrier
 {
     /// <inheritdoc />
     public static string TableName => "outbox";
@@ -61,7 +61,7 @@ public class OutboxMessage : IMessage, ICarriesCreationContext
     [Column("traceparent")]
     public string? TraceParent { get; internal set; }
 
-    void ICarriesCreationContext.StampCreationContext(string? traceParent) => TraceParent = traceParent;
+    void ITraceContextCarrier.SetTraceParent(string? traceParent) => TraceParent = traceParent;
 
     internal OutboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
