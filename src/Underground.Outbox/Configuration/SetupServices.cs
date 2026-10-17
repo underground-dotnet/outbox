@@ -66,6 +66,7 @@ public static class SetupServices
     {
         services.AddSingleton(serviceConfig);
         services.AddSingleton(new RetryBackoff<TEntity>(serviceConfig.BackoffBase, serviceConfig.MaxBackoff, serviceConfig.BackoffJitter));
+        services.AddSingleton(new ExceptionPolicyTable<TEntity>(serviceConfig.Registrations, serviceConfig.GlobalPolicies.ExceptionPolicies));
 
         services.TryAddSingleton<HandlerRegistry<TEntity>>();
         services.AddScoped<IMessageDispatcher<TEntity>, MessageDispatcher<TEntity>>();
