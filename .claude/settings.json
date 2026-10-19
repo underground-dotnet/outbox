@@ -36,5 +36,17 @@
     "dotnet-test@dotnet-agent-skills": true
   },
   "autoContinueAtUsageLimit": false,
-  "outputStyle": "Concise"
+  "outputStyle": "Concise",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
 }

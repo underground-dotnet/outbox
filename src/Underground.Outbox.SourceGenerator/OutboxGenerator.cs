@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 
@@ -58,30 +59,13 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return list;
     }
 
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-    {
-        if (node is not ClassDeclarationSyntax classDecl || classDecl.BaseList is null)
-        {
-            return false;
-        }
-
-        foreach (var baseType in classDecl.BaseList.Types)
-        {
-            // IOutboxMessageHandler<T> or IInboxMessageHandler<T>
-            if (baseType.Type is GenericNameSyntax { Identifier.ValueText: "IOutboxMessageHandler" or "IInboxMessageHandler" })
-            {
-                return true;
-            }
-
-            // Namespace.IOutboxMessageHandler<T>
-            if (baseType.Type is QualifiedNameSyntax { Right: GenericNameSyntax { Identifier.ValueText: "IOutboxMessageHandler" or "IInboxMessageHandler" } })
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    /// <summary>
+    /// A handler may inherit its interface from a base class, possibly in another assembly, so syntax cannot
+    /// tell a handler apart; every class that could be one is left to the semantic check.
+    /// </summary>
+    private static bool IsSyntaxTargetForGeneration(SyntaxNode node) =>
+        node is ClassDeclarationSyntax { BaseList: not null, TypeParameterList: null } classDecl
+        && !classDecl.Modifiers.Any(SyntaxKind.AbstractKeyword);
 
     private static ImmutableArray<HandlerClassInfo> GetSemanticTargetsForGeneration(GeneratorSyntaxContext context)
     {
@@ -92,7 +76,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             return ImmutableArray<HandlerClassInfo>.Empty;
         }
 
-        if (classSymbol.IsAbstract)
+        if (classSymbol.IsAbstract || IsOpenGeneric(classSymbol))
         {
             return ImmutableArray<HandlerClassInfo>.Empty;
         }
@@ -109,7 +93,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         var lifetime = ReadLifetime(classSymbol);
         var builder = ImmutableArray.CreateBuilder<HandlerClassInfo>();
 
-        foreach (var iface in classSymbol.Interfaces)
+        foreach (var iface in classSymbol.AllInterfaces)
         {
             if (!iface.IsGenericType)
             {
@@ -134,6 +118,22 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return builder.ToImmutable();
     }
 
+    /// <summary>
+    /// A class with a type parameter of its own or of a containing type cannot be built by the container.
+    /// </summary>
+    private static bool IsOpenGeneric(INamedTypeSymbol classSymbol)
+    {
+        for (var type = classSymbol; type is not null; type = type.ContainingType)
+        {
+            if (type.TypeParameters.Length > 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static HandlerKind? ClassifyHandlerInterface(INamedTypeSymbol definition, INamedTypeSymbol? outbox, INamedTypeSymbol? inbox)
     {
         if (SymbolEqualityComparer.Default.Equals(definition, outbox))
@@ -150,12 +150,26 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Reads <c>[MessageHandlerLifetime]</c> off the handler. The attribute is optional; without it a
-    /// handler is Transient, which is what registration defaulted to when it was written by hand.
+    /// Reads <c>[MessageHandlerLifetime]</c> off the handler or, as the attribute is inherited, its nearest base
+    /// class that carries one. Without it a handler is Transient, which is what registration defaulted to when
+    /// it was written by hand.
     /// </summary>
     private static string ReadLifetime(INamedTypeSymbol classSymbol)
     {
-        foreach (var attribute in classSymbol.GetAttributes())
+        for (var type = classSymbol; type is not null; type = type.BaseType)
+        {
+            if (FindLifetime(type) is { } lifetime)
+            {
+                return lifetime;
+            }
+        }
+
+        return DefaultLifetime;
+    }
+
+    private static string? FindLifetime(INamedTypeSymbol type)
+    {
+        foreach (var attribute in type.GetAttributes())
         {
             if (!string.Equals(attribute.AttributeClass?.ToDisplayString(), LifetimeAttribute, StringComparison.Ordinal))
             {
@@ -177,7 +191,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             };
         }
 
-        return DefaultLifetime;
+        return null;
     }
 
     private static void Execute(EquatableList<HandlerClassInfo> handlers, string? assemblyName, SourceProductionContext context)
