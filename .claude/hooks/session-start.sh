@@ -1,6 +1,6 @@
 #!/bin/bash
-# Starts the Docker daemon so the Testcontainers integration tests in
-# test/Underground.OutboxTest can run, and warms the NuGet and image caches.
+# Restores NuGet packages and starts the Docker daemon so the Testcontainers
+# integration tests in test/Underground.OutboxTest can run.
 set -euo pipefail
 
 # Local machines already have their own Docker setup.
@@ -9,6 +9,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 log() { echo "[session-start] $*"; }
+
+log "restoring NuGet packages"
+dotnet restore "$CLAUDE_PROJECT_DIR/Underground.slnx" -v quiet
 
 if ! command -v dockerd > /dev/null 2>&1; then
   log "dockerd not found in this image; skipping Docker setup"
@@ -33,5 +36,9 @@ else
   fi
   log "Docker daemon ready"
 fi
+
+# Matches PostgresFixture; a failed pull only means the first test run pulls it instead.
+log "pulling postgres image"
+docker pull -q postgres:18.1 > /dev/null || log "image pull failed; tests will pull on demand"
 
 log "done"
