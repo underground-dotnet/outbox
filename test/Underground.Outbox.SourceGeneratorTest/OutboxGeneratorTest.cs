@@ -232,6 +232,149 @@ public class OutboxGeneratorTest
     }
 
     [Fact]
+    public void Generates_registration_for_handler_inheriting_its_interface()
+    {
+        var result = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public interface IIntegrationEvent;
+
+            public sealed record EntityAdded(int Id) : IIntegrationEvent;
+
+            public class ForwardingHandler<T> : IOutboxMessageHandler<T> where T : IIntegrationEvent
+            {
+                public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class EntityAddedHandler : ForwardingHandler<EntityAdded>;
+            """);
+
+        Snapshot.Validate(result);
+    }
+
+    [Fact]
+    public void Generates_registration_for_handler_whose_base_is_in_a_referenced_assembly()
+    {
+        var result = GeneratorTestHelper.Run(
+            source: """
+                namespace Sample;
+
+                public sealed record EntityAdded(int Id) : Shared.IIntegrationEvent;
+
+                public sealed class EntityAddedHandler : Shared.ForwardingHandler<EntityAdded>;
+                """,
+            referencedSource: """
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                using Underground.Outbox;
+                using Underground.Outbox.Data;
+
+                namespace Shared;
+
+                public interface IIntegrationEvent;
+
+                public abstract class ForwardingHandler<T> : IOutboxMessageHandler<T> where T : IIntegrationEvent
+                {
+                    public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+                """);
+
+        Snapshot.Validate(result);
+    }
+
+    [Fact]
+    public void Inherits_lifetime_from_base_class()
+    {
+        var result = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Microsoft.Extensions.DependencyInjection;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Attributes;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            [MessageHandlerLifetime(ServiceLifetime.Scoped)]
+            public abstract class ScopedHandler<T> : IOutboxMessageHandler<T>
+            {
+                public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class TestMessageHandler : ScopedHandler<TestMessage>;
+            """);
+
+        Snapshot.Validate(result);
+    }
+
+    [Fact]
+    public void Reports_concrete_base_and_subclass_handling_the_same_message_type()
+    {
+        var result = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            public class TestMessageHandler : IOutboxMessageHandler<TestMessage>
+            {
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class AuditedTestMessageHandler : TestMessageHandler;
+            """);
+
+        Snapshot.Validate(result);
+    }
+
+    [Fact]
+    public void Ignores_open_generic_handler_classes()
+    {
+        var result = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(int Id);
+
+            public class GenericHandler<T> : IOutboxMessageHandler<T>
+            {
+                public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public static class Outer<T>
+            {
+                public sealed class NestedHandler : IOutboxMessageHandler<TestMessage>
+                {
+                    public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+                }
+            }
+            """);
+
+        AssertNothingGenerated(result);
+    }
+
+    [Fact]
     public void Ignores_non_handler_classes()
     {
         var result = GeneratorTestHelper.Run("""

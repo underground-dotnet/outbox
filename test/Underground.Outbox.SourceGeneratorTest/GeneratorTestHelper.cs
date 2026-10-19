@@ -9,14 +9,29 @@ namespace Underground.Outbox.SourceGeneratorTest;
 
 internal static class GeneratorTestHelper
 {
-    public static GeneratorDriverRunResult Run(string source)
+    public static GeneratorDriverRunResult Run(string source) => Run(source, referencedSource: null);
+
+    /// <param name="source">The assembly the generator runs on.</param>
+    /// <param name="referencedSource">An assembly <paramref name="source"/> references, which the generator does not run on.</param>
+    public static GeneratorDriverRunResult Run(string source, string? referencedSource)
     {
-        var syntaxTree = CSharpSyntaxTree.ParseText(source);
+        var references = GetReferences().ToList();
+
+        if (referencedSource is not null)
+        {
+            var referenced = CSharpCompilation.Create(
+                assemblyName: "ReferencedAssembly",
+                syntaxTrees: [CSharpSyntaxTree.ParseText(referencedSource)],
+                references: references,
+                options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+            references.Add(referenced.ToMetadataReference());
+        }
 
         var compilation = CSharpCompilation.Create(
             assemblyName: "GeneratorTests",
-            syntaxTrees: [syntaxTree],
-            references: GetReferences());
+            syntaxTrees: [CSharpSyntaxTree.ParseText(source)],
+            references: references);
 
         GeneratorDriver driver = CSharpGeneratorDriver.Create(new OutboxGenerator());
 
