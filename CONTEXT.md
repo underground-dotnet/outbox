@@ -70,8 +70,9 @@ _Avoid_: Lock, reservation, checkout
 
 **Handler**:
 Application-supplied code that carries out the effect of one message. Never invoked concurrently
-for two messages of the same group.
-_Avoid_: Consumer, subscriber, listener
+for two messages of the same group. A Handler is a class the container can build for a known message
+type; a generic or abstract base class it inherits its handler interface from is not itself a Handler.
+_Avoid_: Consumer, subscriber, listener, transport *(reads as a message broker)*
 
 **Handler Lifetime**:
 How long one Handler instance lives in the container: Transient unless the Handler says otherwise with
