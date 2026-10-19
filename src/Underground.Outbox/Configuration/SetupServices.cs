@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 using Underground.Outbox.Data;
 using Underground.Outbox.Domain;
 using Underground.Outbox.Domain.Dispatchers;
+using Underground.Outbox.Domain.Inboxes;
 using Underground.Outbox.Domain.Middleware;
 using Underground.Outbox.Domain.ExceptionHandlers;
 
@@ -31,21 +34,72 @@ public static class SetupServices
         services.AddScoped(MessagePipelineFactory.CreateOutbox);
         services.AddScoped<IProcessor<OutboxMessage>, OutboxProcessor>();
 
-        AddGenericServices<OutboxMessage, IOutboxDbContext>(services, serviceConfig);
+        AddOutboxSingletons(services, serviceConfig);
+        AddPipelineServices<OutboxMessage>(services);
     }
 
     public static void SetupInternalInboxServices<TContext>(
         IServiceCollection services,
+        string inbox,
         Action<InboxServiceConfiguration> configuration
     ) where TContext : DbContext, IInboxDbContext
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inbox);
+
+        if (services.Any(d => d.ImplementationInstance is InboxRegistration existing && string.Equals(existing.Name, inbox, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException($"The Inbox '{inbox}' is already registered.", nameof(inbox));
+        }
+
         var serviceConfig = new InboxServiceConfiguration();
         configuration.Invoke(serviceConfig);
         serviceConfig.Validate();
 
-        services.AddScoped<IInboxDbContext>(sp => sp.GetRequiredService<TContext>());
-        services.AddScoped(sp => new MessageDbContext<InboxMessage>(sp.GetRequiredService<TContext>()));
+        services.AddSingleton(new InboxRegistration(inbox, typeof(TContext), serviceConfig));
+
+        services.AddSingleton<IHostedService>(sp =>
+        {
+            var running = sp.GetRequiredService<InboxDirectory>()[inbox];
+            return new BackgroundService<InboxMessage>(running.Processor, running.Registry);
+        });
+        services.AddSingleton<IHostedService>(sp =>
+        {
+            var running = sp.GetRequiredService<InboxDirectory>()[inbox];
+            return new CleanupBackgroundService<InboxMessage>(
+                running.ScopeFactory,
+                running.Configuration,
+                sp.GetRequiredService<ILogger<CleanupBackgroundService<InboxMessage>>>());
+        });
+
+        AddSharedInboxServices(services);
+    }
+
+    /// <summary>
+    /// The services every Inbox shares. Registered once however many Inboxes there are: each resolves what
+    /// differs between Inboxes from the <see cref="InboxScope"/> its worker bound the scope to.
+    /// </summary>
+    private static void AddSharedInboxServices(IServiceCollection services)
+    {
+        if (services.Any(d => d.ServiceType == typeof(InboxDirectory)))
+        {
+            return;
+        }
+
+        services.AddSingleton<InboxDirectory>();
         services.AddScoped<IInbox, InboxImpl>();
+        services.AddScoped<InboxScope>();
+
+        services.AddScoped(sp => sp.GetRequiredService<InboxScope>().Inbox.Configuration);
+        services.AddScoped(sp => sp.GetRequiredService<InboxScope>().Inbox.Registry);
+        services.AddScoped(sp => sp.GetRequiredService<InboxScope>().Inbox.Backoff);
+        services.AddScoped(sp => sp.GetRequiredService<InboxScope>().Inbox.Policies);
+        services.AddScoped(sp => new MessageDbContext<InboxMessage>(
+            (IDbContext)sp.GetRequiredService(sp.GetRequiredService<InboxScope>().Inbox.ContextType)));
+        services.AddScoped(sp => new DeleteCompletedMessages<InboxMessage>(
+            sp.GetRequiredService<MessageDbContext<InboxMessage>>(),
+            sp.GetRequiredService<ServiceConfiguration<InboxMessage>>(),
+            sp.GetRequiredService<InboxScope>().Inbox.Name));
+
         services.AddScoped<ClaimHeadMessage<InboxMessage>, ClaimInboxHeadMessage>();
 
         // one transaction spans claim, Handler and outcome, so the inbox keeps the savepoint
@@ -53,22 +107,30 @@ public static class SetupServices
         services.AddScoped(MessagePipelineFactory.CreateInbox);
         services.AddScoped<IProcessor<InboxMessage>, InboxProcessor>();
 
-        AddGenericServices<InboxMessage, IInboxDbContext>(services, serviceConfig);
+        AddPipelineServices<InboxMessage>(services);
     }
 
-#pragma warning disable S2326 // Unused type parameters should be removed
-    private static void AddGenericServices<TEntity, TContext>(this IServiceCollection services, ServiceConfiguration<TEntity> serviceConfig)
-#pragma warning restore S2326 // Unused type parameters should be removed
-    where TEntity : class, IMessage
-    where TContext : IDbContext
+    /// <summary>
+    /// What the outbox holds once for the whole host: its settings, Handlers, retry and exception policies,
+    /// workers and cleanup.
+    /// </summary>
+    private static void AddOutboxSingletons(IServiceCollection services, OutboxServiceConfiguration serviceConfig)
     {
-        services.AddSingleton(serviceConfig);
-        services.AddSingleton(new RetryBackoff<TEntity>(serviceConfig.BackoffBase, serviceConfig.MaxBackoff, serviceConfig.BackoffJitter));
-        services.AddSingleton(new ExceptionPolicyTable<TEntity>(serviceConfig.Registrations, serviceConfig.GlobalPolicies.ExceptionPolicies));
+        services.AddSingleton<ServiceConfiguration<OutboxMessage>>(serviceConfig);
+        services.AddSingleton(new RetryBackoff<OutboxMessage>(serviceConfig.BackoffBase, serviceConfig.MaxBackoff, serviceConfig.BackoffJitter));
+        services.AddSingleton(new ExceptionPolicyTable<OutboxMessage>(serviceConfig.Registrations, serviceConfig.GlobalPolicies.ExceptionPolicies));
 
-        services.TryAddSingleton<HandlerRegistry<TEntity>>();
+        services.TryAddSingleton<HandlerRegistry<OutboxMessage>>();
 
-        services.AddSingleton<ConcurrentProcessor<TEntity>>();
+        services.AddSingleton<ConcurrentProcessor<OutboxMessage>>();
+        services.AddScoped<DeleteCompletedMessages<OutboxMessage>>();
+        services.AddHostedService<BackgroundService<OutboxMessage>>();
+        services.AddHostedService<CleanupBackgroundService<OutboxMessage>>();
+    }
+
+    /// <summary>The per-message middleware and exception handling both sides run.</summary>
+    private static void AddPipelineServices<TEntity>(IServiceCollection services) where TEntity : class, IMessage
+    {
         // services.AddScoped<IMessageExceptionHandler<TEntity>, DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<DiscardMessageOnExceptionHandler<TEntity>>();
         services.AddScoped<ProcessExceptionFromHandler<TEntity>>();
@@ -82,9 +144,6 @@ public static class SetupServices
         services.AddScoped<TimeoutMiddleware<TEntity>>();
         services.AddScoped<DispatchMessage<TEntity>>();
 
-        services.AddScoped<DeleteCompletedMessages<TEntity>>();
-        services.AddHostedService<BackgroundService<TEntity>>();
-        services.AddHostedService<CleanupBackgroundService<TEntity>>();
         services.TryAddScoped<ProcessMessagesOnSaveChangesInterceptor>();
 
         // services.AddSingleton<IDistributedLockProvider>(sp =>

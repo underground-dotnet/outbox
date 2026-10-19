@@ -135,9 +135,9 @@ public class ClaimTests : DatabaseTest
             await addContext.ExecuteInTransactionAsync(ct => inbox.AddMessageAsync(addContext, message, ct), cancellationToken);
         }
 
-        await using (var scope = provider.CreateAsyncScope())
+        await using (var scope = provider.CreateInboxScope())
         {
-            var context = scope.ServiceProvider.GetRequiredService<IInboxDbContext>();
+            var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
             var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<InboxMessage>>();
 
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -156,7 +156,7 @@ public class ClaimTests : DatabaseTest
         Assert.Null(stored.CompletedAt);
     }
 
-    private static async Task<DateTime?> ReadInboxCompletedAtAsync(IInboxDbContext context, CancellationToken cancellationToken)
+    private static async Task<DateTime?> ReadInboxCompletedAtAsync(InboxOutboxDbContext context, CancellationToken cancellationToken)
         => await context.InboxMessages.AsNoTracking().Select(m => m.CompletedAt).SingleAsync(cancellationToken);
 
     private static async Task AddOutboxMessageAsync(ServiceProvider provider, CancellationToken cancellationToken)
@@ -201,8 +201,8 @@ public class ClaimTests : DatabaseTest
         services.AddLogging(builder => builder.ConfigureTestLogger(_testOutputHelper));
         services.AddDbContext<InboxOutboxDbContext>(options => options.UseNpgsql(Database.ConnectionString));
         services.AddOutboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, _ => { });
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }

@@ -62,6 +62,12 @@ internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEnti
         // PostgreSQL table partitioning; this attribute is the documented exception.
         activity.SetTag("messaging.destination.partition.id", message.GroupKey);
 
+        // each Inbox receives its own copy of a message, which is what the conventions call a consumer group
+        if (message is InboxMessage inboxMessage)
+        {
+            activity.SetTag("messaging.consumer.group.name", inboxMessage.Inbox);
+        }
+
         activity.SetTag("underground.outbox.message.type", message.Type);
         activity.SetTag("underground.outbox.retry_count", message.RetryCount);
 

@@ -13,7 +13,15 @@ namespace Underground.Outbox.Data;
 internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration<TEntity>
     where TEntity : class, IMessage
 {
-    public void Configure(EntityTypeBuilder<TEntity> builder)
+    /// <summary>
+    /// Columns every index leads with, because each claim and sweep reads one Inbox's rows at a time. Empty
+    /// for the outbox, which holds a single set of Groups.
+    /// </summary>
+    protected virtual string[] LeadingIndexColumns => [];
+
+    private string[] IndexColumns(params string[] columns) => [.. LeadingIndexColumns, .. columns];
+
+    public virtual void Configure(EntityTypeBuilder<TEntity> builder)
     {
         // Properties are addressed by name, not by lambda: a lambda over TEntity reaches them through
         // IMessage, where the [Column] annotations are not.
@@ -35,17 +43,17 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         // to the unprocessed rows rather than the processed ones kept for the retention period.
         // The filter names the column literally because an IEntityTypeConfiguration runs before the
         // mapping annotations are applied; safe only because the names are fixed (ADR 0005).
-        builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
+        builder.HasIndex(IndexColumns(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id)))
             .HasFilter("\"completed_at\" IS NULL");
 
         // Serves the windowed claim, which walks the pending messages oldest first across every Group (ADR 0010).
-        builder.HasIndex(nameof(IMessage.TransactionId), nameof(IMessage.Id))
+        builder.HasIndex(IndexColumns(nameof(IMessage.TransactionId), nameof(IMessage.Id)))
             .HasFilter("\"completed_at\" IS NULL");
 
         // Serves the retention sweep, which deletes by completed_at. Complements the index above rather than
         // widening it: the two filters are disjoint, so together they stay proportional to the whole table
         // without either sweep paying for the other's rows.
-        builder.HasIndex(nameof(IMessage.CompletedAt))
+        builder.HasIndex(IndexColumns(nameof(IMessage.CompletedAt)))
             .HasFilter("\"completed_at\" IS NOT NULL");
     }
 }

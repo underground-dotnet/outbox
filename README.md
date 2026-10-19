@@ -7,6 +7,7 @@ background, in order per group, safely across multiple application instances.
 
 - **Outbox**: deliver an effect *outside* the database (HTTP call, Kafka publish) after your change commits. At-least-once.
 - **Inbox**: apply an incoming event to *this* database. Exactly-once, with duplicate suppression by `EventId`.
+  A database can host several named Inboxes, each applying its own copy of an event in its own transaction.
 
 ## Requirements
 
@@ -54,7 +55,7 @@ public class OrderShippedHandler : IOutboxMessageHandler<OrderShipped>
 
 Inbox handlers implement `IInboxMessageHandler<T>` the same way. Handlers are discovered automatically
 and registered as `Transient`; change that with `[MessageHandlerLifetime(ServiceLifetime.Scoped)]`.
-Each message type can have only one outbox and one inbox handler.
+Each message type can have only one outbox handler, and one inbox handler per Inbox.
 
 ### 4. Register the services
 
@@ -65,12 +66,33 @@ builder.Services.AddDbContext<AppDbContext>((sp, options) => options
     .AddInterceptors(sp.GetRequiredService<ProcessMessagesOnSaveChangesInterceptor>()));
 
 builder.Services.AddOutboxServices<AppDbContext>(cfg => { });
-builder.Services.AddInboxServices<AppDbContext>(cfg => { });
+builder.Services.AddInboxServices<AppDbContext>(inbox: "orders", cfg => { });
 
-// generated per project that declares handlers, named after its assembly
+// generated per project that declares handlers, named after its assembly; a project with inbox handlers
+// takes the Inbox they belong to
 builder.Services.AddMyAppMessageHandlers();
-builder.Services.AddMyOrdersModuleMessageHandlers();
+builder.Services.AddMyOrdersModuleMessageHandlers(inbox: "orders");
 ```
+
+### Several Inboxes
+
+An Inbox has a name, and one database may host several, each with its own handlers, workers, settings and
+`DbContext`. Typical use is a modular monolith whose modules each react to the same event in a transaction
+of their own:
+
+```csharp
+builder.Services.AddInboxServices<PaymentsContext>(inbox: "payments", cfg => { });
+builder.Services.AddInboxServices<ShippingContext>(inbox: "shipping", cfg => { });
+
+builder.Services.AddPaymentsMessageHandlers(inbox: "payments");
+builder.Services.AddShippingMessageHandlers(inbox: "shipping");
+```
+
+Adding or staging an `InboxMessage` writes one copy into every Inbox with a handler for its type, all with
+the same `EventId`; a type no Inbox handles is refused. Each Inbox applies its copy in a transaction on its
+own context, so one Inbox failing neither repeats nor holds back another. Groups belong to their Inbox:
+the same `GroupKey` in two Inboxes is two independent queues. Every context that writes inbox messages maps
+the one shared `inbox` table.
 
 ### 5. Add messages
 
@@ -94,7 +116,8 @@ await dbContext.ExecuteInTransactionAsync(async ct =>
 }, cancellationToken);
 ```
 
-The inbox works the same through `IInbox.AddMessageAsync` with an `InboxMessage`.
+The inbox works the same through `IInbox.AddMessageAsync` with an `InboxMessage`, which is written into
+every Inbox that handles its type. The instance you pass is copied, not tracked.
 
 Useful variations:
 
@@ -124,7 +147,7 @@ Pick a key per aggregate, account or customer: whatever must stay ordered. Leavi
 - **Outbox is at-least-once. Make outbox handlers idempotent.** A worker that dies, or a handler that times
   out, after the external effect but before recording success causes a second delivery.
 - **Inbox is exactly-once for database effects.** The handler runs in the same transaction that marks
-  the message handled. Under a retrying execution strategy the handler itself may run more than once,
+  the message handled, on its Inbox's own context; write through that context. Under a retrying execution strategy the handler itself may run more than once,
   so keep its effects inside that transaction.
 - Handlers receive a `CancellationToken` that fires after `HandlerTimeout`; honour it. An outbox handler
   that ignores it keeps its lease renewed, so its group waits until it returns
@@ -164,9 +187,11 @@ level the most specific exception type wins, like a `catch` block.
 - **The message type name is persisted.** Renaming or moving a message class orphans rows already in the
   table. Drain the table first, or keep the old type and its handler until it has drained. Avoid generic
   message types: their name includes assembly versions. On the inbox, external producers must write this
-  .NET type name into the `type` column.
-- **Inbox retention is your duplicate window.** Duplicates are rejected only while the original row
-  exists, so set `CompletedMessageRetention` to at least the longest redelivery window of your senders.
+  .NET type name into the `type` column, and the name of the Inbox into the `inbox` column.
+- **Removing an Inbox's handler for a type strands its messages.** They have no handler and block their
+  group. Drain them first.
+- **Inbox retention is your duplicate window.** Duplicates (the same `EventId` in one Inbox) are rejected
+  only while the original row exists, so set `CompletedMessageRetention` to at least the longest redelivery window of your senders.
 - **Table names are fixed** (`outbox`, `inbox`) and queried unqualified. If they live in a non-default
   schema, set it on the connection: `Search Path=app`.
   ([ADR 0005](docs/adr/0005-fixed-table-and-column-names.md))
@@ -175,7 +200,7 @@ level the most specific exception type wins, like a `catch` block.
 
 ## Configuration
 
-Set on `cfg` in `AddOutboxServices` / `AddInboxServices`:
+Set on `cfg` in `AddOutboxServices` / `AddInboxServices`; each Inbox has its own:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -198,7 +223,8 @@ builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
     .AddSource(OutboxTelemetry.ActivitySourceName));
 ```
 
-The library uses `System.Diagnostics.ActivitySource` and has no OpenTelemetry dependency. A span with
+An inbox span names its Inbox as `messaging.consumer.group.name`. The library uses
+`System.Diagnostics.ActivitySource` and has no OpenTelemetry dependency. A span with
 `error.type = duplicate_delivery` means an outbox effect will be carried out twice; it is worth alerting on.
 Messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace.
 

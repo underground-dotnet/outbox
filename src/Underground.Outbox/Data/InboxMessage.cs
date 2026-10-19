@@ -7,14 +7,14 @@ using Microsoft.EntityFrameworkCore;
 namespace Underground.Outbox.Data;
 
 /// <summary>
-/// An externally-originated event to be applied to this database.
+/// An event to be applied to this database, as one Inbox receives it.
 /// </summary>
 /// <remarks>
 /// The table and column names are fixed and may not be remapped; see
 /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
 /// </remarks>
 [Table("inbox")]
-[Index(nameof(EventId), IsUnique = true)]
+[Index(nameof(Inbox), nameof(EventId), IsUnique = true)]
 [EntityTypeConfiguration(typeof(InboxMessageConfiguration))]
 public class InboxMessage : IMessage, ITraceContextCarrier
 {
@@ -24,6 +24,13 @@ public class InboxMessage : IMessage, ITraceContextCarrier
     [Column("id")]
     [Key]
     public long Id { get; init; }
+
+    /// <summary>
+    /// The Inbox this message belongs to, whose Handler runs it. Assigned when the message is staged, which
+    /// writes one message into every Inbox that handles its type.
+    /// </summary>
+    [Column("inbox")]
+    public string Inbox { get; private set; } = string.Empty;
 
     [Column("event_id")]
     [DatabaseGenerated(DatabaseGeneratedOption.None)]
@@ -63,9 +70,10 @@ public class InboxMessage : IMessage, ITraceContextCarrier
 
     void ITraceContextCarrier.SetTraceParent(string? traceParent) => TraceParent = traceParent;
 
-    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
+    internal InboxMessage(long id, string inbox, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
         Id = id;
+        Inbox = inbox;
         EventId = eventId;
         TransactionId = transactionId;
         CreatedAt = createdAt;
@@ -80,7 +88,7 @@ public class InboxMessage : IMessage, ITraceContextCarrier
     /// <summary>
     /// Creates a message whose body is already serialized.
     /// </summary>
-    /// <param name="eventId">Identifies the message. A second message with the same value is rejected.</param>
+    /// <param name="eventId">Identifies the message. A second message with the same value in one Inbox is rejected.</param>
     /// <param name="createdAt">When the message was created, in UTC.</param>
     /// <param name="type">
     /// The message type's <see cref="System.Type.FullName"/>, which selects the handler. Supplying anything
@@ -109,7 +117,7 @@ public class InboxMessage : IMessage, ITraceContextCarrier
     /// Creates a message whose body is serialized to JSON, and whose type is taken from
     /// <paramref name="data"/>.
     /// </summary>
-    /// <param name="eventId">Identifies the message. A second message with the same value is rejected.</param>
+    /// <param name="eventId">Identifies the message. A second message with the same value in one Inbox is rejected.</param>
     /// <param name="createdAt">When the message was created, in UTC.</param>
     /// <param name="data">The message body.</param>
     /// <param name="groupKey">
@@ -132,4 +140,13 @@ public class InboxMessage : IMessage, ITraceContextCarrier
         Data = JsonSerializer.Serialize(data);
         VisibleAt = visibleAt.GetValueOrDefault();
     }
+
+    /// <summary>
+    /// This message's copy for one Inbox. Every copy carries the same EventId, which is unique per Inbox.
+    /// </summary>
+    internal InboxMessage AddressedTo(string inbox) =>
+        new(Id, inbox, EventId, TransactionId, CreatedAt, Type, GroupKey, Data, RetryCount, VisibleAt, CompletedAt)
+        {
+            TraceParent = TraceParent,
+        };
 }

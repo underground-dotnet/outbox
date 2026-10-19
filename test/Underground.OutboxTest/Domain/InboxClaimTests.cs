@@ -1,7 +1,11 @@
+using System.Data.Common;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+
+using Npgsql;
 
 using Underground.Outbox;
 using Underground.Outbox.Configuration;
@@ -42,13 +46,18 @@ public class InboxClaimTests : DatabaseTest
             {
                 declare.Transaction = claim.Transaction;
                 declare.CommandText = $"DECLARE claim_cursor NO SCROLL CURSOR FOR {claim.CommandText}";
+                foreach (DbParameter parameter in claim.Parameters)
+                {
+                    declare.Parameters.Add(((NpgsqlParameter)parameter).Clone());
+                }
+
                 await declare.ExecuteNonQueryAsync(ct);
             }
 
             // another worker's retry, whose backoff has already run out
             await using var otherWorker = CreateDbContext();
             await otherWorker.Database.ExecuteSqlAsync(
-                $"UPDATE inbox SET retry_count = retry_count + 1, visible_at = clock_timestamp() WHERE id = {message.Id}",
+                $"UPDATE inbox SET retry_count = retry_count + 1, visible_at = clock_timestamp() WHERE event_id = {message.EventId}",
                 ct);
 
             claim.CommandText = "FETCH ALL FROM claim_cursor";
@@ -129,7 +138,7 @@ public class InboxClaimTests : DatabaseTest
 
     private static async Task ProcessOnceAsync(ServiceProvider provider, CancellationToken cancellationToken)
     {
-        await using var scope = provider.CreateAsyncScope();
+        await using var scope = provider.CreateInboxScope();
         var processor = scope.ServiceProvider.GetRequiredService<IProcessor<InboxMessage>>();
 
         await processor.TryProcessHeadMessageAsync(cancellationToken);
@@ -146,8 +155,8 @@ public class InboxClaimTests : DatabaseTest
             .UseLoggerFactory(loggerFactory)
             .AddInterceptors(interceptor));
         services.AddOutboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, _ => { });
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }

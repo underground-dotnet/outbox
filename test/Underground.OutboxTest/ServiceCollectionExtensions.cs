@@ -18,7 +18,7 @@ public static class ServiceCollectionExtensions
 
         // every handler in this assembly is discovered, so each test sees all of them; their message
         // types are distinct, so a test only ever receives the messages it wrote
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services;
     }

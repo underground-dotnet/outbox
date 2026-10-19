@@ -53,7 +53,7 @@ public class SeparateDbContextTests : DatabaseTest
 
         // Act
         await provider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>().ProcessUntilIdleAsync(cancellationToken);
-        await provider.GetRequiredService<ConcurrentProcessor<InboxMessage>>().ProcessUntilIdleAsync(cancellationToken);
+        await provider.InboxWorkers().ProcessUntilIdleAsync(cancellationToken);
 
         // Assert
         Assert.Equal([1, 2], SeparateContextMessageHandler.CalledWith.Order());
@@ -73,15 +73,15 @@ public class SeparateDbContextTests : DatabaseTest
         if (outboxRegisteredFirst)
         {
             services.AddOutboxServices<TestDbContext>(_ => { });
-            services.AddInboxServices<InboxOnlyDbContext>(_ => { });
+            services.AddInboxServices<InboxOnlyDbContext>(TestInbox.Name, _ => { });
         }
         else
         {
-            services.AddInboxServices<InboxOnlyDbContext>(_ => { });
+            services.AddInboxServices<InboxOnlyDbContext>(TestInbox.Name, _ => { });
             services.AddOutboxServices<TestDbContext>(_ => { });
         }
 
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }

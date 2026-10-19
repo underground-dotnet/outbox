@@ -71,7 +71,7 @@ public class WindowedClaimTests : DatabaseTest
             cancellationToken);
 
         // Act
-        await provider.GetRequiredService<ConcurrentProcessor<InboxMessage>>().ProcessUntilIdleAsync(cancellationToken);
+        await provider.InboxWorkers().ProcessUntilIdleAsync(cancellationToken);
 
         // Assert
         Assert.Equal([BeyondTheWindow], BacklogMessageHandler.CalledWith);
@@ -150,8 +150,8 @@ public class WindowedClaimTests : DatabaseTest
             .UseLoggerFactory(loggerFactory)
             .AddInterceptors(interceptors));
         services.AddOutboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, _ => { });
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }

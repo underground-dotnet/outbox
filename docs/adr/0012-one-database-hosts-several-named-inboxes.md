@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # One database hosts several named Inboxes
@@ -31,8 +31,17 @@ naturally to one Inbox.
 ## Consequences
 
 Breaking: the column, the unique index moving to `(inbox, event_id)`, and the required name. An external
-producer writing rows directly must name the Inbox; forgetting fails its `INSERT` rather than leaving a
-row nobody claims.
+producer writing rows directly must name the Inbox; forgetting, or naming it empty, fails its `INSERT`
+rather than leaving a row nobody claims. A Handler bound to an Inbox nobody registered fails host start,
+because staging would otherwise write rows into it.
+
+The inbox's scoped services are registered once, not per Inbox. A worker binds each scope it opens to
+its Inbox, and the services read that Inbox's settings, Handlers and context from it, so the middleware
+did not have to learn about Inboxes.
+
+`IInboxMessageHandler<T>` is no longer registered in the container: with two Inboxes it names no single
+Handler, so a generated entry resolves its concrete Handler instead. Staging copies the caller's message
+once per Inbox and tracks the copies, not the instance passed in.
 
 Workers are per Inbox, so one Inbox's backlog never takes workers from another, at the cost of
 connections per Inbox. Every Inbox's write transaction still pins the shared watermark (ADR 0002), so a

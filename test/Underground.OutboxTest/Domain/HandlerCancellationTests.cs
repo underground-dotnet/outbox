@@ -75,7 +75,7 @@ public class HandlerCancellationTests : DatabaseTest
             cancellationToken);
 
         // Act
-        var result = await provider.GetRequiredService<ConcurrentProcessor<InboxMessage>>().ProcessNextAsync(cancellationToken);
+        var result = await provider.InboxWorkers().ProcessNextAsync(cancellationToken);
 
         // Assert: the savepoint was rolled back and the attempt still committed
         Assert.Equal(ClaimResult.HeadMessageClaimed, result);
@@ -95,8 +95,8 @@ public class HandlerCancellationTests : DatabaseTest
             .UseNpgsql(Database.ConnectionString)
             .UseLoggerFactory(loggerFactory));
         services.AddOutboxServices<InboxOutboxDbContext>(configureOutbox);
-        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, _ => { });
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }

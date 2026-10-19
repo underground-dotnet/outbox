@@ -83,7 +83,7 @@ public class HandlerRegistryTests
     public void AScopedHandlerOfSeveralMessageTypes_IsOneInstancePerScope()
     {
         var services = new ServiceCollection();
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
@@ -98,7 +98,7 @@ public class HandlerRegistryTests
     public void AScopedHandler_IsADifferentInstanceInAnotherScope()
     {
         var services = new ServiceCollection();
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         using var provider = services.BuildServiceProvider();
         using var first = provider.CreateScope();

@@ -227,9 +227,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine("#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member");
         sb.AppendLine($"public static class {identifier}HandlerRegistration");
         sb.AppendLine("{");
-        sb.AppendLine($"    /// <summary>Registers the message handlers declared in the {identifier} assembly.</summary>");
-        sb.AppendLine($"    public static IServiceCollection Add{identifier}MessageHandlers(this IServiceCollection services)");
-        sb.AppendLine("    {");
+        AppendMethodSignature(sb, identifier, bindsInbox: distinctHandlers.Any(h => h.Kind == HandlerKind.Inbox));
 
         AppendHandlerRegistrations(sb, distinctHandlers);
         sb.AppendLine();
@@ -249,9 +247,32 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Registers each handler once as its concrete type, and points every handler interface it implements
-    /// at that one registration. Registering each interface independently would give a Scoped handler of
-    /// two message types two instances per scope.
+    /// Opens the registration method. An assembly's inbox handlers all serve one Inbox, which the composition
+    /// root names, so the method takes that name only when the assembly declares any.
+    /// </summary>
+    private static void AppendMethodSignature(StringBuilder sb, string identifier, bool bindsInbox)
+    {
+        sb.AppendLine($"    /// <summary>Registers the message handlers declared in the {identifier} assembly.</summary>");
+        if (!bindsInbox)
+        {
+            sb.AppendLine($"    public static IServiceCollection Add{identifier}MessageHandlers(this IServiceCollection services)");
+            sb.AppendLine("    {");
+            return;
+        }
+
+        sb.AppendLine("    /// <param name=\"services\">The service collection to register the handlers with.</param>");
+        sb.AppendLine("    /// <param name=\"inbox\">The Inbox whose messages this assembly's inbox handlers run.</param>");
+        sb.AppendLine($"    public static IServiceCollection Add{identifier}MessageHandlers(this IServiceCollection services, string inbox)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        ArgumentException.ThrowIfNullOrWhiteSpace(inbox);");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Registers each handler once as its concrete type, and points every outbox handler interface it
+    /// implements at that one registration. Registering each interface independently would give a Scoped
+    /// handler of two message types two instances per scope. Inbox handler interfaces are not registered:
+    /// two Inboxes may each have a handler for one message type, so the interface names no single handler.
     /// </summary>
     private static void AppendHandlerRegistrations(StringBuilder sb, IEnumerable<HandlerClassInfo> handlers)
     {
@@ -261,7 +282,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 
             sb.AppendLine($"        services.TryAdd{lifetime}<{handler.Key}>();");
 
-            foreach (var registration in handler)
+            foreach (var registration in handler.Where(h => h.Kind == HandlerKind.Outbox))
             {
                 var iface = InterfaceName(registration);
                 sb.AppendLine($"        services.TryAdd{lifetime}<{iface}>(static serviceProvider => serviceProvider.GetRequiredService<{registration.HandlerFullName}>());");
@@ -276,6 +297,11 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         var iface = InterfaceName(handler);
 
         sb.AppendLine($"        services.AddSingleton(new HandlerEntry<{entity}>(");
+        if (handler.Kind == HandlerKind.Inbox)
+        {
+            sb.AppendLine("            inbox,");
+        }
+
         // the runtime spelling, which is what the write side stores; a literal would differ for nested and generic types
         sb.AppendLine($"            typeof({messageType}).FullName!,");
         sb.AppendLine($"            typeof({handler.HandlerFullName}),");
@@ -285,7 +311,10 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine($"                var payload = JsonSerializer.Deserialize<{messageType}>(message.Data)");
         // the id only: the body is application data, and this message ends up in logs and on spans
         sb.AppendLine("                    ?? throw new ParsingException($\"Cannot parse event body of message: {message.Id}\");");
-        sb.AppendLine($"                var handler = serviceProvider.GetRequiredService<{iface}>();");
+        // an inbox entry resolves its own handler, since the inbox interface is not registered
+        sb.AppendLine(handler.Kind == HandlerKind.Inbox
+            ? $"                {iface} handler = serviceProvider.GetRequiredService<{handler.HandlerFullName}>();"
+            : $"                var handler = serviceProvider.GetRequiredService<{iface}>();");
         sb.AppendLine("                try");
         sb.AppendLine("                {");
         sb.AppendLine("                    await handler.HandleAsync(payload, metadata, cancellationToken);");

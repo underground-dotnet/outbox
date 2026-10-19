@@ -26,7 +26,7 @@ public class MessageTypeNameTests
         var services = new ServiceCollection();
 
         // the generated registration is the only thing that puts handlers and entries in the container
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
         services.AddSingleton<HandlerRegistry<OutboxMessage>>();
 
         await using var provider = services.BuildServiceProvider();
@@ -78,7 +78,7 @@ public class MessageTypeNameTests
     public void Registry_IsKeyedOnTheStoredSpelling_ForNestedTypes()
     {
         var services = new ServiceCollection();
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
         services.AddSingleton<HandlerRegistry<OutboxMessage>>();
 
         using var provider = services.BuildServiceProvider();

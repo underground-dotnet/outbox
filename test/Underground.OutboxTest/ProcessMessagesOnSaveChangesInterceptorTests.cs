@@ -103,7 +103,8 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 
     private static OutboxMessage NewOutboxMessage() => new(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
 
-    private static InboxMessage NewInboxMessage() => new(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+    private static InboxMessage NewInboxMessage() =>
+        new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)).AddressedTo(TestInbox.Name);
 
     [Fact]
     public async Task Commit_DoesNotTriggerProcessing_WhenAnEarlierTransactionWasRolledBack()
@@ -159,6 +160,7 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
         // Assert
         Assert.Equal(1, outbox.ProcessMessagesCalls);
         Assert.Equal(1, inbox.ProcessMessagesCalls);
+        Assert.Equal([TestInbox.Name], inbox.NotifiedInboxes);
     }
 
     [Fact]
@@ -195,7 +197,15 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
     {
         public int ProcessMessagesCalls { get; private set; }
 
+        public List<string> NotifiedInboxes { get; } = [];
+
         public void ProcessMessages() => ProcessMessagesCalls++;
+
+        public void ProcessMessages(string inbox)
+        {
+            ProcessMessagesCalls++;
+            NotifiedInboxes.Add(inbox);
+        }
 
         public Task AddMessageAsync(IOutboxDbContext context, OutboxMessage message, CancellationToken cancellationToken) => throw new NotSupportedException();
 

@@ -10,7 +10,7 @@ namespace Underground.Outbox;
 /// Adds and Stages messages for one side, and wakes that side's workers. <see cref="IOutbox"/> and
 /// <see cref="IInbox"/> are this closed over each side's types, so a change to either path lands on both.
 /// </summary>
-internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntity> processor)
+internal abstract class MessageBox<TEntity, TContext>
     where TEntity : class, IMessage, ITraceContextCarrier
     where TContext : IDbContext
 {
@@ -32,13 +32,11 @@ internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntit
 
     public void StageMessage(TContext context, TEntity message) => StageMessages(context, [message]);
 
-    // an instance member because it implements IOutbox and IInbox
-#pragma warning disable CA1822, S2325 // Mark members as static
     public void StageMessages(TContext context, IEnumerable<TEntity> messages)
-#pragma warning restore CA1822, S2325 // Mark members as static
     {
-        // materialised once: the trace context is stamped in a pass of its own, and AddRange enumerates again
-        var toAdd = messages as IReadOnlyCollection<TEntity> ?? [.. messages];
+        // materialised once, and all addressed before any is added, so a message that cannot be staged leaves
+        // nothing of the call behind
+        List<TEntity> toAdd = [.. messages.SelectMany(Address)];
 
         var traceParent = Activity.Current?.Id;
         foreach (var message in toAdd)
@@ -49,5 +47,8 @@ internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntit
         context.Set<TEntity>().AddRange(toAdd);
     }
 
-    public void ProcessMessages() => processor.NotifyWork();
+    public abstract void ProcessMessages();
+
+    /// <summary>The rows staging a message writes.</summary>
+    protected abstract IEnumerable<TEntity> Address(TEntity message);
 }

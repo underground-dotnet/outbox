@@ -52,8 +52,8 @@ public class ExecutionStrategyTests : DatabaseTest
         });
 
         services.AddOutboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
-        services.AddUndergroundOutboxTestMessageHandlers();
+        services.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, _ => { });
+        services.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         return services.BuildServiceProvider();
     }
@@ -231,7 +231,9 @@ public class ExecutionStrategyTests : DatabaseTest
     private static async Task ProcessUntilAsync<TEntity>(IServiceProvider provider, Func<bool> handled, CancellationToken cancellationToken)
         where TEntity : class, IMessage
     {
-        var processor = provider.GetRequiredService<ConcurrentProcessor<TEntity>>();
+        var processor = typeof(TEntity) == typeof(InboxMessage)
+            ? (ConcurrentProcessor<TEntity>)(object)provider.InboxWorkers()
+            : provider.GetRequiredService<ConcurrentProcessor<TEntity>>();
         var deadline = DateTime.UtcNow.AddSeconds(10);
 
         do

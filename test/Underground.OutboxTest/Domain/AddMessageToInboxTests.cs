@@ -22,7 +22,8 @@ public class AddMessageToInboxTests : DatabaseTest
         var serviceCollection = new ServiceCollection();
         serviceCollection.AddLogging(builder => builder.ConfigureTestLogger(testOutputHelper));
         serviceCollection.AddDbContext<InboxOutboxDbContext>(options => ConfigureOptions(options));
-        serviceCollection.AddInboxServices<InboxOutboxDbContext>(cfg => { });
+        serviceCollection.AddInboxServices<InboxOutboxDbContext>(TestInbox.Name, cfg => { });
+        serviceCollection.AddUndergroundOutboxTestMessageHandlers(TestInbox.Name);
 
         _serviceProvider = serviceCollection.BuildServiceProvider();
     }
@@ -43,7 +44,7 @@ public class AddMessageToInboxTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var context = CreateInboxDbContext();
         var inbox = _serviceProvider.GetRequiredService<IInbox>();
-        var message = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(1));
+        var message = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new InboxRetryMessage(1));
 
         // Act
         await using (var transaction = await context.Database.BeginTransactionAsync(cancellationToken))
@@ -65,7 +66,7 @@ public class AddMessageToInboxTests : DatabaseTest
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var context = CreateInboxDbContext();
         var inbox = _serviceProvider.GetRequiredService<IInbox>();
-        var message = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(2));
+        var message = new InboxMessage(Guid.NewGuid(), DateTime.UtcNow, new InboxRetryMessage(2));
 
         // Act
         inbox.StageMessage(context, message);

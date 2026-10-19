@@ -18,14 +18,18 @@ namespace Underground.Outbox.Configuration;
 public static class GeneratorTestsHandlerRegistration
 {
     /// <summary>Registers the message handlers declared in the GeneratorTests assembly.</summary>
-    public static IServiceCollection AddGeneratorTestsMessageHandlers(this IServiceCollection services)
+    /// <param name="services">The service collection to register the handlers with.</param>
+    /// <param name="inbox">The Inbox whose messages this assembly's inbox handlers run.</param>
+    public static IServiceCollection AddGeneratorTestsMessageHandlers(this IServiceCollection services, string inbox)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inbox);
+
         services.TryAddTransient<global::Sample.InboxHandler>();
-        services.TryAddTransient<global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType>>(static serviceProvider => serviceProvider.GetRequiredService<global::Sample.InboxHandler>());
         services.TryAddTransient<global::Sample.OutboxHandler>();
         services.TryAddTransient<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.OutboxMessageType>>(static serviceProvider => serviceProvider.GetRequiredService<global::Sample.OutboxHandler>());
 
         services.AddSingleton(new HandlerEntry<InboxMessage>(
+            inbox,
             typeof(global::Sample.InboxMessageType).FullName!,
             typeof(global::Sample.InboxHandler),
             typeof(global::Sample.InboxMessageType),
@@ -33,7 +37,7 @@ public static class GeneratorTestsHandlerRegistration
             {
                 var payload = JsonSerializer.Deserialize<global::Sample.InboxMessageType>(message.Data)
                     ?? throw new ParsingException($"Cannot parse event body of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType>>();
+                global::Underground.Outbox.IInboxMessageHandler<global::Sample.InboxMessageType> handler = serviceProvider.GetRequiredService<global::Sample.InboxHandler>();
                 try
                 {
                     await handler.HandleAsync(payload, metadata, cancellationToken);

@@ -25,7 +25,10 @@ public sealed class HandlerEntry<TEntity> where TEntity : class, IMessage
     /// <summary>The payload type the message deserializes to.</summary>
     public MessageType MessageType { get; }
 
-    /// <summary>Creates an entry. Called from generated code.</summary>
+    /// <summary>The Inbox whose messages this entry runs; <see langword="null"/> for an outbox entry.</summary>
+    public string? Inbox { get; }
+
+    /// <summary>Creates an outbox entry. Called from generated code.</summary>
     /// <param name="messageTypeName">The stored <see cref="IMessage.Type"/> this entry answers to.</param>
     /// <param name="handlerType">The handler that runs it.</param>
     /// <param name="messageType">The payload type it deserializes to.</param>
@@ -40,6 +43,24 @@ public sealed class HandlerEntry<TEntity> where TEntity : class, IMessage
         HandlerType = handlerType;
         MessageType = messageType;
         _handle = handle;
+    }
+
+    /// <summary>Creates an entry for one Inbox. Called from generated code.</summary>
+    /// <param name="inbox">The Inbox whose messages this entry runs.</param>
+    /// <param name="messageTypeName">The stored <see cref="IMessage.Type"/> this entry answers to.</param>
+    /// <param name="handlerType">The handler that runs it.</param>
+    /// <param name="messageType">The payload type it deserializes to.</param>
+    /// <param name="handle">Deserializes the payload, resolves the handler and invokes it.</param>
+    public HandlerEntry(
+        string inbox,
+        string messageTypeName,
+        HandlerType handlerType,
+        MessageType messageType,
+        Func<IServiceProvider, TEntity, MessageMetadata, CancellationToken, Task> handle)
+        : this(messageTypeName, handlerType, messageType, handle)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(inbox);
+        Inbox = inbox;
     }
 
     /// <summary>Runs the message through its handler.</summary>

@@ -22,7 +22,7 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
 {
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private bool _hasOutboxChanges;
-    private bool _hasInboxChanges;
+    private readonly HashSet<string> _inboxesWithChanges = new(StringComparer.Ordinal);
     private Guid? _stagingTransactionId;
     private readonly ILogger<ProcessMessagesOnSaveChangesInterceptor> _logger = logger;
 
@@ -81,13 +81,18 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
         // accumulate: a transaction stages over several saves, and a later one adding nothing says nothing
         // about what an earlier one added
         _hasOutboxChanges |= context is IOutboxDbContext && context.ChangeTracker.Entries<OutboxMessage>().Any(entry => entry.State == EntityState.Added);
-        _hasInboxChanges |= context is IInboxDbContext && context.ChangeTracker.Entries<InboxMessage>().Any(entry => entry.State == EntityState.Added);
+        if (context is IInboxDbContext)
+        {
+            _inboxesWithChanges.UnionWith(context.ChangeTracker.Entries<InboxMessage>()
+                .Where(entry => entry.State == EntityState.Added)
+                .Select(entry => entry.Entity.Inbox));
+        }
     }
 
     private void TriggerProcessing()
     {
         var processOutbox = _hasOutboxChanges;
-        var processInbox = _hasInboxChanges;
+        string[] inboxes = [.. _inboxesWithChanges];
         ClearPendingChanges();
 
         if (processOutbox)
@@ -96,17 +101,23 @@ public sealed partial class ProcessMessagesOnSaveChangesInterceptor(IServiceProv
             _serviceProvider.GetRequiredService<IOutbox>().ProcessMessages();
         }
 
-        if (processInbox)
+        if (inboxes.Length > 0)
         {
             LogNewMessagesDetected("inbox");
-            _serviceProvider.GetRequiredService<IInbox>().ProcessMessages();
+
+            // only the Inboxes the transaction wrote to: the others have nothing new to look at
+            var inboxService = _serviceProvider.GetRequiredService<IInbox>();
+            foreach (var inbox in inboxes)
+            {
+                inboxService.ProcessMessages(inbox);
+            }
         }
     }
 
     private void ClearPendingChanges()
     {
         _hasOutboxChanges = false;
-        _hasInboxChanges = false;
+        _inboxesWithChanges.Clear();
         _stagingTransactionId = null;
     }
 

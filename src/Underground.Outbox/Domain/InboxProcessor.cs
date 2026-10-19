@@ -16,20 +16,22 @@ namespace Underground.Outbox.Domain;
 /// ADR 0002.
 /// </remarks>
 internal sealed class InboxProcessor(
-    IInboxDbContext dbContext,
+    MessageDbContext<InboxMessage> messageDbContext,
     ClaimHeadMessage<InboxMessage> claimHeadMessage,
     MessagePipeline<InboxMessage> pipeline
 ) : IProcessor<InboxMessage>
 {
+    private readonly IDbContext _dbContext = messageDbContext.Context;
+
     public async Task<ClaimResult> TryProcessHeadMessageAsync(CancellationToken cancellationToken)
     {
         // .net aspire compatability
         // One transaction spans the whole attempt, so the attempt is also what a transient failure
         // replays. See ADR 0006.
-        return await dbContext.ExecuteInTransactionAsync(async ct =>
+        return await _dbContext.ExecuteInTransactionAsync(async ct =>
         {
             // a replayed attempt inherits what the failed one tracked, whose transaction is gone
-            dbContext.ChangeTracker.Clear();
+            _dbContext.ChangeTracker.Clear();
 
             var claim = await claimHeadMessage.ExecuteAsync(ct).ConfigureAwait(false);
             if (claim is null)

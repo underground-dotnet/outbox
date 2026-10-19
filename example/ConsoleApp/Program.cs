@@ -30,13 +30,14 @@ builder.Services.AddOutboxServices<AppDbContext>(cfg =>
         .OnException<InvalidOperationException>().Discard()
         .OnException<TimeoutException>().Discard();
 });
-builder.Services.AddInboxServices<AppDbContext>(cfg =>
+builder.Services.AddInboxServices<AppDbContext>(inbox: "console", cfg =>
 {
     cfg.Policies.OnException<FileNotFoundException>().Discard();
 });
 
-// handlers are discovered; this registers the ones declared in this project
-builder.Services.AddConsoleAppMessageHandlers();
+// handlers are discovered; this registers the ones declared in this project, binding its inbox handlers to
+// the Inbox registered above
+builder.Services.AddConsoleAppMessageHandlers(inbox: "console");
 
 IHost host = builder.Build();
 

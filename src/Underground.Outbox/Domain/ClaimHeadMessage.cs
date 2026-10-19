@@ -65,15 +65,24 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
     /// Puts <paramref name="actOnClaimed"/> - the statement acting on the one row in a CTE named <c>claimed</c>,
     /// already locked for the calling transaction - behind the two ways of finding that row.
     /// </summary>
-    protected static string BuildStatement(string actOnClaimed)
-        => $"WITH {WindowedHeadMessageCtes()},\n{AllGroupsHeadMessageCtes()},\n{ClaimedCte()}\n{actOnClaimed}";
+    /// <param name="actOnClaimed">The statement acting on the claimed row.</param>
+    /// <param name="scopeColumn">
+    /// A column every row read must equal the like-named parameter in, confining the claim to one Inbox;
+    /// <see langword="null"/> to claim across the whole table.
+    /// </param>
+    protected static string BuildStatement(string actOnClaimed, string? scopeColumn = null)
+    {
+        string InScope(string alias) => scopeColumn is null ? "" : $"AND {alias}.{scopeColumn} = @{scopeColumn}";
+
+        return $"WITH {WindowedHeadMessageCtes(InScope)},\n{AllGroupsHeadMessageCtes(InScope)},\n{ClaimedCte(InScope)}\n{actOnClaimed}";
+    }
 
     /// <summary>
     /// HeadMessage discovery among the <see cref="HeadMessageWindow"/> oldest Stable messages not yet completed,
     /// walked oldest first and stopping at the first one that can be claimed, as two CTEs named
     /// <c>window_end</c> and <c>claimed_within_window</c>.
     /// </summary>
-    private static string WindowedHeadMessageCtes()
+    private static string WindowedHeadMessageCtes(Func<string, string> inScope)
     {
         // Exact rather than approximate: the window holds every Stable pending message up to its last one,
         // so if any message in it can be claimed, the oldest one that can be claimed anywhere is in it too.
@@ -90,11 +99,12 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
         return $"""
             window_end AS MATERIALIZED (
                 SELECT transaction_id, id FROM (
-                    SELECT transaction_id, id
-                    FROM {TEntity.TableName}
-                    WHERE completed_at IS NULL
-                    AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
-                    ORDER BY transaction_id, id
+                    SELECT w.transaction_id, w.id
+                    FROM {TEntity.TableName} w
+                    WHERE w.completed_at IS NULL
+                    {inScope("w")}
+                    AND w.transaction_id < pg_snapshot_xmin(pg_current_snapshot())
+                    ORDER BY w.transaction_id, w.id
                     LIMIT {HeadMessageWindow}
                 ) oldest
                 ORDER BY transaction_id DESC, id DESC
@@ -104,6 +114,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
                 SELECT m.*
                 FROM {TEntity.TableName} m
                 WHERE m.completed_at IS NULL
+                {inScope("m")}
                 AND (m.transaction_id, m.id) <= ((SELECT transaction_id FROM window_end), (SELECT id FROM window_end))
                 AND m.visible_at <= clock_timestamp()
                 AND m.id = (
@@ -111,6 +122,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
                     FROM {TEntity.TableName} e
                     WHERE e.group_key = m.group_key
                     AND e.completed_at IS NULL
+                    {inScope("e")}
                     ORDER BY e.transaction_id, e.id
                     LIMIT 1
                 )
@@ -128,7 +140,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
     /// so the schema is the deployment's to choose through <c>search_path</c>; see
     /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
     /// </summary>
-    private static string AllGroupsHeadMessageCtes()
+    private static string AllGroupsHeadMessageCtes(Func<string, string> inScope)
     {
         // Two steps, because a Group's HeadMessage is its lowest (transaction_id, id) *regardless of
         // visibility*; only then is visibility tested. Filtering by visible_at first would hand out the
@@ -157,11 +169,12 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
         // clock_timestamp() rather than now(), which is frozen for the transaction the inbox holds open.
         return $"""
             head_messages AS MATERIALIZED (
-                SELECT DISTINCT ON (group_key) id, transaction_id
-                FROM {TEntity.TableName}
-                WHERE completed_at IS NULL
-                AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
-                ORDER BY group_key, transaction_id, id
+                SELECT DISTINCT ON (g.group_key) g.id, g.transaction_id
+                FROM {TEntity.TableName} g
+                WHERE g.completed_at IS NULL
+                {inScope("g")}
+                AND g.transaction_id < pg_snapshot_xmin(pg_current_snapshot())
+                ORDER BY g.group_key, g.transaction_id, g.id
             ),
             claimed_across_all_groups AS (
                 SELECT m.*
@@ -180,7 +193,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
     /// The CTE named <c>claimed</c>: the claim within the window or, when that finds nothing and the window did
     /// not hold every Stable pending message, the claim across every Group.
     /// </summary>
-    private static string ClaimedCte()
+    private static string ClaimedCte(Func<string, string> inScope)
     {
         // A WITH query is evaluated only as far as its reader fetches, and the gate is a one-time filter, so the
         // claim across every Group runs only when the window claimed nothing and a Stable message lies beyond it.
@@ -202,6 +215,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
                     SELECT b.id
                     FROM {TEntity.TableName} b
                     WHERE b.completed_at IS NULL
+                    {inScope("b")}
                     AND b.transaction_id < pg_snapshot_xmin(pg_current_snapshot())
                     AND (b.transaction_id, b.id) > ((SELECT transaction_id FROM window_end), (SELECT id FROM window_end))
                     ORDER BY b.transaction_id, b.id
