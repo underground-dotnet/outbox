@@ -11,8 +11,15 @@ as the business change that justified it. Its handler is delivered **at-least-on
 idempotent, because the effect cannot be rolled back with the database.
 _Avoid_: Event, publication, outgoing message
 
+**Inbox**:
+A named recipient of Inbox Messages. One database may host several, told apart by name, each with its
+own Handlers, its own Groups and its own duplicate window. A message staged for every Inbox that handles
+its type becomes one Inbox Message in each of them.
+_Avoid_: Subscriber, consumer *(both already wrong words for Handler)*, queue *(a Group is the queue)*,
+channel
+
 **Inbox Message**:
-A record of an externally-originated event to be applied *to* this database. Its Handler runs in the
+A record of an event to be applied *to* this database, belonging to exactly one Inbox. Its Handler runs in the
 same transaction as the bookkeeping that records the message as handled, so its effect on this
 database lands **exactly once**. The Handler itself may be *run* again if that transaction is
 replayed, which is why an inbox Handler's effects must not leave it.
@@ -26,7 +33,8 @@ commits with the change that justified it.
 _Avoid_: Enqueue, buffer, pend, queue *(a Group is the queue)*
 
 **Group**:
-The set of messages that must be handled one at a time, in order, identified by `GroupKey`. Two
+The set of messages that must be handled one at a time, in order, identified by `GroupKey` within its
+Inbox (the outbox has a single set of groups). Two
 messages of the same group are never in flight simultaneously; two messages of different groups
 may be. This is the unit of both ordering and concurrency, and the only source of parallelism.
 _Avoid_: Partition, lane, stream, shard
@@ -82,8 +90,8 @@ _Avoid_: Scope *(taken - a Scope is the `IServiceScope` one message is Processed
 one of the lifetimes)*, handler scope, DI scope
 
 **Handler Registry**:
-The map from a message's stored `Type` to the one Handler that may run it, built as the host starts from
-the Handler Entries every assembly contributed. Two assemblies claiming one message type is a
+The map, per Inbox and for the outbox, from a message's stored `Type` to the one Handler that may run it, built as the host starts from
+the Handler Entries every assembly contributed. Two assemblies claiming one message type in the same Inbox is a
 contradiction the Registry refuses rather than resolves, which is why building it can fail.
 _Avoid_: Dispatch table *(a table is a Postgres table here)*, routing table *(routing implies a choice
 among destinations; this is an exact match where two candidates are an error)*, handler map
