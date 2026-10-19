@@ -11,6 +11,7 @@ internal static class GeneratorTestHelper
 {
     public static GeneratorDriverRunResult Run(string source) => Run(source, referencedSource: null);
 
+    /// <summary>Runs the generator on <paramref name="source"/> compiled against <paramref name="referencedSource"/>.</summary>
     /// <param name="source">The assembly the generator runs on.</param>
     /// <param name="referencedSource">An assembly <paramref name="source"/> references, which the generator does not run on.</param>
     public static GeneratorDriverRunResult Run(string source, string? referencedSource)
