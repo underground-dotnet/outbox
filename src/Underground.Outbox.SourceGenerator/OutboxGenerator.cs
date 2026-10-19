@@ -37,6 +37,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             .CreateSyntaxProvider(
                 predicate: static (s, _) => IsSyntaxTargetForGeneration(s),
                 transform: static (ctx, _) => GetSemanticTargetsForGeneration(ctx))
+            .WithTrackingName("HandlerClasses")
             .SelectMany(static (handlers, _) => handlers)
             .Collect()
             .Select(static (handlers, _) => ToEquatableList(handlers));
@@ -67,18 +68,18 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         node is ClassDeclarationSyntax { BaseList: not null, TypeParameterList: null } classDecl
         && !classDecl.Modifiers.Any(SyntaxKind.AbstractKeyword);
 
-    private static ImmutableArray<HandlerClassInfo> GetSemanticTargetsForGeneration(GeneratorSyntaxContext context)
+    private static EquatableList<HandlerClassInfo> GetSemanticTargetsForGeneration(GeneratorSyntaxContext context)
     {
         var classDeclaration = (ClassDeclarationSyntax)context.Node;
 
         if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol classSymbol)
         {
-            return ImmutableArray<HandlerClassInfo>.Empty;
+            return [];
         }
 
         if (classSymbol.IsAbstract || IsOpenGeneric(classSymbol))
         {
-            return ImmutableArray<HandlerClassInfo>.Empty;
+            return [];
         }
 
         var compilation = context.SemanticModel.Compilation;
@@ -87,11 +88,11 @@ public sealed class OutboxGenerator : IIncrementalGenerator
 
         if (outbox is null && inbox is null)
         {
-            return ImmutableArray<HandlerClassInfo>.Empty;
+            return [];
         }
 
         var lifetime = ReadLifetime(classSymbol);
-        var builder = ImmutableArray.CreateBuilder<HandlerClassInfo>();
+        var handlers = new EquatableList<HandlerClassInfo>();
 
         foreach (var iface in classSymbol.AllInterfaces)
         {
@@ -108,14 +109,14 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             }
 
             // fully qualified, so a user namespace cannot shadow a type argument's own namespace
-            builder.Add(new HandlerClassInfo(
+            handlers.Add(new HandlerClassInfo(
                 classSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 iface.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 kind.Value,
                 lifetime));
         }
 
-        return builder.ToImmutable();
+        return handlers;
     }
 
     /// <summary>

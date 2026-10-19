@@ -390,6 +390,31 @@ public class OutboxGeneratorTest
         AssertNothingGenerated(result);
     }
 
+    [Fact]
+    public void Caches_discovered_handlers_across_an_unrelated_edit()
+    {
+        var result = GeneratorTestHelper.RunAfterUnrelatedEdit("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(string Text);
+
+            public sealed class TestMessageHandler : IOutboxMessageHandler<TestMessage>
+            {
+                public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        var outputs = result.TrackedSteps["HandlerClasses"].SelectMany(step => step.Outputs);
+
+        Assert.All(outputs, output => Assert.Equal(IncrementalStepRunReason.Unchanged, output.Reason));
+    }
+
     private static void AssertNothingGenerated(GeneratorDriverRunResult result)
     {
         Assert.Empty(result.GeneratedTrees);
