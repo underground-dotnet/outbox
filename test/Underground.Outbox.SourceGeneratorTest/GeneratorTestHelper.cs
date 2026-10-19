@@ -39,6 +39,25 @@ internal static class GeneratorTestHelper
         return driver.RunGenerators(compilation).GetRunResult();
     }
 
+    /// <summary>Runs the generator on <paramref name="source"/>, then again after an unrelated file is added.</summary>
+    public static GeneratorRunResult RunAfterUnrelatedEdit(string source)
+    {
+        var compilation = CSharpCompilation.Create(
+            assemblyName: "GeneratorTests",
+            syntaxTrees: [CSharpSyntaxTree.ParseText(source)],
+            references: GetReferences());
+
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            [new OutboxGenerator().AsSourceGenerator()],
+            driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
+
+        driver = driver.RunGenerators(compilation);
+
+        var edited = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Sample; public sealed class Unrelated;"));
+
+        return driver.RunGenerators(edited).GetRunResult().Results.Single();
+    }
+
     /// <summary>
     /// The generator compares interface symbols rather than their spelling, so the compilation has to be
     /// able to resolve them - which takes the runtime assemblies as well as this library's own.
