@@ -13,8 +13,9 @@ internal sealed class ClaimInboxHeadMessage(
     ILoggerFactory loggerFactory
 ) : ClaimHeadMessage<InboxMessage>(dbContext, loggerFactory)
 {
-    // the CTE's lock is held until the transaction ends, so this only hands out the row version it locked
-    private static readonly string ClaimStatement = BuildStatement("SELECT * FROM claimed");
+    // The CTE's lock is held until the transaction ends, so this only hands out the row version it locked.
+    // A Group belongs to one Recipient, so one Recipient's stalled message never holds back another's (ADR 0012).
+    private static readonly string ClaimStatement = BuildStatement("SELECT * FROM claimed", "recipient", "group_key");
 
     protected override string Statement => ClaimStatement;
 }

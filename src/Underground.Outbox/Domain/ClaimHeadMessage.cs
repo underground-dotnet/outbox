@@ -65,16 +65,20 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
     /// Puts <paramref name="actOnClaimed"/> - the statement acting on the one row in a CTE named <c>claimed</c>,
     /// already locked for the calling transaction - behind the two ways of finding that row.
     /// </summary>
-    protected static string BuildStatement(string actOnClaimed)
-        => $"WITH {WindowedHeadMessageCtes()},\n{AllGroupsHeadMessageCtes()},\n{ClaimedCte()}\n{actOnClaimed}";
+    /// <param name="actOnClaimed">The statement acting on the claimed row.</param>
+    /// <param name="groupColumns">The columns that together identify a Group on this side.</param>
+    protected static string BuildStatement(string actOnClaimed, params string[] groupColumns)
+        => $"WITH {WindowedHeadMessageCtes(groupColumns)},\n{AllGroupsHeadMessageCtes(groupColumns)},\n{ClaimedCte()}\n{actOnClaimed}";
 
     /// <summary>
     /// HeadMessage discovery among the <see cref="HeadMessageWindow"/> oldest Stable messages not yet completed,
     /// walked oldest first and stopping at the first one that can be claimed, as two CTEs named
     /// <c>window_end</c> and <c>claimed_within_window</c>.
     /// </summary>
-    private static string WindowedHeadMessageCtes()
+    private static string WindowedHeadMessageCtes(string[] groupColumns)
     {
+        var sameGroup = string.Join(" AND ", groupColumns.Select(column => $"e.{column} = m.{column}"));
+
         // Exact rather than approximate: the window holds every Stable pending message up to its last one,
         // so if any message in it can be claimed, the oldest one that can be claimed anywhere is in it too.
         //
@@ -109,7 +113,7 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
                 AND m.id = (
                     SELECT e.id
                     FROM {TEntity.TableName} e
-                    WHERE e.group_key = m.group_key
+                    WHERE {sameGroup}
                     AND e.completed_at IS NULL
                     ORDER BY e.transaction_id, e.id
                     LIMIT 1
@@ -128,8 +132,10 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
     /// so the schema is the deployment's to choose through <c>search_path</c>; see
     /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
     /// </summary>
-    private static string AllGroupsHeadMessageCtes()
+    private static string AllGroupsHeadMessageCtes(string[] groupColumns)
     {
+        var group = string.Join(", ", groupColumns);
+
         // Two steps, because a Group's HeadMessage is its lowest (transaction_id, id) *regardless of
         // visibility*; only then is visibility tested. Filtering by visible_at first would hand out the
         // message behind a HeadMessage in backoff, which is the reordering this design exists to prevent.
@@ -157,11 +163,11 @@ internal abstract class ClaimHeadMessage<TEntity>(IDbContext dbContext, ILoggerF
         // clock_timestamp() rather than now(), which is frozen for the transaction the inbox holds open.
         return $"""
             head_messages AS MATERIALIZED (
-                SELECT DISTINCT ON (group_key) id, transaction_id
+                SELECT DISTINCT ON ({group}) id, transaction_id
                 FROM {TEntity.TableName}
                 WHERE completed_at IS NULL
                 AND transaction_id < pg_snapshot_xmin(pg_current_snapshot())
-                ORDER BY group_key, transaction_id, id
+                ORDER BY {group}, transaction_id, id
             ),
             claimed_across_all_groups AS (
                 SELECT m.*

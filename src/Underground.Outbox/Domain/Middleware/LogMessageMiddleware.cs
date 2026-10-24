@@ -12,11 +12,17 @@ internal sealed partial class LogMessageMiddleware<TEntity>(
     ILogger<LogMessageMiddleware<TEntity>> logger
 ) : IMessageMiddleware<TEntity> where TEntity : class, IMessage
 {
+    private static readonly Func<ILogger, string, IDisposable?> RecipientScope =
+        LoggerMessage.DefineScope<string>("Recipient {Recipient}");
+
     private readonly ILogger<LogMessageMiddleware<TEntity>> _logger = logger;
 
     public async Task<ProcessingAttempt> ExecuteAsync(Claim<TEntity> claim, MessageMiddlewareDelegate next, CancellationToken cancellationToken)
     {
         var message = claim.Message;
+
+        // a scope rather than a field of each line, so whatever the Handler logs carries the Recipient too
+        using var scope = message is IAddressedMessage addressed ? RecipientScope(_logger, addressed.Recipient) : null;
 
         LogProcessingMessage(message.Id, typeof(TEntity).ToString(), message.GroupKey);
 

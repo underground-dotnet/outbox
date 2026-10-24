@@ -26,7 +26,7 @@ internal sealed class ClaimOutboxHeadMessage(
         FROM claimed c
         WHERE m.id = c.id
         RETURNING m.*
-        """);
+        """, "group_key");
 
     protected override string Statement => ClaimStatement;
 

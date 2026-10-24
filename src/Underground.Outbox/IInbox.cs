@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
 using Underground.Outbox.Data;
+using Underground.Outbox.Exceptions;
 
 namespace Underground.Outbox;
 
@@ -12,6 +13,7 @@ public interface IInbox
     /// <exception cref="DbUpdateException">
     /// When a message with the same EventId already exists in the inbox.
     /// </exception>
+    /// <exception cref="NoInboxHandlerException">When no inbox Handler handles the message's type.</exception>
     public Task AddMessageAsync(IInboxDbContext context, InboxMessage message, CancellationToken cancellationToken);
 
     /// <summary>
@@ -21,10 +23,12 @@ public interface IInbox
     /// <exception cref="DbUpdateException">
     /// When a message with the same EventId already exists in the inbox.
     /// </exception>
+    /// <exception cref="NoInboxHandlerException">When no inbox Handler handles one of the messages' types.</exception>
     public Task AddMessagesAsync(IInboxDbContext context, IEnumerable<InboxMessage> messages, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Stages a message in the caller's unit of work, without saving it.
+    /// Stages a message in the caller's unit of work, without saving it: one row per inbox Handler of its type,
+    /// each addressed to that Handler as its Recipient. <paramref name="message"/> itself is the first of them.
     /// </summary>
     /// <remarks>
     /// Unlike <see cref="AddMessageAsync"/>, this neither saves nor requires an active transaction — the
@@ -33,14 +37,17 @@ public interface IInbox
     /// staged outside an explicit transaction triggers no push-based processing; it is picked up by the next
     /// processing cycle, or at once if the caller calls <see cref="ProcessMessages"/>.
     /// </remarks>
+    /// <exception cref="NoInboxHandlerException">When no inbox Handler handles the message's type.</exception>
     public void StageMessage(IInboxDbContext context, InboxMessage message);
 
     /// <summary>
     /// Stages several messages in the caller's unit of work, without saving them.
     /// </summary>
     /// <remarks>
-    /// See <see cref="StageMessage"/>: the caller owns the save and the transaction.
+    /// See <see cref="StageMessage"/>: the caller owns the save and the transaction. If any message has no
+    /// inbox Handler, none of them is staged.
     /// </remarks>
+    /// <exception cref="NoInboxHandlerException">When no inbox Handler handles one of the messages' types.</exception>
     public void StageMessages(IInboxDbContext context, IEnumerable<InboxMessage> messages);
 
     /// <summary>

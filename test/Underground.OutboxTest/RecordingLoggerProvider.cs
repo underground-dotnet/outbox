@@ -12,12 +12,16 @@ namespace Underground.OutboxTest;
 public sealed class RecordingLoggerProvider : ILoggerProvider
 {
     private readonly ConcurrentQueue<(LogLevel Level, string Message)> _entries = new();
+    private readonly ConcurrentQueue<string> _scopes = new();
 
     /// <summary>Every entry written so far, oldest first.</summary>
     public IReadOnlyCollection<(LogLevel Level, string Message)> Entries => _entries;
 
-    /// <summary>Hands out a logger that records into the one shared queue, whatever its category.</summary>
-    public ILogger CreateLogger(string categoryName) => new RecordingLogger(_entries);
+    /// <summary>Every scope begun so far, as its state formats itself, oldest first.</summary>
+    public IReadOnlyCollection<string> Scopes => _scopes;
+
+    /// <summary>Hands out a logger that records into the shared queues, whatever its category.</summary>
+    public ILogger CreateLogger(string categoryName) => new RecordingLogger(_entries, _scopes);
 
     /// <summary>Does nothing: the entries outlive the provider so a test can still read them.</summary>
     public void Dispose()
@@ -25,9 +29,13 @@ public sealed class RecordingLoggerProvider : ILoggerProvider
         // nothing to release: the entries outlive the provider so a test can still read them
     }
 
-    private sealed class RecordingLogger(ConcurrentQueue<(LogLevel, string)> entries) : ILogger
+    private sealed class RecordingLogger(ConcurrentQueue<(LogLevel, string)> entries, ConcurrentQueue<string> scopes) : ILogger
     {
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull
+        {
+            scopes.Enqueue(state.ToString() ?? "");
+            return null;
+        }
 
         public bool IsEnabled(LogLevel logLevel) => true;
 

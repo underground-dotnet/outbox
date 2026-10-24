@@ -31,7 +31,7 @@ public static class GeneratorTestsHandlerRegistration
             {
                 var payload = JsonSerializer.Deserialize<global::Sample.Envelope<global::Sample.Payload>>(message.Data)
                     ?? throw new ParsingException($"Cannot parse event body of message: {message.Id}");
-                var handler = serviceProvider.GetRequiredService<global::Underground.Outbox.IOutboxMessageHandler<global::Sample.Envelope<global::Sample.Payload>>>();
+                global::Underground.Outbox.IOutboxMessageHandler<global::Sample.Envelope<global::Sample.Payload>> handler = serviceProvider.GetRequiredService<global::Sample.EnvelopeHandler>();
                 try
                 {
                     await handler.HandleAsync(payload, metadata, cancellationToken);

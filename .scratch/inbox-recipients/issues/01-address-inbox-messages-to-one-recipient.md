@@ -38,3 +38,13 @@ each addressed to that Handler as its Recipient, and each Recipient has Groups o
 - Two outbox Handlers of one type still fail the host at startup, and `OUTBOX001` still reports
   within one assembly; two inbox Handlers of one type do not.
 - Generator snapshot tests cover an assembly declaring two inbox Handlers of one type.
+
+## Comments
+
+**Implemented.** One deviation: only the Group index leads with `recipient`, now
+(`recipient`, `group_key`, `transaction_id`, `id`). The (`transaction_id`, `id`) index stays as it is: the
+windowed claim and the probe beyond the window walk it oldest first across every Group (ADR 0010), which a
+leading `recipient` would turn into a sort. The retention index on `completed_at` is likewise unchanged.
+
+Also fixed on the way: generated Handler Entries resolved their Handler through `IInboxMessageHandler<T>`,
+which with two Handlers of one type ran the same one for both entries; they now resolve the concrete Handler.

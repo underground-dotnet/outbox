@@ -18,6 +18,9 @@ public class HandlerRegistryTests
     private static HandlerEntry<OutboxMessage> Entry(string messageTypeName, Type handlerType) =>
         new(messageTypeName, handlerType, typeof(ExampleMessage), (_, _, _, _) => Task.CompletedTask);
 
+    private static HandlerEntry<InboxMessage> InboxEntry(string messageTypeName, Type handlerType) =>
+        new(messageTypeName, handlerType, typeof(ExampleMessage), (_, _, _, _) => Task.CompletedTask);
+
     [Fact]
     public void Throws_WhenTwoHandlersClaimTheSameMessageType()
     {
@@ -73,6 +76,43 @@ public class HandlerRegistryTests
         var registry = new HandlerRegistry<OutboxMessage>([Entry("Sample.Message", typeof(ExampleMessageHandler))]);
 
         Assert.False(registry.TryGetEntry("Sample.Other", out _));
+    }
+
+    [Fact]
+    public void FindsEachInboxHandlerOfOneMessageType_ByItsRecipient()
+    {
+        var registry = new HandlerRegistry<InboxMessage>(
+        [
+            InboxEntry("Sample.Message", typeof(ExampleMessageHandler)),
+            InboxEntry("Sample.Message", typeof(SecondMessageHandler)),
+        ]);
+
+        Assert.True(registry.TryGetEntry("Sample.Message", "Underground.OutboxTest.TestHandler.ExampleMessageHandler", out var first));
+        Assert.True(registry.TryGetEntry("Sample.Message", "Underground.OutboxTest.TestHandler.SecondMessageHandler", out var second));
+        Assert.Equal(typeof(ExampleMessageHandler), first.HandlerType);
+        Assert.Equal(typeof(SecondMessageHandler), second.HandlerType);
+    }
+
+    [Fact]
+    public void DoesNotFindAnInboxEntry_ForAnUnknownRecipient()
+    {
+        var registry = new HandlerRegistry<InboxMessage>([InboxEntry("Sample.Message", typeof(ExampleMessageHandler))]);
+
+        Assert.False(registry.TryGetEntry("Sample.Message", "Sample.RemovedHandler", out _));
+    }
+
+    [Fact]
+    public void StartsTheHost_WhenTwoInboxHandlersClaimTheSameMessageType()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInboxServices<InboxOutboxDbContext>(_ => { });
+        services.AddSingleton(InboxEntry("Sample.Message", typeof(ExampleMessageHandler)));
+        services.AddSingleton(InboxEntry("Sample.Message", typeof(SecondMessageHandler)));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotEmpty(provider.GetRequiredService<IEnumerable<IHostedService>>());
     }
 
     /// <summary>

@@ -35,7 +35,8 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         // to the unprocessed rows rather than the processed ones kept for the retention period.
         // The filter names the column literally because an IEntityTypeConfiguration runs before the
         // mapping annotations are applied; safe only because the names are fixed (ADR 0005).
-        builder.HasIndex(nameof(IMessage.GroupKey), nameof(IMessage.TransactionId), nameof(IMessage.Id))
+        string[] headMessageOrder = [.. GroupProperties, nameof(IMessage.TransactionId), nameof(IMessage.Id)];
+        builder.HasIndex(headMessageOrder)
             .HasFilter("\"completed_at\" IS NULL");
 
         // Serves the windowed claim, which walks the pending messages oldest first across every Group (ADR 0010).
@@ -48,4 +49,7 @@ internal abstract class MessageConfiguration<TEntity> : IEntityTypeConfiguration
         builder.HasIndex(nameof(IMessage.CompletedAt))
             .HasFilter("\"completed_at\" IS NOT NULL");
     }
+
+    /// <summary>The properties that together identify a Group on this side, in the order HeadMessage lookup groups by.</summary>
+    protected virtual string[] GroupProperties => [nameof(IMessage.GroupKey)];
 }

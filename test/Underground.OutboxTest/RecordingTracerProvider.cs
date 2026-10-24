@@ -48,5 +48,13 @@ public sealed class RecordingTracerProvider : IDisposable
         return _exported.Single(activity => Equals(activity.GetTagItem("messaging.message.id"), eventId));
     }
 
+    /// <summary>Every span this library emitted for the given event, one per Recipient on the inbox.</summary>
+    public IReadOnlyList<Activity> SpansFor(Guid eventId)
+    {
+        _provider.ForceFlush();
+
+        return [.. _exported.Where(activity => Equals(activity.GetTagItem("messaging.message.id"), eventId))];
+    }
+
     public void Dispose() => _provider.Dispose();
 }
