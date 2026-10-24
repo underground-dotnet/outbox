@@ -18,6 +18,12 @@ database lands **exactly once**. The Handler itself may be *run* again if that t
 replayed, which is why an inbox Handler's effects must not leave it.
 _Avoid_: Incoming message, consumed event
 
+**Recipient**:
+The one Handler an Inbox Message is addressed to. An event several Handlers must apply is stored once
+per Recipient, so each applies it in a transaction of its own and one failing leaves the others
+untouched. Renaming a Handler orphans the messages already addressed to it.
+_Avoid_: Key, handler key, consumer, subscriber, destination, target
+
 **Stage**:
 To put a message into the caller's unit of work without writing it, leaving it to whichever `SaveChanges`
 the caller makes next. Adding is Staging plus that save, in a transaction this library verified; Staging
