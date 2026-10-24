@@ -32,7 +32,8 @@ commits with the change that justified it.
 _Avoid_: Enqueue, buffer, pend, queue *(a Group is the queue)*
 
 **Group**:
-The set of messages that must be handled one at a time, in order, identified by `GroupKey`. Two
+The set of messages that must be handled one at a time, in order, identified by `GroupKey` and, on
+the inbox, by Recipient as well, so one Recipient's stalled message never holds back another's. Two
 messages of the same group are never in flight simultaneously; two messages of different groups
 may be. This is the unit of both ordering and concurrency, and the only source of parallelism.
 _Avoid_: Partition, lane, stream, shard
@@ -88,9 +89,11 @@ _Avoid_: Scope *(taken - a Scope is the `IServiceScope` one message is Processed
 one of the lifetimes)*, handler scope, DI scope
 
 **Handler Registry**:
-The map from a message's stored `Type` to the one Handler that may run it, built as the host starts from
-the Handler Entries every assembly contributed. Two assemblies claiming one message type is a
-contradiction the Registry refuses rather than resolves, which is why building it can fail.
+The map from a message to the one Handler that may run it, built as the host starts from the Handler
+Entries every assembly contributed. On the outbox a message's stored `Type` selects it, and two
+Handlers claiming one message type is a contradiction the Registry refuses rather than resolves, which
+is why building it can fail. On the inbox a message type may have many Handlers, and its Recipient
+selects one.
 _Avoid_: Dispatch table *(a table is a Postgres table here)*, routing table *(routing implies a choice
 among destinations; this is an exact match where two candidates are an error)*, handler map
 
