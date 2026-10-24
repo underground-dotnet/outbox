@@ -1,8 +1,8 @@
 namespace Underground.Outbox.Exceptions;
 
 /// <summary>
-/// Thrown when two handlers claim the same message type, so which one would run is not something the
-/// author chose.
+/// Thrown when two handlers claim the same outbox message type, so which one would run is not something the
+/// author chose. An inbox message type may have several handlers, each its own Recipient.
 /// </summary>
 /// <remarks>
 /// Within one assembly the source generator reports this at compile time as OUTBOX001. Across
@@ -28,7 +28,7 @@ public class CompetingHandlersException : Exception
         string messageTypeName,
         HandlerType existingHandlerType,
         HandlerType competingHandlerType)
-        : base($"Message type '{messageTypeName}' is claimed by more than one handler ({existingHandlerType.FullName}, {competingHandlerType.FullName}). Only one handler may run a message type.")
+        : base($"Message type '{messageTypeName}' is claimed by more than one handler ({existingHandlerType.FullName}, {competingHandlerType.FullName}). Only one handler may run an outbox message type.")
     {
         MessageTypeName = messageTypeName;
         ExistingHandlerType = existingHandlerType;

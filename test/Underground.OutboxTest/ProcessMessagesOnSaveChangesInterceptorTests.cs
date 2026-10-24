@@ -103,7 +103,8 @@ public class ProcessMessagesOnSaveChangesInterceptorTests : DatabaseTest
 
     private static OutboxMessage NewOutboxMessage() => new(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
 
-    private static InboxMessage NewInboxMessage() => new(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10));
+    // added to the DbSet rather than Staged, so addressed here; nothing processes it
+    private static InboxMessage NewInboxMessage() => new(Guid.NewGuid(), DateTime.UtcNow, new ExampleMessage(10)) { Recipient = "Sample.Handler" };
 
     [Fact]
     public async Task Commit_DoesNotTriggerProcessing_WhenAnEarlierTransactionWasRolledBack()

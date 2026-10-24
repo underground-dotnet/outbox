@@ -54,7 +54,8 @@ public class OrderShippedHandler : IOutboxMessageHandler<OrderShipped>
 
 Inbox handlers implement `IInboxMessageHandler<T>` the same way. Handlers are discovered automatically
 and registered as `Transient`; change that with `[MessageHandlerLifetime(ServiceLifetime.Scoped)]`.
-Each message type can have only one outbox and one inbox handler.
+Each message type can have only one outbox handler. An inbox message type can have several; each gets
+a copy of the message of its own (see [Inbox handlers of one message type](#inbox-handlers-of-one-message-type)).
 
 ### 4. Register the services
 
@@ -119,6 +120,19 @@ Every message has a `GroupKey` (default `"default"`). Groups are the unit of ord
 Pick a key per aggregate, account or customer: whatever must stay ordered. Leaving everything in
 `"default"` means strictly serial processing, and one failing message blocks all others.
 
+## Inbox handlers of one message type
+
+Adding an inbox message stores one row per inbox handler of its type, each addressed to that handler as
+its **recipient** (the handler's full type name). Each handler applies the event in its own transaction,
+so one failing neither rolls back nor delays the others
+([ADR 0012](docs/adr/0012-inbox-messages-fan-out-one-per-recipient.md)):
+
+- On the inbox a group is a recipient and a `GroupKey`. Order is kept per handler, and a failing message
+  blocks only its own handler's group.
+- `EventId` is unique per recipient. Adding the same event again throws `DbUpdateException`, even if a
+  handler was deployed since: recipients are fixed when an event is first added.
+- Adding a message whose type has no inbox handler throws `NoInboxHandlerException`.
+
 ## Delivery guarantees
 
 - **Outbox is at-least-once. Make outbox handlers idempotent.** A worker that dies, or a handler that times
@@ -164,7 +178,10 @@ level the most specific exception type wins, like a `catch` block.
 - **The message type name is persisted.** Renaming or moving a message class orphans rows already in the
   table. Drain the table first, or keep the old type and its handler until it has drained. Avoid generic
   message types: their name includes assembly versions. On the inbox, external producers must write this
-  .NET type name into the `type` column.
+  .NET type name into the `type` column, and the handler's into `recipient`.
+- **Inbox handler names are persisted too.** Renaming or deleting an inbox handler orphans the rows
+  addressed to it: they fail and retry forever, stalling only that handler's groups. Removing them is your
+  call: `DELETE FROM inbox WHERE recipient = '<old Handler FullName>' AND completed_at IS NULL;`
 - **Inbox retention is your duplicate window.** Duplicates are rejected only while the original row
   exists, so set `CompletedMessageRetention` to at least the longest redelivery window of your senders.
 - **Table names are fixed** (`outbox`, `inbox`) and queried unqualified. If they live in a non-default
@@ -200,7 +217,10 @@ builder.Services.AddOpenTelemetry().WithTracing(tracing => tracing
 
 The library uses `System.Diagnostics.ActivitySource` and has no OpenTelemetry dependency. A span with
 `error.type = duplicate_delivery` means an outbox effect will be carried out twice; it is worth alerting on.
-Messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace.
+Inbox spans carry the handler a message is addressed to as `underground.outbox.recipient`, and inbox log
+lines carry it in a `Recipient` scope.
+Outbox messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace. An
+inbox message cannot be added that way: only Staging addresses it to a recipient.
 
 ## Upgrading
 
@@ -211,6 +231,18 @@ add and apply an EF migration:
 dotnet ef migrations add UpdateOutbox
 dotnet ef database update
 ```
+
+### 0.22: inbox `recipient` column
+
+The inbox gains a required `recipient` column, unique together with `event_id`. The generated migration
+adds it filled with an empty string, which addresses pending rows to no handler. In that migration,
+after the column is added, address them to their type's one handler, once per message type:
+
+```csharp
+migrationBuilder.Sql("UPDATE inbox SET recipient = '<Handler FullName>' WHERE type = '<message FullName>' AND completed_at IS NULL;");
+```
+
+Completed rows can keep the empty string; they are never claimed again.
 
 ## Further reading
 

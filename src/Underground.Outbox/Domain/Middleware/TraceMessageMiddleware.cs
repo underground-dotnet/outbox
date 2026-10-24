@@ -65,6 +65,11 @@ internal sealed class TraceMessageMiddleware<TEntity> : IMessageMiddleware<TEnti
         activity.SetTag("underground.outbox.message.type", message.Type);
         activity.SetTag("underground.outbox.retry_count", message.RetryCount);
 
+        if (message is IAddressedMessage addressed)
+        {
+            activity.SetTag("underground.outbox.recipient", addressed.Recipient);
+        }
+
         return activity;
     }
 

@@ -14,9 +14,9 @@ namespace Underground.Outbox.Data;
 /// <c>docs/adr/0005-fixed-table-and-column-names.md</c>.
 /// </remarks>
 [Table("inbox")]
-[Index(nameof(EventId), IsUnique = true)]
+[Index(nameof(EventId), nameof(Recipient), IsUnique = true)]
 [EntityTypeConfiguration(typeof(InboxMessageConfiguration))]
-public class InboxMessage : IMessage, ITraceContextCarrier
+public class InboxMessage : IMessage, ITraceContextCarrier, IAddressedMessage
 {
     /// <inheritdoc />
     public static string TableName => "inbox";
@@ -41,6 +41,14 @@ public class InboxMessage : IMessage, ITraceContextCarrier
     [Column("group_key")]
     public string GroupKey { get; init; }
 
+    /// <summary>
+    /// The <see cref="System.Type.FullName"/> of the one Handler this message is for. Set when the message is
+    /// Staged, which stores one message per inbox Handler of its type.
+    /// </summary>
+    /// <remarks>See <c>docs/adr/0012-inbox-messages-fan-out-one-per-recipient.md</c>.</remarks>
+    [Column("recipient")]
+    public string Recipient { get; internal set; } = null!; // until Staged, so a message added around it fails NOT NULL
+
     [Column("data", TypeName = "jsonb")]
     public string Data { get; init; }
 
@@ -63,7 +71,15 @@ public class InboxMessage : IMessage, ITraceContextCarrier
 
     void ITraceContextCarrier.SetTraceParent(string? traceParent) => TraceParent = traceParent;
 
-    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
+    /// <summary>A copy of this message for another Recipient.</summary>
+    internal InboxMessage AddressedTo(string recipient) => new(EventId, CreatedAt, Type, Data, GroupKey)
+    {
+        VisibleAt = VisibleAt,
+        Recipient = recipient,
+        TraceParent = TraceParent,
+    };
+
+    internal InboxMessage(long id, Guid eventId, ulong transactionId, DateTime createdAt, string type, string groupKey, string recipient, string data, int retryCount, DateTime visibleAt, DateTime? completedAt)
     {
         Id = id;
         EventId = eventId;
@@ -71,6 +87,7 @@ public class InboxMessage : IMessage, ITraceContextCarrier
         CreatedAt = createdAt;
         Type = type;
         GroupKey = groupKey;
+        Recipient = recipient;
         Data = data;
         RetryCount = retryCount;
         VisibleAt = visibleAt;

@@ -32,13 +32,10 @@ internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntit
 
     public void StageMessage(TContext context, TEntity message) => StageMessages(context, [message]);
 
-    // an instance member because it implements IOutbox and IInbox
-#pragma warning disable CA1822, S2325 // Mark members as static
     public void StageMessages(TContext context, IEnumerable<TEntity> messages)
-#pragma warning restore CA1822, S2325 // Mark members as static
     {
-        // materialised once: the trace context is stamped in a pass of its own, and AddRange enumerates again
-        var toAdd = messages as IReadOnlyCollection<TEntity> ?? [.. messages];
+        // materialised before anything is added, so a message that cannot be addressed stages none of them
+        List<TEntity> toAdd = [.. messages.SelectMany(Address)];
 
         var traceParent = Activity.Current?.Id;
         foreach (var message in toAdd)
@@ -50,4 +47,7 @@ internal abstract class MessageBox<TEntity, TContext>(ConcurrentProcessor<TEntit
     }
 
     public void ProcessMessages() => processor.NotifyWork();
+
+    /// <summary>The rows one message is stored as. One, unless the side addresses a row to each of its Handlers.</summary>
+    protected virtual IEnumerable<TEntity> Address(TEntity message) => [message];
 }

@@ -25,6 +25,9 @@ public sealed class HandlerEntry<TEntity> where TEntity : class, IMessage
     /// <summary>The payload type the message deserializes to.</summary>
     public MessageType MessageType { get; }
 
+    /// <summary>What an inbox message addressed to this entry's Handler stores as its Recipient.</summary>
+    internal string Recipient => HandlerType.FullName!;
+
     /// <summary>Creates an entry. Called from generated code.</summary>
     /// <param name="messageTypeName">The stored <see cref="IMessage.Type"/> this entry answers to.</param>
     /// <param name="handlerType">The handler that runs it.</param>

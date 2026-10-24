@@ -25,12 +25,14 @@ internal sealed class DispatchMessage<TEntity>(
     /// this call decide what a throw means. The save runs in the inbox's transaction, or - on the outbox,
     /// which holds none - in one of EF Core's own.
     /// </summary>
-    /// <exception cref="ParsingException">No Handler is registered for the message's type.</exception>
+    /// <exception cref="ParsingException">No Handler is registered for the message's type or, on the inbox, its Recipient.</exception>
     internal async Task ExecuteAsync(TEntity message, CancellationToken cancellationToken)
     {
-        if (!registry.TryGetEntry(message.Type, out var entry))
+        if (!registry.TryGetEntry(message, out var entry))
         {
-            throw new ParsingException($"No handler configured for message type {message.Type} of message: {message.Id}");
+            throw new ParsingException(message is IAddressedMessage addressed
+                ? $"No handler {addressed.Recipient} configured for message type {message.Type} of message: {message.Id}"
+                : $"No handler configured for message type {message.Type} of message: {message.Id}");
         }
 
         var metadata = new MessageMetadata(message.EventId, message.GroupKey, message.RetryCount);

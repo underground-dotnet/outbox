@@ -22,7 +22,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor CompetingHandlers = new(
         id: "OUTBOX001",
         title: "Message type has competing handlers",
-        messageFormat: "Message type '{0}' is handled by more than one {1} handler ({2}). Only one of them is dispatched.",
+        messageFormat: "Message type '{0}' is handled by more than one outbox handler ({1}). Only one of them is dispatched.",
         category: "Underground.Outbox",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -285,7 +285,8 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         sb.AppendLine($"                var payload = JsonSerializer.Deserialize<{messageType}>(message.Data)");
         // the id only: the body is application data, and this message ends up in logs and on spans
         sb.AppendLine("                    ?? throw new ParsingException($\"Cannot parse event body of message: {message.Id}\");");
-        sb.AppendLine($"                var handler = serviceProvider.GetRequiredService<{iface}>();");
+        // the concrete Handler, since an inbox message type may have several behind one interface
+        sb.AppendLine($"                {iface} handler = serviceProvider.GetRequiredService<{handler.HandlerFullName}>();");
         sb.AppendLine("                try");
         sb.AppendLine("                {");
         sb.AppendLine("                    await handler.HandleAsync(payload, metadata, cancellationToken);");
@@ -340,20 +341,21 @@ public sealed class OutboxGenerator : IIncrementalGenerator
         return char.ToUpper(sb[0], CultureInfo.InvariantCulture) + sb.ToString(1, sb.Length - 1);
     }
 
-    /// <summary>
-    /// Reports message types claimed by more than one handler of the same kind within this assembly. Two
-    /// handlers in different assemblies cannot be seen by one compilation; the Handler Registry catches
-    /// that pair when the host starts.
-    /// </summary>
     private static string Unqualified(string fullyQualifiedName) =>
         fullyQualifiedName.StartsWith("global::", StringComparison.Ordinal)
             ? fullyQualifiedName.Substring("global::".Length)
             : fullyQualifiedName;
 
+    /// <summary>
+    /// Reports outbox message types claimed by more than one handler within this assembly. An inbox message
+    /// type may have several, each its own Recipient (ADR 0012). Two handlers in different assemblies cannot
+    /// be seen by one compilation; the Handler Registry catches that pair when the host starts.
+    /// </summary>
     private static void ReportCompetingHandlers(IEnumerable<HandlerClassInfo> handlers, SourceProductionContext context)
     {
         var competing = handlers
-            .GroupBy(h => (h.Kind, h.MessageTypeDisplayName))
+            .Where(h => h.Kind == HandlerKind.Outbox)
+            .GroupBy(h => h.MessageTypeDisplayName, StringComparer.Ordinal)
             .Where(g => g.Count() > 1);
 
         foreach (var group in competing)
@@ -361,8 +363,7 @@ public sealed class OutboxGenerator : IIncrementalGenerator
             context.ReportDiagnostic(Diagnostic.Create(
                 CompetingHandlers,
                 Location.None,
-                Unqualified(group.Key.MessageTypeDisplayName),
-                group.Key.Kind == HandlerKind.Inbox ? "inbox" : "outbox",
+                Unqualified(group.Key),
                 string.Join(", ", group.Select(h => Unqualified(h.HandlerFullName)).OrderBy(n => n, StringComparer.Ordinal))
             ));
         }

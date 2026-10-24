@@ -151,6 +151,34 @@ public class OutboxGeneratorTest
     }
 
     [Fact]
+    public void Generates_registration_for_two_inbox_handlers_of_one_message_type()
+    {
+        var result = GeneratorTestHelper.Run("""
+            using System.Threading;
+            using System.Threading.Tasks;
+
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
+
+            namespace Sample;
+
+            public sealed record TestMessage(string Text);
+
+            public sealed class LedgerHandler : IInboxMessageHandler<TestMessage>
+            {
+                public void HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+
+            public sealed class AuditHandler : IInboxMessageHandler<TestMessage>
+            {
+                public void HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """);
+
+        Snapshot.Validate(result);
+    }
+
+    [Fact]
     public void Generates_registration_for_handler_with_explicit_lifetime()
     {
         var result = GeneratorTestHelper.Run("""
