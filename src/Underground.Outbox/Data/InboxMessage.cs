@@ -43,9 +43,9 @@ public class InboxMessage : IMessage, ITraceContextCarrier, IAddressedMessage
 
     /// <summary>
     /// The <see cref="System.Type.FullName"/> of the one Handler this message is for. Set when the message is
-    /// Staged, which stores one message per inbox Handler of its type; see
-    /// <c>docs/adr/0012-inbox-messages-fan-out-one-per-recipient.md</c>.
+    /// Staged, which stores one message per inbox Handler of its type.
     /// </summary>
+    /// <remarks>See <c>docs/adr/0012-inbox-messages-fan-out-one-per-recipient.md</c>.</remarks>
     [Column("recipient")]
     public string Recipient { get; internal set; } = null!; // until Staged, so a message added around it fails NOT NULL
 

@@ -219,7 +219,8 @@ The library uses `System.Diagnostics.ActivitySource` and has no OpenTelemetry de
 `error.type = duplicate_delivery` means an outbox effect will be carried out twice; it is worth alerting on.
 Inbox spans carry the handler a message is addressed to as `underground.outbox.recipient`, and inbox log
 lines carry it in a `Recipient` scope.
-Messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace.
+Outbox messages added directly to the `DbSet` instead of through `AddMessageAsync` start a new trace. An
+inbox message cannot be added that way: only Staging addresses it to a recipient.
 
 ## Upgrading
 
@@ -241,7 +242,7 @@ after the column is added, address them to their type's one handler, once per me
 migrationBuilder.Sql("UPDATE inbox SET recipient = '<Handler FullName>' WHERE type = '<message FullName>' AND completed_at IS NULL;");
 ```
 
-Completed rows can keep the empty string; they are never handled again.
+Completed rows can keep the empty string; they are never claimed again.
 
 ## Further reading
 

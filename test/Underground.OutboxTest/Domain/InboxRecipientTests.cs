@@ -58,7 +58,7 @@ public class InboxRecipientTests : DatabaseTest
         // Act
         await ProcessUntilIdleAsync(provider, cancellationToken);
 
-        // Assert: the ledger handled both, the audit stalled on its poison message and holds its second copy back
+        // Assert: the ledger Completed both, the audit stalled on its poison message and holds its second copy back
         Assert.Equal([1, 2], SharedMessageLedgerHandler.CalledWith);
         Assert.Equal([1], SharedMessageAuditHandler.CalledWith);
 

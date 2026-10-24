@@ -7,11 +7,10 @@ namespace Underground.Outbox.Domain.Dispatchers;
 
 /// <summary>
 /// The map from a message to the one Handler that may run it, built from the entries every module contributed.
-/// On the outbox a message's stored <see cref="IMessage.Type"/> selects the Handler; on the inbox a type may have
-/// several Handlers, and the message's Recipient selects one.
 /// </summary>
 /// <remarks>
-/// Building it is where two modules claiming one outbox message type is caught. Entries arrive from the
+/// On the outbox a message's stored <see cref="IMessage.Type"/> selects the Handler; on the inbox a type may have
+/// several Handlers, and the message's Recipient selects one. Building it is where two modules claiming one outbox message type is caught. Entries arrive from the
 /// container rather than from a single compilation, so the order in which the generated registration
 /// methods were called does not matter.
 /// </remarks>
@@ -33,14 +32,14 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
 
         foreach (var entry in entries)
         {
-            if (!_byMessageTypeName.TryGetValue(entry.MessageTypeName, out var claimed))
+            if (!_byMessageTypeName.TryGetValue(entry.MessageTypeName, out var handlers))
             {
                 _byMessageTypeName.Add(entry.MessageTypeName, [entry]);
                 continue;
             }
 
             // the same module registered twice is a no-op
-            if (claimed.Exists(e => e.HandlerType == entry.HandlerType))
+            if (handlers.Exists(e => e.HandlerType == entry.HandlerType))
             {
                 continue;
             }
@@ -48,10 +47,10 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
             // without a Recipient to tell them apart, two different handlers is the contradiction
             if (!IsAddressed)
             {
-                throw new CompetingHandlersException(entry.MessageTypeName, claimed[0].HandlerType, entry.HandlerType);
+                throw new CompetingHandlersException(entry.MessageTypeName, handlers[0].HandlerType, entry.HandlerType);
             }
 
-            claimed.Add(entry);
+            handlers.Add(entry);
         }
     }
 
@@ -64,8 +63,8 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
     /// </returns>
     public bool TryGetEntry(string messageTypeName, [NotNullWhen(true)] out HandlerEntry<TEntity>? entry)
     {
-        entry = _byMessageTypeName.TryGetValue(messageTypeName, out var claimed) && claimed.Count == 1
-            ? claimed[0]
+        entry = _byMessageTypeName.TryGetValue(messageTypeName, out var handlers) && handlers.Count == 1
+            ? handlers[0]
             : null;
 
         return entry is not null;
@@ -76,10 +75,10 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
     /// <param name="recipient">The message's Recipient: its Handler's <see cref="System.Type.FullName"/>.</param>
     /// <param name="entry">The entry, when that Handler claims this message type.</param>
     /// <returns><see langword="true"/> when the Recipient is a registered Handler of this message type.</returns>
-    public bool TryGetEntry(string messageTypeName, string recipient, [NotNullWhen(true)] out HandlerEntry<TEntity>? entry)
+    internal bool TryGetEntry(string messageTypeName, string recipient, [NotNullWhen(true)] out HandlerEntry<TEntity>? entry)
     {
-        entry = _byMessageTypeName.TryGetValue(messageTypeName, out var claimed)
-            ? claimed.Find(e => string.Equals(e.Recipient, recipient, StringComparison.Ordinal))
+        entry = _byMessageTypeName.TryGetValue(messageTypeName, out var handlers)
+            ? handlers.Find(e => string.Equals(e.Recipient, recipient, StringComparison.Ordinal))
             : null;
 
         return entry is not null;
@@ -93,5 +92,5 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
 
     /// <summary>Every Handler of a message type, in the order their entries arrived; empty when none claims it.</summary>
     internal IReadOnlyList<HandlerEntry<TEntity>> EntriesFor(string messageTypeName)
-        => _byMessageTypeName.TryGetValue(messageTypeName, out var claimed) ? claimed : [];
+        => _byMessageTypeName.TryGetValue(messageTypeName, out var handlers) ? handlers : [];
 }

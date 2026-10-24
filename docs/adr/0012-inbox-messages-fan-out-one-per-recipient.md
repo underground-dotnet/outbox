@@ -22,8 +22,9 @@ leaks into `MessageMetadata`, logs and `messaging.destination.partition.id`.
 
 **A Group is (Recipient, `GroupKey`).** Fan-out copies one `GroupKey` onto every Recipient's row;
 grouping by key alone would let one Recipient's poison message (ADR 0004) stall its siblings'
-copies, which is the coupling this exists to remove. The head test, `DISTINCT ON` and the partial
-indexes all carry `recipient`.
+copies, which is the coupling this exists to remove. The head test, `DISTINCT ON` and the Group's
+partial index carry `recipient`. The (`transaction_id`, `id`) index does not: the windowed claim walks it
+oldest first across every Group (ADR 0010), which a leading `recipient` would turn into a sort.
 
 **Uniqueness is (`event_id`, `recipient`), and Recipients are fixed when an event is first added.**
 Adding an event again still throws `DbUpdateException`, even if a Handler deployed since would be a
