@@ -14,13 +14,14 @@ public class ServiceConfigurationTests
     [MemberData(nameof(HandlerTimeoutsOutOfRange))]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenHandlerTimeoutIsOutsideItsRange(TimeSpan timeout)
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             HandlerTimeout = timeout
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("HandlerTimeout", exception.Message, StringComparison.Ordinal);
     }
 
@@ -28,12 +29,17 @@ public class ServiceConfigurationTests
     [MemberData(nameof(HandlerTimeoutsInRange))]
     public void Validate_Accepts_HandlerTimeoutAtItsBounds(TimeSpan timeout)
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             HandlerTimeout = timeout
         };
 
-        configuration.Validate();
+        // Act
+        var exception = Record.Exception(configuration.Validate);
+
+        // Assert
+        Assert.Null(exception);
     }
 
     public static TheoryData<TimeSpan> CleanupIntervalsOutOfRange =>
@@ -46,13 +52,14 @@ public class ServiceConfigurationTests
     [MemberData(nameof(CleanupIntervalsOutOfRange))]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenCleanupIntervalIsOutsideItsRange(TimeSpan interval)
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             CleanupInterval = interval
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("CleanupInterval", exception.Message, StringComparison.Ordinal);
     }
 
@@ -60,38 +67,45 @@ public class ServiceConfigurationTests
     [MemberData(nameof(CleanupIntervalsInRange))]
     public void Validate_Accepts_CleanupIntervalAtItsBounds(TimeSpan interval)
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             CleanupInterval = interval
         };
 
-        configuration.Validate();
+        // Act
+        var exception = Record.Exception(configuration.Validate);
+
+        // Assert
+        Assert.Null(exception);
     }
 
     [Fact]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenBackoffBaseIsZero()
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             BackoffBase = TimeSpan.Zero
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("BackoffBase", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenMaxBackoffIsShorterThanBackoffBase()
     {
+        // Arrange
         var configuration = new OutboxServiceConfiguration
         {
             BackoffBase = TimeSpan.FromMinutes(1),
             MaxBackoff = TimeSpan.FromSeconds(1)
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("MaxBackoff", exception.Message, StringComparison.Ordinal);
     }
 
@@ -100,13 +114,14 @@ public class ServiceConfigurationTests
     [InlineData(1.0)]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenBackoffJitterIsOutsideItsRange(double jitter)
     {
+        // Arrange
         var configuration = new InboxServiceConfiguration
         {
             BackoffJitter = jitter
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("BackoffJitter", exception.Message, StringComparison.Ordinal);
     }
 
@@ -120,13 +135,14 @@ public class ServiceConfigurationTests
     [MemberData(nameof(RetentionsOutOfRange))]
     public void Validate_ThrowsArgumentOutOfRangeException_WhenCompletedMessageRetentionIsOutsideItsRange(TimeSpan retention)
     {
+        // Arrange
         var configuration = new InboxServiceConfiguration
         {
             CompletedMessageRetention = retention
         };
 
+        // Act & Assert
         var exception = Assert.Throws<ArgumentOutOfRangeException>(() => configuration.Validate());
-
         Assert.Contains("CompletedMessageRetention", exception.Message, StringComparison.Ordinal);
     }
 
@@ -134,11 +150,16 @@ public class ServiceConfigurationTests
     [MemberData(nameof(RetentionsInRange))]
     public void Validate_Accepts_CompletedMessageRetentionAtItsBounds(TimeSpan retention)
     {
+        // Arrange
         var configuration = new InboxServiceConfiguration
         {
             CompletedMessageRetention = retention
         };
 
-        configuration.Validate();
+        // Act
+        var exception = Record.Exception(configuration.Validate);
+
+        // Assert
+        Assert.Null(exception);
     }
 }

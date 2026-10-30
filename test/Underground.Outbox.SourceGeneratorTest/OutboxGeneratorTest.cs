@@ -9,19 +9,25 @@ public class OutboxGeneratorTest
     [Fact]
     public void Generates_nothing_for_an_assembly_without_handlers()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             namespace Sample;
 
             public sealed class Placeholder;
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         AssertNothingGenerated(result);
     }
 
     [Fact]
     public void Generates_registration_for_local_outbox_handler()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -36,15 +42,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_registration_for_local_inbox_and_outbox_handlers()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -66,15 +77,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(OutboxMessageType message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_registration_for_nested_message_type()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -92,15 +108,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(Outer.Inner message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_registration_for_generic_message_type()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -117,15 +138,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(Envelope<Payload> message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Reports_competing_handlers_for_the_same_message_type()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -145,15 +171,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_registration_for_handler_with_explicit_lifetime()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -172,15 +203,20 @@ public class OutboxGeneratorTest
             {
                 public void HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_one_concrete_registration_for_handler_of_several_message_types()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -203,15 +239,20 @@ public class OutboxGeneratorTest
 
                 public void HandleAsync(Second message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Ignores_abstract_handler_classes()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -226,15 +267,20 @@ public class OutboxGeneratorTest
             {
                 public abstract Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken);
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         AssertNothingGenerated(result);
     }
 
     [Fact]
     public void Generates_registration_for_handler_inheriting_its_interface()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -253,46 +299,55 @@ public class OutboxGeneratorTest
             }
 
             public sealed class EntityAddedHandler : ForwardingHandler<EntityAdded>;
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Generates_registration_for_handler_whose_base_is_in_a_referenced_assembly()
     {
-        var result = GeneratorTestHelper.Run(
-            source: """
-                namespace Sample;
+        // Arrange
+        var source = """
+            namespace Sample;
 
-                public sealed record EntityAdded(int Id) : Shared.IIntegrationEvent;
+            public sealed record EntityAdded(int Id) : Shared.IIntegrationEvent;
 
-                public sealed class EntityAddedHandler : Shared.ForwardingHandler<EntityAdded>;
-                """,
-            referencedSource: """
-                using System.Threading;
-                using System.Threading.Tasks;
+            public sealed class EntityAddedHandler : Shared.ForwardingHandler<EntityAdded>;
+            """;
+        var referencedSource = """
+            using System.Threading;
+            using System.Threading.Tasks;
 
-                using Underground.Outbox;
-                using Underground.Outbox.Data;
+            using Underground.Outbox;
+            using Underground.Outbox.Data;
 
-                namespace Shared;
+            namespace Shared;
 
-                public interface IIntegrationEvent;
+            public interface IIntegrationEvent;
 
-                public abstract class ForwardingHandler<T> : IOutboxMessageHandler<T> where T : IIntegrationEvent
-                {
-                    public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
-                }
-                """);
+            public abstract class ForwardingHandler<T> : IOutboxMessageHandler<T> where T : IIntegrationEvent
+            {
+                public Task HandleAsync(T message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
+            }
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source, referencedSource);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Inherits_lifetime_from_base_class()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -313,15 +368,20 @@ public class OutboxGeneratorTest
             }
 
             public sealed class TestMessageHandler : ScopedHandler<TestMessage>;
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Reports_concrete_base_and_subclass_handling_the_same_message_type()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -338,15 +398,20 @@ public class OutboxGeneratorTest
             }
 
             public sealed class AuditedTestMessageHandler : TestMessageHandler;
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         Snapshot.Validate(result);
     }
 
     [Fact]
     public void Ignores_open_generic_handler_classes()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -369,15 +434,20 @@ public class OutboxGeneratorTest
                     public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
                 }
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         AssertNothingGenerated(result);
     }
 
     [Fact]
     public void Ignores_non_handler_classes()
     {
-        var result = GeneratorTestHelper.Run("""
+        // Arrange
+        var source = """
             namespace Sample;
 
             public interface IOutboxMessageHandler<T>;
@@ -385,15 +455,20 @@ public class OutboxGeneratorTest
             public sealed class TestMessage;
 
             public sealed class LooksLikeHandler : IOutboxMessageHandler<TestMessage>;
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.Run(source);
+
+        // Assert
         AssertNothingGenerated(result);
     }
 
     [Fact]
     public void Caches_discovered_handlers_across_an_unrelated_edit()
     {
-        var result = GeneratorTestHelper.RunAfterUnrelatedEdit("""
+        // Arrange
+        var source = """
             using System.Threading;
             using System.Threading.Tasks;
 
@@ -408,8 +483,12 @@ public class OutboxGeneratorTest
             {
                 public Task HandleAsync(TestMessage message, MessageMetadata metadata, CancellationToken cancellationToken) => Task.CompletedTask;
             }
-            """);
+            """;
 
+        // Act
+        var result = GeneratorTestHelper.RunAfterUnrelatedEdit(source);
+
+        // Assert
         var outputs = result.TrackedSteps["HandlerClasses"].SelectMany(step => step.Outputs);
 
         Assert.All(outputs, output => Assert.Equal(IncrementalStepRunReason.Unchanged, output.Reason));

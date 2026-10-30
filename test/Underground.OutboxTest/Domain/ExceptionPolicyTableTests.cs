@@ -20,67 +20,85 @@ public class ExceptionPolicyTableTests
     [Fact]
     public void HandlerPolicyWinsOverGlobalPolicy()
     {
+        // Arrange
         _config.Policies.OnException<DataException>().Discard();
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>().OnException<DataException>().MarkAsCompleted();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.IsType<MarkAsCompletedExceptionPolicy<OutboxMessage>>(policy);
     }
 
     [Fact]
     public void HandlerPolicyWinsOverMoreSpecificGlobalPolicy()
     {
+        // Arrange
         _config.Policies.OnException<DataException>().Discard();
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>().OnException<Exception>().MarkAsCompleted();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.IsType<MarkAsCompletedExceptionPolicy<OutboxMessage>>(policy);
     }
 
     [Fact]
     public void NearestExceptionTypeWinsWhateverTheRegistrationOrder()
     {
+        // Arrange
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
             .OnException<Exception>().Discard()
             .OnException<DataException>().MarkAsCompleted();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.IsType<MarkAsCompletedExceptionPolicy<OutboxMessage>>(policy);
     }
 
     [Fact]
     public void BaseTypePolicyMatchesDerivedException()
     {
+        // Arrange
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>().OnException<SystemException>().Discard();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.Equal(typeof(SystemException), policy?.ExceptionType);
     }
 
     [Fact]
     public void DuplicateExceptionTypeKeepsTheFirstRegistration()
     {
+        // Arrange
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>()
             .OnException<DataException>().Discard()
             .OnException<DataException>().MarkAsCompleted();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.IsType<DiscardExceptionPolicy<OutboxMessage>>(policy);
     }
 
     [Fact]
     public void HandlerPolicyAppliesOnlyToItsConfiguredMessageType()
     {
+        // Arrange
         _config.ForHandler<FailedMultipleMessagesHandler, FailedMultiMessageA>().OnException<InvalidOperationException>().Discard();
 
+        // Act
         var forA = Select<FailedMultipleMessagesHandler, FailedMultiMessageA>(new InvalidOperationException());
         var forB = Select<FailedMultipleMessagesHandler, FailedMultiMessageB>(new InvalidOperationException());
 
+        // Assert
         Assert.NotNull(forA);
         Assert.Null(forB);
     }
@@ -88,22 +106,28 @@ public class ExceptionPolicyTableTests
     [Fact]
     public void HandlerWithoutAMatchingPolicyFallsBackToGlobal()
     {
+        // Arrange
         _config.Policies.OnException<DataException>().Discard();
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>().OnException<InvalidOperationException>().MarkAsCompleted();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new DataException());
 
+        // Assert
         Assert.IsType<DiscardExceptionPolicy<OutboxMessage>>(policy);
     }
 
     [Fact]
     public void NoMatchingPolicyReturnsNull()
     {
+        // Arrange
         _config.Policies.OnException<DataException>().Discard();
         _config.ForHandler<DiscardFailedMessageHandler, DiscardMessage>().OnException<DataException>().Discard();
 
+        // Act
         var policy = Select<DiscardFailedMessageHandler, DiscardMessage>(new InvalidOperationException());
 
+        // Assert
         Assert.Null(policy);
     }
 

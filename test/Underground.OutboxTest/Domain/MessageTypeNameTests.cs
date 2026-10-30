@@ -43,10 +43,13 @@ public class MessageTypeNameTests
     [Fact]
     public async Task ExecuteAsync_ReachesTheHandler_WhenTheMessageTypeIsNested()
     {
+        // Arrange
         var message = new OutboxMessage(Guid.NewGuid(), CreatedAt, new Envelope.Nested(42));
 
+        // Act
         await DispatchAsync(message);
 
+        // Assert
         Assert.Equal("Underground.OutboxTest.TestHandler.Envelope+Nested", message.Type);
         Assert.Contains(NestedMessageHandler.CalledWithNested, m => m.Id == 42);
     }
@@ -54,10 +57,13 @@ public class MessageTypeNameTests
     [Fact]
     public async Task ExecuteAsync_ReachesTheHandler_WhenTheMessageTypeIsGeneric()
     {
+        // Arrange
         var message = new OutboxMessage(Guid.NewGuid(), CreatedAt, new Wrapped<Envelope.Nested>(new Envelope.Nested(7)));
 
+        // Act
         await DispatchAsync(message);
 
+        // Assert
         Assert.StartsWith("Underground.OutboxTest.TestHandler.Wrapped`1[[", message.Type, StringComparison.Ordinal);
         Assert.Contains(NestedMessageHandler.CalledWithWrapped, m => m.Body.Id == 7);
     }
@@ -65,8 +71,10 @@ public class MessageTypeNameTests
     [Fact]
     public async Task ExecuteAsync_Throws_WhenNoHandlerIsRegisteredForTheType()
     {
+        // Arrange
         var message = new OutboxMessage(Guid.NewGuid(), CreatedAt, "Sample.Unknown", "{}");
 
+        // Act & Assert
         await Assert.ThrowsAsync<ParsingException>(() => DispatchAsync(message));
     }
 
@@ -77,6 +85,7 @@ public class MessageTypeNameTests
     [Fact]
     public void Registry_IsKeyedOnTheStoredSpelling_ForNestedTypes()
     {
+        // Arrange
         var services = new ServiceCollection();
         services.AddUndergroundOutboxTestMessageHandlers();
         services.AddSingleton<HandlerRegistry<OutboxMessage>>();
@@ -84,8 +93,12 @@ public class MessageTypeNameTests
         using var provider = services.BuildServiceProvider();
         var registry = provider.GetRequiredService<HandlerRegistry<OutboxMessage>>();
 
-        Assert.True(registry.TryGetEntry("Underground.OutboxTest.TestHandler.Envelope+Nested", out var entry));
-        Assert.Equal(typeof(NestedMessageHandler), entry.HandlerType);
+        // Act
+        var found = registry.TryGetEntry("Underground.OutboxTest.TestHandler.Envelope+Nested", out var entry);
+
+        // Assert
+        Assert.True(found);
+        Assert.Equal(typeof(NestedMessageHandler), entry?.HandlerType);
     }
 
     /// <summary>

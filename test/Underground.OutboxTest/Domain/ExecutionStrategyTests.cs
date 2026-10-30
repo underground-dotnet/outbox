@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -58,11 +59,14 @@ public class ExecutionStrategyTests : DatabaseTest
         return services.BuildServiceProvider();
     }
 
+    /// <summary>
+    /// The failure this change exists to remove: EF refuses any strategy-covered operation inside a
+    /// transaction the caller began itself, which is every way of staging an outbox message.
+    /// </summary>
     [Fact]
     public async Task AddMessageAsync_IsRefused_InACallerBegunTransaction_UnderARetryingExecutionStrategy()
     {
-        // the failure this change exists to remove: EF refuses any strategy-covered operation inside a
-        // transaction the caller began itself, which is every way of staging an outbox message
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
         using var scope = provider.CreateScope();
@@ -72,6 +76,7 @@ public class ExecutionStrategyTests : DatabaseTest
         var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await using (transaction.ConfigureAwait(false))
         {
+            // Act & Assert
             var refused = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await outbox.AddMessageAsync(
                     context,
@@ -115,20 +120,24 @@ public class ExecutionStrategyTests : DatabaseTest
         using var scope = provider.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<InboxOutboxDbContext>();
         var outbox = scope.ServiceProvider.GetRequiredService<IOutbox>();
+        IDbContextTransaction? outerTransaction = null;
+        IDbContextTransaction? innerTransaction = null;
 
         // Act: the outer call owns the transaction, so the inner one must find and reuse it
         await context.ExecuteInTransactionAsync(async ct =>
         {
-            var outer = context.Database.CurrentTransaction;
+            outerTransaction = context.Database.CurrentTransaction;
 
             await context.ExecuteInTransactionAsync(async inner =>
             {
-                Assert.Same(outer, context.Database.CurrentTransaction);
+                innerTransaction = context.Database.CurrentTransaction;
                 await outbox.AddMessageAsync(context, new OutboxMessage(Guid.NewGuid(), DateTime.UtcNow, new RetryMessage(2)), inner);
             }, ct);
         }, cancellationToken);
 
         // Assert: the inner call committed nothing of its own, and the outer commit made the message durable
+        Assert.NotNull(outerTransaction);
+        Assert.Same(outerTransaction, innerTransaction);
         await ProcessUntilAsync<OutboxMessage>(provider, () => RetryMessageHandler.Calls > 0, cancellationToken);
         Assert.Equal(1, RetryMessageHandler.Calls);
     }

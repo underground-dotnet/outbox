@@ -48,14 +48,17 @@ public class WorkSignalTests
     [Fact]
     public async Task NotifyingWhileNobodyWaitsStillReleasesTheNextWaiter()
     {
+        // Arrange
         var processor = CreateProcessor();
 
+        // Act
         // the notification a worker races with: it lands after that worker found no work and before it
         // started waiting, so nothing is parked to receive it
         processor.NotifyWork();
 
         var wait = processor.WaitForWorkAsync(TestContext.Current.CancellationToken);
 
+        // Assert
         Assert.True(
             await WasReleasedAsync(wait, TestContext.Current.CancellationToken),
             "the notification was dropped, so the waiter is left running to the next poll");
@@ -64,6 +67,7 @@ public class WorkSignalTests
     [Fact]
     public async Task OneNotificationReleasesEveryWaiter()
     {
+        // Arrange
         var processor = CreateProcessor();
 
         var waits = Enumerable.Range(0, 4)
@@ -74,8 +78,10 @@ public class WorkSignalTests
         // they all have would be drained by the first one; this is the one timing-dependent test here
         await Task.Delay(TimeSpan.FromMilliseconds(250), TestContext.Current.CancellationToken);
 
+        // Act
         processor.NotifyWork();
 
+        // Assert
         Assert.True(
             await WasReleasedAsync(Task.WhenAll(waits), TestContext.Current.CancellationToken),
             "only some waiters were released, so a single commit would put only part of the pool back to work");
@@ -84,12 +90,15 @@ public class WorkSignalTests
     [Fact]
     public async Task CancellingAWaitReturnsRatherThanThrowing()
     {
+        // Arrange
         var processor = CreateProcessor();
         using var shutdown = new CancellationTokenSource();
 
+        // Act
         var wait = processor.WaitForWorkAsync(shutdown.Token);
         await shutdown.CancelAsync();
 
+        // Assert
         Assert.True(await WasReleasedAsync(wait, TestContext.Current.CancellationToken), "the wait ignored the cancellation");
 
         // the worker loop decides what a cancellation means, so the wait itself must not throw

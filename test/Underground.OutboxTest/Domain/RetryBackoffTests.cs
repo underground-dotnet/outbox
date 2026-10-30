@@ -12,10 +12,13 @@ public class RetryBackoffTests
     [Fact]
     public void DelayDoublesWithEveryFailedAttempt()
     {
+        // Arrange
         var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromHours(1), jitter: 0);
 
+        // Act
         var delays = Enumerable.Range(0, 5).Select(backoff.DelayFor);
 
+        // Assert
         Assert.Equal(
             [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(16)],
             delays);
@@ -24,10 +27,13 @@ public class RetryBackoffTests
     [Fact]
     public void DelayStopsGrowingAtTheConfiguredMaximum()
     {
+        // Arrange
         var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5), jitter: 0);
 
+        // Act
         var delays = Enumerable.Range(0, 6).Select(backoff.DelayFor);
 
+        // Assert
         Assert.Equal(
             [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5)],
             delays);
@@ -36,19 +42,27 @@ public class RetryBackoffTests
     [Fact]
     public void DelayStaysAtTheMaximumForAMessageThatHasFailedFarTooOftenToDouble()
     {
-        // a message that fails forever passes the point where doubling the base overflows a TimeSpan
+        // Arrange
         var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(1), TimeSpan.FromMinutes(10), jitter: 0);
 
-        Assert.Equal(TimeSpan.FromMinutes(10), backoff.DelayFor(1_000));
+        // Act
+        // a message that fails forever passes the point where doubling the base overflows a TimeSpan
+        var delay = backoff.DelayFor(1_000);
+
+        // Assert
+        Assert.Equal(TimeSpan.FromMinutes(10), delay);
     }
 
     [Fact]
     public void JitterVariesTheDelayWithinTheConfiguredProportion()
     {
+        // Arrange
         var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0.2);
 
+        // Act
         var delays = Enumerable.Range(0, 50).Select(_ => backoff.DelayFor(0)).ToList();
 
+        // Assert
         Assert.All(delays, delay => Assert.InRange(delay, TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(12)));
         // two Groups backing off at the same instant must not come back at the same instant
         Assert.True(delays.Distinct().Count() > 1, "jitter produced the same delay every time");
@@ -57,10 +71,13 @@ public class RetryBackoffTests
     [Fact]
     public void NoJitterMeansTheDelayIsExact()
     {
+        // Arrange
         var backoff = new RetryBackoff<OutboxMessage>(TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10), jitter: 0);
 
+        // Act
         var delays = Enumerable.Range(0, 10).Select(_ => backoff.DelayFor(0));
 
+        // Assert
         Assert.All(delays, delay => Assert.Equal(TimeSpan.FromSeconds(10), delay));
     }
 }

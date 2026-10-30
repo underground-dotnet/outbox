@@ -39,12 +39,13 @@ public class DeleteCompletedMessagesTests(ITestOutputHelper testOutputHelper) : 
         );
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        // Act
         var configuration = new OutboxServiceConfiguration
         {
             CompletedMessageRetention = retention
         };
         var useCase = new DeleteCompletedMessages<OutboxMessage>(new MessageDbContext<OutboxMessage>(context), configuration);
+
+        // Act
         var deletedCount = await useCase.ExecuteAsync(TestContext.Current.CancellationToken);
 
         // Assert

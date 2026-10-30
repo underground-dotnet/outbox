@@ -28,14 +28,17 @@ public class ClaimTests : DatabaseTest
     [Fact]
     public async Task ClaimThatStillHoldsItsLeaseCompletesTheMessage()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
         await AddOutboxMessageAsync(provider, cancellationToken);
-
         await using var held = await ClaimOutboxAsync(provider, cancellationToken);
 
-        Assert.True(await held.Claim.TryCompleteAsync(cancellationToken));
+        // Act
+        var completed = await held.Claim.TryCompleteAsync(cancellationToken);
 
+        // Assert
+        Assert.True(completed);
         var stored = await CreateDbContext().OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
         Assert.NotNull(stored.CompletedAt);
     }
@@ -43,14 +46,17 @@ public class ClaimTests : DatabaseTest
     [Fact]
     public async Task RecordedFailureCountsTheAttemptAndHidesTheMessageForTheDelay()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
         await AddOutboxMessageAsync(provider, cancellationToken);
-
         await using var held = await ClaimOutboxAsync(provider, cancellationToken);
 
-        Assert.True(await held.Claim.TryRecordFailureAsync(Delay, cancellationToken));
+        // Act
+        var recorded = await held.Claim.TryRecordFailureAsync(Delay, cancellationToken);
 
+        // Assert
+        Assert.True(recorded);
         var context = CreateDbContext();
         var stored = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
         Assert.Equal(1, stored.RetryCount);
@@ -65,23 +71,29 @@ public class ClaimTests : DatabaseTest
     [Fact]
     public async Task RenewedClaimStillCompletesTheMessage()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
         await AddOutboxMessageAsync(provider, cancellationToken);
-
         await using var held = await ClaimOutboxAsync(provider, cancellationToken);
         var context = CreateDbContext();
         var granted = await context.VisibleAtAsync(held.Claim.Message.Id, cancellationToken);
 
+        // Act
+        bool renewed;
         await using (var renewalScope = provider.CreateAsyncScope())
         {
             var renewalConnection = renewalScope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
-            Assert.True(await held.Claim.TryRenewAsync(renewalConnection, Delay, cancellationToken));
+            renewed = await held.Claim.TryRenewAsync(renewalConnection, Delay, cancellationToken);
         }
 
-        Assert.NotEqual(granted, await context.VisibleAtAsync(held.Claim.Message.Id, cancellationToken));
-        Assert.True(await held.Claim.TryCompleteAsync(cancellationToken));
+        var renewedLease = await context.VisibleAtAsync(held.Claim.Message.Id, cancellationToken);
+        var completed = await held.Claim.TryCompleteAsync(cancellationToken);
 
+        // Assert
+        Assert.True(renewed);
+        Assert.NotEqual(granted, renewedLease);
+        Assert.True(completed);
         var stored = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
         Assert.NotNull(stored.CompletedAt);
     }
@@ -93,6 +105,7 @@ public class ClaimTests : DatabaseTest
     [Fact]
     public async Task ClaimWhoseLeaseWasTakenOverWritesNothing()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
         await AddOutboxMessageAsync(provider, cancellationToken);
@@ -106,10 +119,15 @@ public class ClaimTests : DatabaseTest
         await using var renewalScope = provider.CreateAsyncScope();
         var renewalConnection = renewalScope.ServiceProvider.GetRequiredService<IOutboxDbContext>();
 
-        Assert.False(await stale.Claim.TryCompleteAsync(cancellationToken));
-        Assert.False(await stale.Claim.TryRecordFailureAsync(Delay, cancellationToken));
-        Assert.False(await stale.Claim.TryRenewAsync(renewalConnection, Delay, cancellationToken));
+        // Act
+        var completed = await stale.Claim.TryCompleteAsync(cancellationToken);
+        var recorded = await stale.Claim.TryRecordFailureAsync(Delay, cancellationToken);
+        var renewed = await stale.Claim.TryRenewAsync(renewalConnection, Delay, cancellationToken);
 
+        // Assert
+        Assert.False(completed);
+        Assert.False(recorded);
+        Assert.False(renewed);
         var stored = await context.OutboxMessages.AsNoTracking().SingleAsync(cancellationToken);
         Assert.Null(stored.CompletedAt);
         Assert.Equal(0, stored.RetryCount);
@@ -123,6 +141,7 @@ public class ClaimTests : DatabaseTest
     [Fact]
     public async Task InboxClaimCompletesTheMessageInsideItsTransaction()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var provider = CreateServiceProvider();
 
@@ -135,21 +154,22 @@ public class ClaimTests : DatabaseTest
             await addContext.ExecuteInTransactionAsync(ct => inbox.AddMessageAsync(addContext, message, ct), cancellationToken);
         }
 
-        await using (var scope = provider.CreateAsyncScope())
-        {
-            var context = scope.ServiceProvider.GetRequiredService<IInboxDbContext>();
-            var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<InboxMessage>>();
+        await using var scope = provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<IInboxDbContext>();
+        var claimHeadMessage = scope.ServiceProvider.GetRequiredService<ClaimHeadMessage<InboxMessage>>();
 
-            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            var claim = await claimHeadMessage.ExecuteAsync(cancellationToken);
-            Assert.NotNull(claim);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var claim = await claimHeadMessage.ExecuteAsync(cancellationToken);
+        Assert.NotNull(claim);
 
-            Assert.True(await claim.TryCompleteAsync(cancellationToken));
-            Assert.NotNull(await ReadInboxCompletedAtAsync(context, cancellationToken));
+        // Act
+        var completed = await claim.TryCompleteAsync(cancellationToken);
+        var completedAtInsideTransaction = await ReadInboxCompletedAtAsync(context, cancellationToken);
+        await transaction.RollbackAsync(cancellationToken);
 
-            await transaction.RollbackAsync(cancellationToken);
-        }
-
+        // Assert
+        Assert.True(completed);
+        Assert.NotNull(completedAtInsideTransaction);
         await using var verify = provider.CreateAsyncScope();
         var stored = await verify.ServiceProvider.GetRequiredService<InboxOutboxDbContext>()
             .InboxMessages.AsNoTracking().SingleAsync(cancellationToken);
