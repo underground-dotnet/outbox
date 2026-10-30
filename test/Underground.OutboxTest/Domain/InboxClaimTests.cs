@@ -90,7 +90,7 @@ public class InboxClaimTests : DatabaseTest
         await using var provider = CreateServiceProvider(completionMisses);
         await AddMessageAsync(provider, message, cancellationToken);
 
-        // Act
+        // Act & Assert
         await Assert.ThrowsAsync<InboxClaimLostException>(() => ProcessOnceAsync(provider, cancellationToken));
 
         // Assert: nothing the attempt did was kept, so the message is still pending and offered again

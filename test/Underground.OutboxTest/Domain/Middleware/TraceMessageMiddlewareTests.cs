@@ -19,8 +19,10 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task SpanContinuesTheTraceOfTheTransactionThatWroteTheMessage()
     {
+        // Act
         var (activity, _) = await ProcessAsync(traceParent: ParentTraceParent);
 
+        // Assert
         Assert.Equal("0af7651916cd43dd8448eb211c80319c", activity.TraceId.ToHexString());
         Assert.Equal("b7ad6b7169203331", activity.ParentSpanId.ToHexString());
     }
@@ -28,16 +30,20 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task MessageWrittenWithNothingTracingStartsATraceOfItsOwn()
     {
+        // Act
         var (activity, _) = await ProcessAsync(traceParent: null);
 
+        // Assert
         Assert.Equal(default, activity.ParentSpanId);
     }
 
     [Fact]
     public async Task UnparseableTraceContextStartsATraceOfItsOwnRatherThanThrowing()
     {
+        // Act
         var (activity, attempt) = await ProcessAsync(traceParent: "not-a-traceparent");
 
+        // Assert
         Assert.Equal(default, activity.ParentSpanId);
         Assert.Equal(ProcessingStatus.Succeeded, attempt.Status);
     }
@@ -45,10 +51,13 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task SpanCarriesTheMessagingAttributes()
     {
+        // Arrange
         var message = NewMessage(traceParent: null);
 
+        // Act
         var (activity, _) = await ProcessAsync(message, () => Task.FromResult(ProcessingAttempt.Succeeded));
 
+        // Assert
         Assert.Equal("process outbox", activity.DisplayName);
         Assert.Equal(ActivityKind.Consumer, activity.Kind);
         Assert.Equal(OutboxTelemetry.MessagingSystem, activity.GetTagItem("messaging.system"));
@@ -65,8 +74,10 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task HandledMessageLeavesTheStatusUnset()
     {
+        // Act
         var (activity, _) = await ProcessAsync(traceParent: null);
 
+        // Assert
         Assert.Equal(ActivityStatusCode.Unset, activity.Status);
         Assert.Null(activity.GetTagItem("error.type"));
     }
@@ -74,12 +85,15 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task RecordedFailureIsAnErrorNamingTheException()
     {
+        // Arrange
         var failure = new InvalidOperationException("handler said no");
 
+        // Act
         var (activity, _) = await ProcessAsync(
             NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.Failed(failure)));
 
+        // Assert
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal(typeof(InvalidOperationException).FullName, activity.GetTagItem("error.type"));
         Assert.Contains(activity.Events, e => string.Equals(e.Name, "exception", StringComparison.Ordinal));
@@ -88,10 +102,12 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task LeaseLostAfterAFailureIsReportedAsALostLease()
     {
+        // Act
         var (activity, _) = await ProcessAsync(
             NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.LeaseLost(new InvalidOperationException())));
 
+        // Assert
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal(TraceMessageMiddleware<OutboxMessage>.LeaseLostErrorType, activity.GetTagItem("error.type"));
     }
@@ -99,11 +115,13 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task LeaseLostAfterTheHandlerSucceededIsReportedAsADuplicateDelivery()
     {
+        // Act
         // the effect was carried out and the completion write came too late, so it will be carried out again
         var (activity, _) = await ProcessAsync(
             NewMessage(traceParent: null),
             () => Task.FromResult(ProcessingAttempt.LeaseLost(failure: null)));
 
+        // Assert
         Assert.Equal(ActivityStatusCode.Error, activity.Status);
         Assert.Equal(TraceMessageMiddleware<OutboxMessage>.DuplicateDeliveryErrorType, activity.GetTagItem("error.type"));
     }
@@ -111,11 +129,13 @@ public class TraceMessageMiddlewareTests
     [Fact]
     public async Task ShutdownMidAttemptIsNotAnError()
     {
+        // Arrange
         var message = NewMessage(traceParent: null);
         var middleware = new TraceMessageMiddleware<OutboxMessage>();
 
         using var spans = new RecordingTracerProvider();
 
+        // Act & Assert
         await Assert.ThrowsAsync<OperationCanceledException>(
             () => middleware.ExecuteAsync(ClaimOn(message), _ => throw new OperationCanceledException(), TestContext.Current.CancellationToken));
 

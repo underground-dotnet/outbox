@@ -19,6 +19,9 @@ dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTes
   when a run yields several files (generated sources by hint name, then a `.txt` of diagnostics). A diff
   fails the test and writes an `.actual.*` next to it; accept by renaming it over the `.verified.*`.
 - `test/Underground.OutboxTest` — integration tests on Testcontainers Postgres. **Requires Docker**
+- Structure every test as Arrange/Act/Assert, marked with `// Arrange`, `// Act`, `// Assert` comments.
+  Merge into `// Act & Assert` when the act is wrapped in the assertion (`Assert.Throws`); omit
+  `// Arrange` when there is nothing to set up. A short *why* may follow the marker (`// Act: …`).
 
 ## Conventions
 

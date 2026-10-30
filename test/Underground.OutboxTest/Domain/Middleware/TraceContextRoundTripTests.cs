@@ -34,6 +34,7 @@ public class TraceContextRoundTripTests : DatabaseTest
     [Fact]
     public async Task HandlingAMessageContinuesTheTraceOfTheTransactionThatWroteIt()
     {
+        // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         var context = CreateDbContext();
         var eventId = Guid.NewGuid();
@@ -55,18 +56,21 @@ public class TraceContextRoundTripTests : DatabaseTest
                 cancellationToken);
         }
 
+        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
+
+        // handled with nothing ambient, exactly as a background worker does
+        Assert.Null(Activity.Current);
+
+        // Act
+        await processor.ProcessUntilIdleAsync(cancellationToken);
+
+        // Assert
         // the row carries the writing transaction's context, not a live ambient one
         var stored = await context.OutboxMessages.AsNoTracking().SingleAsync(m => m.EventId == eventId, cancellationToken);
         Assert.NotNull(stored.TraceParent);
         Assert.Contains(producerTraceId.ToHexString(), stored.TraceParent, StringComparison.Ordinal);
 
-        // handled with nothing ambient, exactly as a background worker does
-        Assert.Null(Activity.Current);
-        var processor = _serviceProvider.GetRequiredService<ConcurrentProcessor<OutboxMessage>>();
-        await processor.ProcessUntilIdleAsync(cancellationToken);
-
         var handled = spans.SpanFor(eventId);
-
         Assert.Equal(producerTraceId, handled.TraceId);
         Assert.Equal(producerSpanId, handled.ParentSpanId);
     }
