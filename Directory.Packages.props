@@ -5,9 +5,9 @@
   <ItemGroup>
     <PackageVersion Include="DistributedLock.Postgres" Version="1.3.0" />
     <PackageVersion Include="MartinCostello.Logging.XUnit.v3" Version="0.7.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.318" />
-    <PackageVersion Include="Meziantou.Framework.SnapshotTesting" Version="3.1.18" />
-    <PackageVersion Include="Meziantou.Framework.SnapshotTesting.Roslyn" Version="1.0.18" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.321" />
+    <PackageVersion Include="Meziantou.Framework.SnapshotTesting" Version="3.1.19" />
+    <PackageVersion Include="Meziantou.Framework.SnapshotTesting.Roslyn" Version="1.0.19" />
     <!-- Sets the consumer SDK floor: a generator cannot run on a compiler older than the Roslyn it
          references (SDK 10.0.4xx ships Roslyn 5.9). Bump deliberately, together with the floor in
          the generator's buildTransitive targets, global.json and the docs. -->
