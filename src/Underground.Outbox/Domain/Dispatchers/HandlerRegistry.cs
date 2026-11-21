@@ -26,7 +26,7 @@ public sealed class HandlerRegistry<TEntity> where TEntity : class, IMessage
     {
         ArgumentNullException.ThrowIfNull(entries);
 
-        _byMessageTypeName = [];
+        _byMessageTypeName = new(StringComparer.Ordinal);
 
         foreach (var entry in entries)
         {

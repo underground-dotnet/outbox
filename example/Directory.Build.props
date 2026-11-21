@@ -1,0 +1,9 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!-- One framework keeps `dotnet run` free of a framework argument; net10.0 builds on either SDK. -->
+    <TargetFrameworks />
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+</Project>
