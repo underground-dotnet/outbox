@@ -8,7 +8,7 @@ namespace Underground.OutboxTest.TestHandler;
 
 public class GroupedMessageHandler : IOutboxMessageHandler<GroupedMessage>
 {
-    public static ConcurrentDictionary<string, List<int>> CalledWith { get; set; } = [];
+    public static ConcurrentDictionary<string, List<int>> CalledWith { get; set; } = new(StringComparer.Ordinal);
     public static int TotalCount => CalledWith.Values.Sum(list => list.Count);
 
     /// <summary>
