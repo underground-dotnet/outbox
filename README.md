@@ -10,7 +10,7 @@ background, in order per group, safely across multiple application instances.
 
 ## Requirements
 
-- .NET 10 with EF Core, built with **.NET SDK 10.0.400 or newer**
+- .NET 10 (EF Core 10) or .NET 11 (EF Core 11), built with **.NET SDK 10.0.400 or newer**
 - **PostgreSQL 13 or newer**, via Npgsql
 
 ## Getting started

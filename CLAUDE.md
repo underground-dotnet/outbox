@@ -12,6 +12,10 @@ dotnet test --no-restore --project test/Underground.Outbox.SourceGeneratorTest/U
 dotnet test --no-restore --project <project> --filter-class "*OutboxGeneratorTest" # or --filter-method
 ```
 
+Everything but the generator and the examples targets `net10.0;net11.0`: building needs SDK 11, and
+the net10.0 tests need the .NET 10 runtime too. Package versions per framework live in
+`Directory.Packages.props`.
+
 ## Tests
 
 - `test/Underground.Outbox.SourceGeneratorTest` — Meziantou.Framework.SnapshotTesting tests of generator

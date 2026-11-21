@@ -1,5 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- Clears the multi-targeting from Directory.Build.props: the compiler loads netstandard2.0 only. -->
+    <TargetFrameworks />
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>Underground.Outbox.SourceGenerator</PackageId>
     <Title>Underground.Outbox.SourceGenerator</Title>
