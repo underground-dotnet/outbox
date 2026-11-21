@@ -10,13 +10,6 @@ fi
 
 log() { echo "[session-start] $*"; }
 
-# global.json needs SDK 11; the image's SDK 10 stays, as the runtime for the net10.0 tests.
-if ! dotnet --list-sdks | grep -q '^11\.'; then
-  log "installing .NET SDK 11"
-  dotnet_dir="$(dirname "$(readlink -f "$(command -v dotnet)")")"
-  curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 11.0 --install-dir "$dotnet_dir" > /dev/null
-fi
-
 log "restoring NuGet packages"
 dotnet restore "$CLAUDE_PROJECT_DIR/Underground.slnx" -v quiet
 
